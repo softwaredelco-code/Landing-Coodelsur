@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadEstado {
+  recibido
+  revisado
+  contactado
+  descartado
+}
+
+model Lead {
+  id                       String     @id @default(uuid())
+  tipoCredito              String
+  nombre                   String
+  cedula                   String
+  telefono                 String
+  email                    String?
+  datosFormulario          Json
+  origen                   String
+  estado                   LeadEstado @default(recibido)
+  aceptaTerminos           Boolean    @default(false)
+  fechaAceptacionTerminos  DateTime?
+  utmSource                String?
+  utmCampaign              String?
+  utmMedium                String?
+  utmTerm                  String?
+  utmContent               String?
+  ip                       String?
+  ciudad                   String?
+  pais                     String?
+  latitud                  Float?
+  longitud                 Float?
+  fechaCreacion            DateTime   @default(now())
+  fechaActualizacion       DateTime   @updatedAt
+
+  @@index([tipoCredito])
+  @@index([origen])
+  @@index([estado])
+  @@index([cedula])
+  @@index([fechaCreacion])
+  @@index([utmSource])
+}

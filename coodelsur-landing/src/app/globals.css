@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --coodel-primary: #002446;
+  --coodel-accent: #135a28;
+  --coodel-accent-light: #2db742;
+  --coodel-gold: #ffbc7d;
+  --coodel-body: #33373d;
+  --coodel-surface: #f5f7f9;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-coodel-body antialiased;
+  }
+}
+
+@layer utilities {
+  .animate-rise {
+    animation: rise 0.8s ease-out both;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 1.1s ease-out both;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
