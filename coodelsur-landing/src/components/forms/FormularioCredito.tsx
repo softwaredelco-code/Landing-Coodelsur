@@ -11,6 +11,7 @@ import { SeccionLaboral } from "@/components/forms/sections/SeccionLaboral";
 import { SeccionReferenciaFamiliar } from "@/components/forms/sections/SeccionReferenciaFamiliar";
 import { SeccionVerificacion } from "@/components/forms/sections/SeccionVerificacion";
 import { Button } from "@/components/ui/Button";
+import { calcularDesgloseCuota } from "@/lib/credito/amortizacion";
 import {
   NANOCREDITO_STEPS,
   nanocreditoDefaultValues,
@@ -56,12 +57,18 @@ export function FormularioCredito({ config, initialMonto }: FormularioCreditoPro
     ...nanocreditoDefaultValues,
     tipoCredito: "microcredito_small" as const,
     ...(typeof initialMonto === "number" && Number.isFinite(initialMonto)
-      ? {
-          capitalSeleccionado: initialMonto,
-          valorCuota: Math.round(
-            initialMonto / Number(nanocreditoDefaultValues.cantidadCuotas || 12),
-          ),
-        }
+      ? (() => {
+          const plazo = Number(nanocreditoDefaultValues.cantidadCuotas || 12);
+          const desglose = calcularDesgloseCuota("microcredito_small", initialMonto, plazo);
+          return {
+            capitalSeleccionado: initialMonto,
+            valorCuota: desglose.valorCuotaTotal,
+            valorCreditoFinanciado: desglose.valorCreditoFinanciado,
+            cuotaCapitalInteres: desglose.cuotaCapitalInteres,
+            cuotaFianzaMensual: desglose.fianzaMensual,
+            cuotaVidaDeudoresMensual: desglose.vidaDeudoresMensual,
+          };
+        })()
       : {}),
   } as NanocreditoFormValues;
 

@@ -2,14 +2,13 @@ import type { FormSectionConfig } from "@/types/credito";
 import { opcionesBancos } from "@/data/bancos";
 import { opcionesDepartamento } from "@/data/colombia";
 import {
-  ANOS_PAGO,
   CANTIDAD_CUOTAS,
   DESTINOS_CREDITO,
-  DIAS_PAGO,
+  ORIGENES_OTROS_INGRESOS,
   ESTADOS_CIVILES,
   ESTRATOS,
   GENEROS,
-  MESES,
+  SECTORES_DOMICILIO,
   SI_NO,
   TIPOS_CUENTA,
   TIPOS_IDENTIFICACION,
@@ -68,9 +67,13 @@ export const formSectionsNanocredito: FormSectionConfig[] = [
         required: true,
         colSpan: 2,
       },
-      { name: "diaPago", label: "Fecha de pago oportuno — Día", type: "select", options: DIAS_PAGO, required: true },
-      { name: "mesPago", label: "Fecha de pago oportuno — Mes", type: "select", options: MESES, required: true },
-      { name: "anoPago", label: "Fecha de pago oportuno — Año", type: "select", options: ANOS_PAGO, required: true },
+      {
+        name: "fechaPagoOportunoModo",
+        label: "Fecha de pago oportuno",
+        type: "hidden",
+        helperText:
+          "Microcrédito Small: 30 días después del desembolso (no lo elige el cliente).",
+      },
       {
         name: "moraVigente",
         label: "¿Tiene mora vigente en centrales de riesgo (Datacrédito / TransUnion-Cifin)?",
@@ -80,7 +83,14 @@ export const formSectionsNanocredito: FormSectionConfig[] = [
         colSpan: 2,
       },
       { name: "ingresosMensuales", label: "Ingresos mensuales", type: "number", required: true },
-      { name: "otrosIngresos", label: "Otros ingresos", type: "number" },
+      {
+        name: "origenOtrosIngresos",
+        label: "Origen de otros ingresos",
+        type: "select",
+        options: ORIGENES_OTROS_INGRESOS,
+      },
+      { name: "origenOtrosIngresosOtro", label: "Origen de otros ingresos (otro)", type: "text" },
+      { name: "otrosIngresos", label: "Valor de otros ingresos", type: "number" },
     ],
   },
   {
@@ -95,6 +105,13 @@ export const formSectionsNanocredito: FormSectionConfig[] = [
         required: true,
       },
       { name: "municipio", label: "Municipio", type: "select", required: true },
+      {
+        name: "sectorDomicilio",
+        label: "Sector",
+        type: "select",
+        options: SECTORES_DOMICILIO,
+        required: true,
+      },
       { name: "direccion", label: "Dirección", type: "text", required: true, colSpan: 2 },
       { name: "barrio", label: "Barrio", type: "text", required: true },
     ],

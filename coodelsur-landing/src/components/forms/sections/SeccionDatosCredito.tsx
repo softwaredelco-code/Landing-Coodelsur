@@ -7,19 +7,19 @@
  */
 
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { getParametrosAmortizacion, opcionesPlazosCuotas } from "@/config/creditos/amortizacion";
 import {
-  ANOS_PAGO,
-  CANTIDAD_CUOTAS,
   DESTINOS_CREDITO,
-  DIAS_PAGO,
-  MESES,
+  ORIGENES_OTROS_INGRESOS,
   SI_NO,
 } from "@/config/creditos/opciones";
 import { getRangoPorTipo } from "@/config/creditos/montos";
+import { calcularDesgloseCuota } from "@/lib/credito/amortizacion";
 import { formatCOP } from "@/lib/utils";
 import type { NanocreditoFormValues } from "@/lib/validation/nanocredito";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { Controller, useFormContext } from "react-hook-form";
 
 const SMALL = getRangoPorTipo("microcredito_small")!;
@@ -35,14 +35,24 @@ export function SeccionDatosCredito() {
 
   const capital = Number(watch("capitalSeleccionado") || 0);
   const cuotas = Number(watch("cantidadCuotas") || 0);
-  const cuotaEditada = useRef(false);
+  const tipoCredito = watch("tipoCredito") || "microcredito_small";
+  const origenOtrosIngresos = watch("origenOtrosIngresos");
+  const parametros = getParametrosAmortizacion(tipoCredito);
+
+  const desglose = useMemo(() => {
+    if (capital <= 0 || cuotas <= 0) return null;
+    return calcularDesgloseCuota(tipoCredito, capital, cuotas);
+  }, [capital, cuotas, tipoCredito]);
 
   useEffect(() => {
-    if (cuotaEditada.current) return;
-    if (capital > 0 && cuotas > 0) {
-      setValue("valorCuota", Math.round(capital / cuotas), { shouldDirty: true });
-    }
-  }, [capital, cuotas, setValue]);
+    if (!desglose) return;
+
+    setValue("valorCuota", desglose.valorCuotaTotal, { shouldDirty: true, shouldValidate: true });
+    setValue("valorCreditoFinanciado", desglose.valorCreditoFinanciado, { shouldDirty: true });
+    setValue("cuotaCapitalInteres", desglose.cuotaCapitalInteres, { shouldDirty: true });
+    setValue("cuotaFianzaMensual", desglose.fianzaMensual, { shouldDirty: true });
+    setValue("cuotaVidaDeudoresMensual", desglose.vidaDeudoresMensual, { shouldDirty: true });
+  }, [desglose, setValue]);
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -62,7 +72,6 @@ export function SeccionDatosCredito() {
           step={SMALL.step}
           value={Math.min(Math.max(capital || SMALL.min, SMALL.min), SMALL.max)}
           onChange={(event) => {
-            cuotaEditada.current = false;
             setValue("capitalSeleccionado", Number(event.target.value), { shouldValidate: true });
             setValue("tipoCredito", "microcredito_small", { shouldDirty: false });
           }}
@@ -78,7 +87,6 @@ export function SeccionDatosCredito() {
                 name={field.name}
                 value={field.value}
                 onValueChange={(next) => {
-                  cuotaEditada.current = false;
                   const clamped = Math.min(SMALL.max, Math.max(SMALL.min, next || SMALL.min));
                   field.onChange(clamped);
                   setValue("tipoCredito", "microcredito_small", { shouldDirty: false });
@@ -94,35 +102,57 @@ export function SeccionDatosCredito() {
 
       <Select
         label="Cantidad de cuotas"
-        options={CANTIDAD_CUOTAS}
+        options={opcionesPlazosCuotas(tipoCredito)}
         placeholder="Seleccionar..."
         required
         error={errors.cantidadCuotas?.message}
-        {...register("cantidadCuotas", {
-          onChange: () => {
-            cuotaEditada.current = false;
-          },
-        })}
+        {...register("cantidadCuotas")}
       />
-      <Controller
-        name="valorCuota"
-        control={control}
-        render={({ field }) => (
-          <CurrencyInput
-            label="Valor de cuota"
-            name={field.name}
-            value={field.value}
-            required
-            onValueChange={(next) => {
-              cuotaEditada.current = true;
-              field.onChange(next);
-            }}
-            onBlur={field.onBlur}
-            ref={field.ref}
-            error={errors.valorCuota?.message}
-          />
+      <div>
+        <label className="text-sm font-medium text-coodel-dark">
+          Valor de cuota mensual <span className="text-red-500">*</span>
+        </label>
+        <p className="mt-1 text-lg font-semibold text-coodel-primary">
+          {formatCOP(desglose?.valorCuotaTotal ?? Number(watch("valorCuota") || 0))}
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          Calculado con tasa del {(parametros.tasaMensual * 100).toFixed(2).replace(".", ",")} %
+          mensual, fianza ({(parametros.fianzaMensualPorcentaje * 100).toFixed(2).replace(".", ",")}{" "}
+          % del monto) y vida deudores (
+          {(parametros.vidaDeudoresPorcentaje * 100).toFixed(4).replace(".", ",")} % del monto).
+        </p>
+        {errors.valorCuota?.message && (
+          <p className="mt-1 text-xs text-red-600">{errors.valorCuota.message}</p>
         )}
-      />
+      </div>
+
+      {desglose && (
+        <div className="md:col-span-2 rounded-lg border border-gray-100 bg-coodel-surface/40 p-4 text-sm text-coodel-body">
+          <p className="font-medium text-coodel-dark">Desglose estimado de tu cuota</p>
+          <ul className="mt-2 space-y-1">
+            <li className="flex justify-between gap-4">
+              <span>Capital + intereses</span>
+              <span className="font-medium">{formatCOP(desglose.cuotaCapitalInteres)}</span>
+            </li>
+            <li className="flex justify-between gap-4">
+              <span>Fianza mensual</span>
+              <span className="font-medium">{formatCOP(desglose.fianzaMensual)}</span>
+            </li>
+            <li className="flex justify-between gap-4">
+              <span>Vida deudores</span>
+              <span className="font-medium">{formatCOP(desglose.vidaDeudoresMensual)}</span>
+            </li>
+            <li className="flex justify-between gap-4 border-t border-gray-200 pt-2 font-medium text-coodel-dark">
+              <span>Total cuota</span>
+              <span>{formatCOP(desglose.valorCuotaTotal)}</span>
+            </li>
+          </ul>
+          <p className="mt-2 text-xs text-gray-500">
+            Monto financiado para amortización: {formatCOP(desglose.valorCreditoFinanciado)} (capital
+            solicitado + costos asociados).
+          </p>
+        </div>
+      )}
 
       <div className="md:col-span-2">
         <Select
@@ -136,32 +166,12 @@ export function SeccionDatosCredito() {
       </div>
 
       <div className="md:col-span-2">
-        <p className="mb-2 text-sm font-medium text-coodel-dark">Fecha de pago oportuno</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Select
-            label="Día"
-            options={DIAS_PAGO}
-            placeholder="Día"
-            required
-            error={errors.diaPago?.message}
-            {...register("diaPago")}
-          />
-          <Select
-            label="Mes"
-            options={MESES}
-            placeholder="Mes"
-            required
-            error={errors.mesPago?.message}
-            {...register("mesPago")}
-          />
-          <Select
-            label="Año"
-            options={ANOS_PAGO}
-            placeholder="Año"
-            required
-            error={errors.anoPago?.message}
-            {...register("anoPago")}
-          />
+        <div className="rounded-lg border border-coodel-accent/20 bg-coodel-accent/5 px-4 py-3">
+          <p className="text-sm font-medium text-coodel-dark">Fecha de pago oportuno</p>
+          <p className="mt-1 text-sm text-coodel-body">
+            Tu fecha de pago oportuno será <strong>30 días después del desembolso</strong> de tu
+            crédito.
+          </p>
         </div>
       </div>
 
@@ -192,22 +202,52 @@ export function SeccionDatosCredito() {
           />
         )}
       />
-      <Controller
-        name="otrosIngresos"
-        control={control}
-        render={({ field }) => (
-          <CurrencyInput
-            label="Otros ingresos"
-            name={field.name}
-            value={field.value}
-            helperText="Opcional"
-            onValueChange={field.onChange}
-            onBlur={field.onBlur}
-            ref={field.ref}
-            error={errors.otrosIngresos?.message}
+
+      <div className="md:col-span-2 rounded-lg border border-gray-100 bg-coodel-surface/40 p-4">
+        <p className="mb-3 text-sm font-medium text-coodel-dark">Otros ingresos</p>
+        <p className="mb-3 text-xs text-gray-500">Opcional. Complétalo si recibes ingresos adicionales.</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Select
+            label="¿De dónde provienen?"
+            options={ORIGENES_OTROS_INGRESOS}
+            placeholder="Seleccionar..."
+            error={errors.origenOtrosIngresos?.message}
+            {...register("origenOtrosIngresos", {
+              onChange: (event) => {
+                if (event.target.value !== "otro") {
+                  setValue("origenOtrosIngresosOtro", "", { shouldValidate: true });
+                }
+              },
+            })}
           />
-        )}
-      />
+          <Controller
+            name="otrosIngresos"
+            control={control}
+            render={({ field }) => (
+              <CurrencyInput
+                label="Valor de otros ingresos"
+                name={field.name}
+                value={field.value}
+                onValueChange={field.onChange}
+                onBlur={field.onBlur}
+                ref={field.ref}
+                error={errors.otrosIngresos?.message}
+              />
+            )}
+          />
+          {origenOtrosIngresos === "otro" && (
+            <div className="md:col-span-2">
+              <Input
+                label="Describe el origen de tus otros ingresos"
+                placeholder="Ej. venta de productos caseros, comisiones, etc."
+                required
+                error={errors.origenOtrosIngresosOtro?.message}
+                {...register("origenOtrosIngresosOtro")}
+              />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

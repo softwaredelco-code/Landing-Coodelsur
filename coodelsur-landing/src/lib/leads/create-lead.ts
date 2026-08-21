@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { geolocateByIp } from "@/lib/geo/ipapi";
 import { processFileFields } from "@/lib/storage/upload";
 import { inferOrigen } from "@/lib/tracking/utm";
+import { normalizeDocumentNumber } from "@/lib/identity/cedula";
 import {
   isDbConnectionError,
   saveLeadToFile,
@@ -191,7 +192,7 @@ export function extractLeadFromFormBody(body: Record<string, unknown>, utm?: Utm
   return {
     tipoCredito,
     nombre,
-    cedula,
+    cedula: normalizeDocumentNumber(cedula) || String(cedula).trim(),
     telefono,
     email,
     datosFormulario,

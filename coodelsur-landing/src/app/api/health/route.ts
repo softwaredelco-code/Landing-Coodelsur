@@ -1,3 +1,4 @@
+import { isEmailConfigured, getEmailTransport } from "@/lib/email/send";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -13,8 +14,10 @@ export async function GET() {
     ),
     witmeConfigured: Boolean(process.env.WITME_API_KEY),
     adminConfigured: Boolean(process.env.ADMIN_PASSWORD),
+    emailConfigured: isEmailConfigured(),
+    emailTransport: getEmailTransport(),
+    cedulaVerifyConfigured: Boolean(process.env.VERIFIK_API_KEY),
   };
-
   try {
     await prisma.$queryRaw`SELECT 1`;
     checks.database = true;

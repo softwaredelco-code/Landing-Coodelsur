@@ -27,6 +27,11 @@ export const SI_NO = [
   { label: "No", value: "no" },
 ];
 
+export const SECTORES_DOMICILIO = [
+  { label: "Urbano", value: "urbano" },
+  { label: "Rural", value: "rural" },
+];
+
 export const ESTRATOS = [
   { label: "1", value: "1" },
   { label: "2", value: "2" },
@@ -49,6 +54,17 @@ export const DESTINOS_CREDITO = [
   { label: "Salud", value: "salud" },
   { label: "Mejoras de vivienda", value: "vivienda" },
   { label: "Consolidación de deudas", value: "deudas" },
+  { label: "Otro", value: "otro" },
+];
+
+export const ORIGENES_OTROS_INGRESOS = [
+  { label: "Arriendos", value: "arriendos" },
+  { label: "Negocio propio o ventas informales", value: "negocio_propio" },
+  { label: "Pensión o mesada pensional", value: "pension" },
+  { label: "Apoyo económico familiar", value: "apoyo_familiar" },
+  { label: "Remesas del exterior", value: "remesas" },
+  { label: "Trabajo freelance u honorarios", value: "freelance" },
+  { label: "Dividendos o intereses", value: "dividendos_intereses" },
   { label: "Otro", value: "otro" },
 ];
 

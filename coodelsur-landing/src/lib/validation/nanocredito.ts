@@ -1,5 +1,8 @@
 import { z } from "zod";
+import { getParametrosAmortizacion } from "@/config/creditos/amortizacion";
 import { getRangoPorTipo } from "@/config/creditos/montos";
+import { calcularDesgloseCuota } from "@/lib/credito/amortizacion";
+import { validateLocalIdentity } from "@/lib/identity/cedula-local";
 import { isCelularColombia } from "@/lib/utils";
 import type { GeoCoords } from "@/types/credito";
 
@@ -92,16 +95,28 @@ export const nanocreditoSchema = z.object({
   ),
   cantidadCuotas: requiredInt("Cantidad de cuotas", 1),
   valorCuota: requiredMoney("Valor de cuota"),
+  valorCreditoFinanciado: optionalNumber,
+  cuotaCapitalInteres: optionalNumber,
+  cuotaFianzaMensual: optionalNumber,
+  cuotaVidaDeudoresMensual: optionalNumber,
   destinoCredito: requiredText("Destino del crédito"),
-  diaPago: requiredText("Día de pago"),
-  mesPago: requiredText("Mes de pago"),
-  anoPago: requiredText("Año de pago"),
+  /** Microcrédito Small: pago oportuno 30 días después del desembolso (no lo elige el cliente). */
+  fechaPagoOportunoModo: z.literal("30_dias_despues_desembolso").default("30_dias_despues_desembolso"),
   moraVigente: requiredText("Indica si tienes mora vigente"),
   ingresosMensuales: requiredMoney("Ingresos mensuales"),
+  origenOtrosIngresos: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  origenOtrosIngresosOtro: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
   otrosIngresos: optionalNumber,
 
   departamento: requiredText("Departamento"),
   municipio: requiredText("Municipio"),
+  sectorDomicilio: requiredText("Sector del domicilio"),
   direccion: requiredText("Dirección", 5),
   barrio: requiredText("Barrio"),
 
@@ -137,7 +152,82 @@ export const nanocreditoSchema = z.object({
     }),
   fechaAceptacionTerminos: z.string().optional(),
   firma: z.string().min(1, "La firma es requerida para confirmar tu aceptación"),
-});
+})
+  .superRefine((data, ctx) => {
+    const validation = validateLocalIdentity({
+      documentType: data.tipoIdentificacion,
+      documentNumber: data.cedula,
+      nombre: data.nombre,
+      fechaNacimiento: data.fechaNacimiento,
+      fechaExpedicion: data.fechaExpedicion,
+    });
+
+    if (!validation.ok) {
+      for (const message of validation.messages) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message,
+          path: ["cedula"],
+        });
+      }
+    }
+
+    const origenOtros = data.origenOtrosIngresos?.trim() ?? "";
+    const origenOtrosOtro = data.origenOtrosIngresosOtro?.trim() ?? "";
+    const montoOtros = data.otrosIngresos ?? 0;
+    const tieneOrigenOtros = origenOtros.length > 0;
+    const tieneMontoOtros = montoOtros > 0;
+
+    if (tieneOrigenOtros || tieneMontoOtros) {
+      if (!tieneOrigenOtros) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Indica de dónde provienen tus otros ingresos",
+          path: ["origenOtrosIngresos"],
+        });
+      }
+
+      if (!tieneMontoOtros) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Ingresa el valor de tus otros ingresos",
+          path: ["otrosIngresos"],
+        });
+      }
+
+      if (origenOtros === "otro" && !origenOtrosOtro) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Describe de dónde provienen tus otros ingresos",
+          path: ["origenOtrosIngresosOtro"],
+        });
+      }
+    }
+
+    const params = getParametrosAmortizacion(data.tipoCredito);
+
+    if (!(params.plazosPermitidos as readonly number[]).includes(data.cantidadCuotas)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Selecciona un plazo válido para este tipo de crédito",
+        path: ["cantidadCuotas"],
+      });
+    }
+
+    const desglose = calcularDesgloseCuota(
+      data.tipoCredito,
+      data.capitalSeleccionado,
+      data.cantidadCuotas,
+    );
+
+    if (Math.abs(data.valorCuota - desglose.valorCuotaTotal) > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El valor de la cuota no coincide con el cálculo del crédito. Actualiza capital o plazo.",
+        path: ["valorCuota"],
+      });
+    }
+  });
 
 export type NanocreditoFormValues = z.infer<typeof nanocreditoSchema>;
 
@@ -169,11 +259,10 @@ export const NANOCREDITO_STEPS = [
       "cantidadCuotas",
       "valorCuota",
       "destinoCredito",
-      "diaPago",
-      "mesPago",
-      "anoPago",
       "moraVigente",
       "ingresosMensuales",
+      "origenOtrosIngresos",
+      "origenOtrosIngresosOtro",
       "otrosIngresos",
     ],
   },
@@ -181,7 +270,7 @@ export const NANOCREDITO_STEPS = [
     id: "domicilio",
     title: "Domicilio",
     description: "¿Dónde vives actualmente?",
-    fields: ["departamento", "municipio", "direccion", "barrio"],
+    fields: ["departamento", "municipio", "sectorDomicilio", "direccion", "barrio"],
   },
   {
     id: "activos",
@@ -223,6 +312,8 @@ export const NANOCREDITO_STEPS = [
 
 export type NanocreditoStepId = (typeof NANOCREDITO_STEPS)[number]["id"];
 
+const defaultDesglose = calcularDesgloseCuota("microcredito_small", 400_000, 12);
+
 export const nanocreditoDefaultValues: Partial<NanocreditoFormValues> = {
   tipoCredito: "microcredito_small",
   nombre: "",
@@ -237,14 +328,19 @@ export const nanocreditoDefaultValues: Partial<NanocreditoFormValues> = {
   estrato: "",
   capitalSeleccionado: 400_000,
   cantidadCuotas: 12,
-  valorCuota: Math.round(400_000 / 12),
+  valorCuota: defaultDesglose.valorCuotaTotal,
+  valorCreditoFinanciado: defaultDesglose.valorCreditoFinanciado,
+  cuotaCapitalInteres: defaultDesglose.cuotaCapitalInteres,
+  cuotaFianzaMensual: defaultDesglose.fianzaMensual,
+  cuotaVidaDeudoresMensual: defaultDesglose.vidaDeudoresMensual,
   destinoCredito: "",
-  diaPago: "",
-  mesPago: "",
-  anoPago: "",
+  fechaPagoOportunoModo: "30_dias_despues_desembolso",
   moraVigente: "",
+  origenOtrosIngresos: "",
+  origenOtrosIngresosOtro: "",
   departamento: "",
   municipio: "",
+  sectorDomicilio: "",
   direccion: "",
   barrio: "",
   tieneVivienda: "",

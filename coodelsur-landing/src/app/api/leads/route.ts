@@ -1,4 +1,9 @@
 import { createLead, extractLeadFromFormBody } from "@/lib/leads/create-lead";
+import { sendLeadConfirmationEmail } from "@/lib/email/lead-confirmation";
+import {
+  buildCedulaVerificacionPayload,
+  verifyDocumentComplete,
+} from "@/lib/identity/verify-document";
 import { getClientIp } from "@/lib/utils";
 import { montoCoincideConTipo, resolverTipoPorMonto } from "@/config/creditos/montos";
 import { nanocreditoSchema } from "@/lib/validation/nanocredito";
@@ -88,13 +93,50 @@ export async function POST(request: Request) {
       );
     }
 
+    const cedulaVerificacion = await verifyDocumentComplete({
+      documentType: String(formResult.data.tipoIdentificacion ?? "CC"),
+      documentNumber: formResult.data.cedula,
+      nombre: formResult.data.nombre,
+      fechaNacimiento: formResult.data.fechaNacimiento,
+      fechaExpedicion: formResult.data.fechaExpedicion,
+      checkDuplicate: true,
+    });
+
+    if (!cedulaVerificacion.ok) {
+      return NextResponse.json(
+        {
+          error: cedulaVerificacion.message,
+          details: { cedulaVerificacion: cedulaVerificacion.status },
+        },
+        { status: 422 },
+      );
+    }
+
+    leadData.datosFormulario.cedulaVerificacion = buildCedulaVerificacionPayload(cedulaVerificacion);
+
     const lead = await createLead({ ...leadData, ip });
+
+    void sendLeadConfirmationEmail({
+      to: leadData.email ?? "",
+      leadId: lead.id,
+      nombre: leadData.nombre,
+      tipoCredito: leadData.tipoCredito,
+      estado: "recibido",
+      datosFormulario: leadData.datosFormulario,
+    }).catch((error) => {
+      console.error("[POST /api/leads] email", error);
+    });
 
     return NextResponse.json(
       {
         success: true,
         id: lead.id,
         storage: lead.storage ?? "database",
+        cedulaVerificacion: {
+          status: cedulaVerificacion.status,
+          message: cedulaVerificacion.message,
+        },
+        emailQueued: Boolean(leadData.email),
       },
       { status: 201 },
     );

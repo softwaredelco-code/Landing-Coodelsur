@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { SECTORES_DOMICILIO } from "@/config/creditos/opciones";
 import { opcionesDepartamento, opcionesMunicipio } from "@/data/colombia";
 import type { NanocreditoFormValues } from "@/lib/validation/nanocredito";
 import { useFormContext } from "react-hook-form";
@@ -36,6 +37,14 @@ export function SeccionDomicilio() {
         disabled={!departamento}
         error={errors.municipio?.message}
         {...register("municipio")}
+      />
+      <Select
+        label="Sector"
+        options={SECTORES_DOMICILIO}
+        placeholder="Seleccionar..."
+        required
+        error={errors.sectorDomicilio?.message}
+        {...register("sectorDomicilio")}
       />
       <div className="md:col-span-2">
         <Input

@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
+import { SECTORES_DOMICILIO } from "@/config/creditos/opciones";
 import { formatCOP } from "@/lib/utils";
 import type { NanocreditoFormValues } from "@/lib/validation/nanocredito";
 import Link from "next/link";
@@ -25,6 +26,10 @@ export function ConfirmacionSolicitud({
   leadId,
   onNuevaSolicitud,
 }: ConfirmacionSolicitudProps) {
+  const sectorLabel =
+    SECTORES_DOMICILIO.find((sector) => sector.value === data.sectorDomicilio)?.label ??
+    data.sectorDomicilio;
+
   return (
     <div className="border border-gray-200 bg-white p-6 shadow-sm md:p-10">
       <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-coodel-accent/10 text-coodel-accent">
@@ -35,6 +40,13 @@ export function ConfirmacionSolicitud({
       <h2 className="text-center text-2xl font-bold text-coodel-dark">Solicitud recibida</h2>
       <p className="mx-auto mt-2 max-w-md text-center text-coodel-body">
         En breve te contactaremos. Un asesor de Coodelsur revisará tus datos y se comunicará contigo.
+        {data.email ? (
+          <>
+            {" "}
+            También enviamos un resumen de tu solicitud a{" "}
+            <span className="font-medium text-coodel-dark">{data.email}</span>.
+          </>
+        ) : null}
       </p>
       {leadId && (
         <p className="mt-3 text-center text-xs text-gray-500">
@@ -50,7 +62,7 @@ export function ConfirmacionSolicitud({
         <Row label="Capital" value={formatCOP(Number(data.capitalSeleccionado))} />
         <Row label="Cuotas" value={String(data.cantidadCuotas)} />
         <Row label="Valor cuota" value={formatCOP(Number(data.valorCuota))} />
-        <Row label="Domicilio" value={`${data.municipio}, ${data.departamento}`} />
+        <Row label="Domicilio" value={`${data.municipio}, ${data.departamento} (${sectorLabel})`} />
         <Row label="Cédula frontal" value={data.cedulaFrontal?.fileName ? "Archivo cargado" : "—"} />
         <Row label="Cédula reverso" value={data.cedulaReverso?.fileName ? "Archivo cargado" : "—"} />
         <Row label="Video" value={data.videoVerificacion?.fileName ? "Video cargado" : "—"} />
