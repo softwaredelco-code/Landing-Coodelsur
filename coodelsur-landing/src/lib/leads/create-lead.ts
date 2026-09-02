@@ -1,12 +1,25 @@
+/**
+ * Creación y finalización de solicitudes de crédito (`Lead`).
+ *
+ * Orquesta geolocalización, subida de adjuntos a Supabase Storage, campos
+ * resumen para el admin y persistencia en PostgreSQL. Si la DB no responde,
+ * cae en `data/leads.json` (solo desarrollo; ver `LEAD_STORE`).
+ *
+ * @see POST /api/leads — endpoint HTTP
+ * @see save-draft-lead.ts — borradores incompletos que se promueven a `recibido`
+ */
 import { Prisma, type LeadEstado } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { geolocateByIp } from "@/lib/geo/ipapi";
+import { buildLeadSummaryFields } from "@/lib/leads/lead-summary-fields";
 import { processFileFields } from "@/lib/storage/upload";
 import { inferOrigen } from "@/lib/tracking/utm";
 import { normalizeDocumentNumber } from "@/lib/identity/cedula";
 import {
+  getLeadFromFile,
   isDbConnectionError,
   saveLeadToFile,
+  updateLeadInFile,
   type StoredLead,
 } from "@/lib/leads/file-store";
 import type { LeadPayload, UtmParams } from "@/types/credito";
@@ -16,6 +29,7 @@ interface CreateLeadInput extends Omit<LeadPayload, "ip"> {
   aceptaTerminos?: boolean;
   fechaAceptacionTerminos?: string | null;
   estado?: LeadEstado;
+  draftLeadId?: string | null;
 }
 
 type LeadResult = {
@@ -61,8 +75,15 @@ function toFileLead(input: CreateLeadInput, processedData: Record<string, unknow
  * 2) Si la DB no responde, guarda en `data/leads.json` para no bloquear la presentación
  */
 export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
-  const geoFromIp = await geolocateByIp(input.ip ?? null);
-  const processedData = await processFileFields(input.datosFormulario);
+  const hasGeoFromClient = Boolean(
+    input.geo?.ciudad ||
+      (input.geo?.latitud != null && input.geo?.longitud != null),
+  );
+
+  const [geoFromIp, processedData] = await Promise.all([
+    hasGeoFromClient ? Promise.resolve({}) : geolocateByIp(input.ip ?? null),
+    processFileFields(input.datosFormulario),
+  ]);
 
   const geo = {
     ciudad: geoFromIp.ciudad,
@@ -85,11 +106,54 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
     fechaAceptacionTerminos && !Number.isNaN(fechaAceptacionTerminos.getTime())
       ? fechaAceptacionTerminos
       : null;
+  const estadoFinal = input.estado ?? "recibido";
+  const summary = buildLeadSummaryFields(processedData, estadoFinal);
 
   const forceFile = process.env.LEAD_STORE === "file";
 
   if (!forceFile) {
     try {
+      if (input.draftLeadId) {
+        const existing = await prisma.lead.findUnique({
+          where: { id: input.draftLeadId },
+          select: { id: true, estado: true },
+        });
+        if (existing?.estado === "incompleto") {
+          const lead = await prisma.lead.update({
+            where: { id: input.draftLeadId },
+            data: {
+              tipoCredito: input.tipoCredito,
+              nombre: input.nombre,
+              cedula: input.cedula,
+              telefono: input.telefono,
+              email: input.email || null,
+              ...summary,
+              datosFormulario: processedData as Prisma.InputJsonValue,
+              origen: input.origen || inferOrigen(utm),
+              estado: estadoFinal,
+              aceptaTerminos,
+              fechaAceptacionTerminos: fechaOk,
+              utmSource: utm.utmSource ?? null,
+              utmCampaign: utm.utmCampaign ?? null,
+              utmMedium: utm.utmMedium ?? null,
+              utmTerm: utm.utmTerm ?? null,
+              utmContent: utm.utmContent ?? null,
+              ip: input.ip ?? null,
+              ciudad: geo.ciudad ?? null,
+              pais: geo.pais ?? null,
+              latitud: geo.latitud ?? null,
+              longitud: geo.longitud ?? null,
+            },
+          });
+          return {
+            id: lead.id,
+            tipoCredito: lead.tipoCredito,
+            nombre: lead.nombre,
+            storage: "database",
+          };
+        }
+      }
+
       const lead = await prisma.lead.create({
         data: {
           tipoCredito: input.tipoCredito,
@@ -97,9 +161,10 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
           cedula: input.cedula,
           telefono: input.telefono,
           email: input.email || null,
+          ...summary,
           datosFormulario: processedData as Prisma.InputJsonValue,
           origen: input.origen || inferOrigen(utm),
-          estado: input.estado ?? "recibido",
+          estado: estadoFinal,
           aceptaTerminos,
           fechaAceptacionTerminos: fechaOk,
           utmSource: utm.utmSource ?? null,
@@ -124,6 +189,42 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
         "[createLead] PostgreSQL no disponible. Usando almacenamiento local data/leads.json",
         error instanceof Error ? error.message : error,
       );
+    }
+  }
+
+  if (input.draftLeadId) {
+    const existing = getLeadFromFile(input.draftLeadId);
+    if (existing?.estado === "incompleto") {
+      const updated = updateLeadInFile(input.draftLeadId, {
+        tipoCredito: input.tipoCredito,
+        nombre: input.nombre,
+        cedula: input.cedula,
+        telefono: input.telefono,
+        email: input.email || null,
+        datosFormulario: processedData,
+        origen: input.origen || inferOrigen(utm),
+        estado: input.estado ?? "recibido",
+        aceptaTerminos,
+        fechaAceptacionTerminos: fechaOk?.toISOString() ?? null,
+        utmSource: utm.utmSource ?? null,
+        utmCampaign: utm.utmCampaign ?? null,
+        utmMedium: utm.utmMedium ?? null,
+        utmTerm: utm.utmTerm ?? null,
+        utmContent: utm.utmContent ?? null,
+        ip: input.ip ?? null,
+        ciudad: geo.ciudad ?? null,
+        pais: geo.pais ?? null,
+        latitud: geo.latitud ?? null,
+        longitud: geo.longitud ?? null,
+      });
+      if (updated) {
+        return {
+          id: updated.id,
+          tipoCredito: updated.tipoCredito,
+          nombre: updated.nombre,
+          storage: "file",
+        };
+      }
     }
   }
 
@@ -169,6 +270,7 @@ export function extractLeadFromFormBody(body: Record<string, unknown>, utm?: Utm
     "email",
     "utm",
     "geoCliente",
+    "draftLeadId",
   ]);
 
   const datosFormulario: Record<string, unknown> = {};

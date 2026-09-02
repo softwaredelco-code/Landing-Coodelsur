@@ -1,47 +1,60 @@
-# Verificación backend (cuando tengas PostgreSQL)
+# Configuración del backend
 
-## Estado actual del código
+Guía para conectar PostgreSQL, Supabase Storage y verificar que el entorno responde correctamente.
 
-- Formulario Nanocrédito → `POST /api/leads`
-- Schema Prisma con `estado`, `aceptaTerminos`, `fechaAceptacionTerminos`
-- Storage con límites (imagen 5MB, video 15MB)
-- Panel `/admin` + APIs admin
-- Webhook Witme listo (`WITME_API_KEY`)
-- `GET /api/health` para diagnóstico
+## Requisitos
 
-## Por qué `db:push` puede fallar en local
+- Node.js 18+
+- Cuenta [Supabase](https://supabase.com) (producción) **o** Docker (local)
 
-Si ves `P1001: Can't reach database server at localhost:5432`, aún no hay PostgreSQL corriendo.
+## Supabase (recomendado)
 
-### Opción rápida (Supabase)
-
-1. Crea proyecto en https://supabase.com  
-2. Settings → Database → URI → pégalo en `.env` y `.env.local` como `DATABASE_URL`  
-3. Storage → bucket `lead-attachments`  
-4. Settings → API → `SUPABASE_URL` + `service_role` en `.env.local`  
-5. Ejecuta:
+1. Crear proyecto (región `sa-east-1`).
+2. **Connect → Transaction pooler** → `DATABASE_URL` (puerto `6543`, `?pgbouncer=true`).
+3. **Connect → Session pooler** → `DIRECT_URL` (puerto `5432`).
+4. **Settings → API Keys** → `SUPABASE_URL` + Secret key → `SUPABASE_SERVICE_ROLE_KEY`.
+5. **Storage → New bucket** → `lead-attachments`.
+6. Sincronizar schema:
 
 ```bash
 npm run db:push
 npm run dev
 ```
 
-6. Abre http://localhost:3000/api/health → `"database": true`  
-7. Envía un Nanocrédito de prueba y revisa Table Editor → `Lead`  
-8. Entra a http://localhost:3000/admin con `ADMIN_PASSWORD`
+7. Verificar: [http://localhost:3000/api/health](http://localhost:3000/api/health) → `"database": true`.
 
-### Opción Docker (si instalas Docker Desktop)
+## Docker local (alternativa)
 
 ```bash
 docker compose up -d
 npm run db:push
 ```
 
-## Checklist de prueba manual (Fase 1)
+Usar `DATABASE_URL` de `.env.example`. No requiere `DIRECT_URL`.
 
-- [ ] `/api/health` responde `database: true`
+## Script de verificación
+
+```bash
+npm run verify:backend
+```
+
+Ejecuta `prisma generate` y consulta `/api/health`.
+
+## Checklist antes de producción
+
 - [ ] `NEXT_PUBLIC_DEMO_MODE=false`
-- [ ] Envío de formulario crea fila en `Lead`
-- [ ] Con Storage configurado, adjuntos tienen `url`
-- [ ] Confirmación muestra número de solicitud (id)
-- [ ] Admin lista el lead en `/admin/leads`
+- [ ] `LEAD_STORE` vacío (usa PostgreSQL, no JSON local)
+- [ ] `ADMIN_PASSWORD` definida
+- [ ] Storage configurado (`storageConfigured: true` en health)
+- [ ] SMTP o Resend para correos al cliente (opcional pero recomendado)
+
+## Solución de problemas
+
+| Error | Causa | Solución |
+|-------|-------|----------|
+| `P1001` localhost:5432 | PostgreSQL no corre | Docker o Supabase |
+| `Invalid Compact JWS` en Storage | Clave `sb_secret_` mal usada | Ya corregido en `supabaseStorageHeaders` |
+| Admin vacío pero hay datos | Caché navegador | Ctrl+Shift+R en `/admin/leads` |
+| Lentitud en admin | Pooler incorrecto | Usar puerto 6543 en `DATABASE_URL` |
+
+Ver también: [DESPLIEGUE.md](./DESPLIEGUE.md), [API.md](./API.md).

@@ -1,4 +1,8 @@
-import { normalizeDocumentNumber } from "@/lib/identity/cedula";
+import {
+  getColombianCcFormatMessage,
+  isValidCcFormat,
+  normalizeDocumentNumber,
+} from "@/lib/identity/cedula";
 
 export type LocalValidationIssue =
   | "invalid_format"
@@ -77,7 +81,7 @@ export function isValidDocumentFormat(documentType: string, documentNumber: stri
 
   switch (type) {
     case "CC":
-      return /^\d{6,10}$/.test(digits);
+      return isValidCcFormat(documentNumber);
     case "CE":
       return /^\d{6,10}$/.test(digits);
     case "TI":
@@ -171,7 +175,7 @@ export function validateLocalIdentity(
 function getDocumentFormatMessage(documentType: string): string {
   switch (documentType.toUpperCase()) {
     case "CC":
-      return "La cédula de ciudadanía debe tener entre 6 y 10 dígitos.";
+      return getColombianCcFormatMessage();
     case "CE":
       return "La cédula de extranjería debe tener entre 6 y 10 dígitos.";
     case "TI":
@@ -189,7 +193,33 @@ function getDocumentFormatMessage(documentType: string): string {
 
 export function buildLocalValidationSuccessMessage(documentType: string): string {
   if (documentType.toUpperCase() === "CC") {
-    return "Documento con formato válido. Validaremos la cédula con las fotos adjuntas y revisión del equipo.";
+    return "Cédula con formato válido. Validaremos con las fotos adjuntas y revisión del equipo.";
   }
   return "Documento con formato válido. Se revisará manualmente con los archivos adjuntos.";
+}
+
+/** Normaliza el valor mientras el usuario escribe, según el tipo de documento. */
+export function formatDocumentInput(documentType: string, value: string): string {
+  const type = documentType.trim().toUpperCase();
+
+  if (type === "PAS") {
+    return value.replace(/\s/g, "").toUpperCase().slice(0, 15);
+  }
+
+  const digits = normalizeDocumentNumber(value);
+  const maxLength = type === "TI" ? 11 : 10;
+  return digits.slice(0, maxLength);
+}
+
+export function getDocumentFormatHint(documentType: string): string | undefined {
+  switch (documentType.trim().toUpperCase()) {
+    case "CC":
+      return "Solo números. Cédula colombiana: 6, 7 o 10 dígitos.";
+    case "CE":
+      return "Solo números. Cédula de extranjería: entre 6 y 10 dígitos.";
+    case "TI":
+      return "Solo números. Tarjeta de identidad: 10 u 11 dígitos.";
+    default:
+      return undefined;
+  }
 }

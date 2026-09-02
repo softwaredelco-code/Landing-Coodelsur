@@ -10,7 +10,9 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "verify:backend": "node scripts/verify-backend.js"
+    "verify:backend": "node scripts/verify-backend.js",
+    "docs:campos-witme": "node scripts/generate-campos-witme-docx.mjs",
+    "docs:manuales": "node scripts/generate-manuales-docx.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -24,6 +26,7 @@
     "react-signature-canvas": "^1.0.6",
     "resend": "^6.21.0",
     "tailwind-merge": "^2.5.4",
+    "xlsx-js-style": "^1.2.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -33,6 +36,7 @@
     "@types/react-dom": "^18.3.1",
     "@types/react-signature-canvas": "^1.0.6",
     "autoprefixer": "^10.4.20",
+    "docx": "^9.7.1",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.18",
     "postcss": "^8.4.49",

@@ -21,7 +21,7 @@ export async function geolocateByIp(ip: string | null): Promise<GeoLocation> {
       : `https://ipapi.co/${ip}/json/`;
 
     const response = await fetch(url, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(2000),
       next: { revalidate: 0 },
     });
 

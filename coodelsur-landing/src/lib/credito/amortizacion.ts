@@ -1,9 +1,11 @@
-import { getParametrosAmortizacion } from "@/config/creditos/amortizacion";
+import { calcularEstudioCredito, getParametrosAmortizacion, type ParametrosAmortizacion } from "@/config/creditos/amortizacion";
 import type { TipoCredito } from "@/types/credito";
 
 export interface DesgloseCuota {
   tipoCredito: TipoCredito;
   montoSolicitado: number;
+  /** Cargo único de estudio de crédito (no va en la cuota mensual aparte; entra en la base PMT). */
+  estudioCredito: number;
   valorCreditoFinanciado: number;
   cantidadCuotas: number;
   tasaMensual: number;
@@ -31,9 +33,11 @@ export function calcularDesgloseCuota(
   tipoCredito: TipoCredito,
   montoSolicitado: number,
   cantidadCuotas: number,
+  parametrosOverride?: ParametrosAmortizacion,
 ): DesgloseCuota {
-  const params = getParametrosAmortizacion(tipoCredito);
-  const valorCreditoFinanciado = Math.round(montoSolicitado * params.factorValorFinanciado);
+  const params = parametrosOverride ?? getParametrosAmortizacion(tipoCredito);
+  const estudioCredito = calcularEstudioCredito(params.estudioCredito, montoSolicitado);
+  const valorCreditoFinanciado = montoSolicitado + estudioCredito;
   const cuotaCapitalInteres = calcularCuotaCapitalInteres(
     valorCreditoFinanciado,
     params.tasaMensual,
@@ -45,6 +49,7 @@ export function calcularDesgloseCuota(
   return {
     tipoCredito,
     montoSolicitado,
+    estudioCredito,
     valorCreditoFinanciado,
     cantidadCuotas,
     tasaMensual: params.tasaMensual,

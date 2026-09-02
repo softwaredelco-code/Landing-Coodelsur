@@ -1,62 +1,65 @@
 "use client";
 
+import { AdminShell } from "@/components/admin/AdminShell";
+import { LeadAttachmentGallery } from "@/components/admin/LeadAttachmentGallery";
+import { LeadInfoGrid, LeadSummaryCard } from "@/components/admin/LeadInfoGrid";
+import { LeadUbicacionSection } from "@/components/admin/LeadUbicacionSection";
+import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import type { AdminLeadDetail } from "@/lib/leads/admin-lead-detail";
+import { formatCOP } from "@/lib/utils";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-interface LeadDetail {
-  id: string;
-  tipoCredito: string;
-  nombre: string;
-  cedula: string;
-  telefono: string;
-  email: string | null;
-  origen: string;
-  estado: string;
-  aceptaTerminos: boolean;
-  fechaAceptacionTerminos: string | null;
-  utmSource: string | null;
-  utmCampaign: string | null;
-  ciudad: string | null;
-  pais: string | null;
-  latitud: number | null;
-  longitud: number | null;
-  fechaCreacion: string;
-  datosFormulario: Record<string, unknown>;
-}
-
-function attachmentUrl(value: unknown): string | null {
-  if (typeof value === "string" && value.startsWith("http")) return value;
-  if (value && typeof value === "object" && "url" in value) {
-    const url = (value as { url?: unknown }).url;
-    return typeof url === "string" ? url : null;
-  }
-  return null;
-}
+const TIPO_CREDITO_LABELS: Record<string, string> = {
+  microcredito_small: "Microcrédito Small",
+};
 
 export default function AdminLeadDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [lead, setLead] = useState<LeadDetail | null>(null);
+  const [lead, setLead] = useState<AdminLeadDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
     const load = async () => {
-      const res = await fetch(`/api/admin/leads/${params.id}`);
-      if (res.status === 401) {
-        router.replace("/admin");
-        return;
+      try {
+        const res = await fetch(`/api/admin/leads/${params.id}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (cancelled) return;
+
+        if (res.status === 401) {
+          router.replace("/admin");
+          return;
+        }
+        if (!res.ok) {
+          setError("No se encontró la solicitud");
+          return;
+        }
+        const data = (await res.json()) as { lead: AdminLeadDetail };
+        setLead(data.lead);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (!cancelled) {
+          setError("No se pudo cargar la solicitud");
+        }
       }
-      if (!res.ok) {
-        setError("No se encontró la solicitud");
-        return;
-      }
-      const data = (await res.json()) as { lead: LeadDetail };
-      setLead(data.lead);
     };
+
     void load();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [params.id, router]);
 
   const updateEstado = async (estado: string) => {
@@ -73,125 +76,188 @@ export default function AdminLeadDetailPage() {
     }
   };
 
+  const deleteSolicitud = async () => {
+    if (!lead) return;
+
+    const confirmed = window.confirm(
+      `¿Eliminar la solicitud de ${lead.nombre}? Esta acción no se puede deshacer.`,
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    const res = await fetch(`/api/admin/leads/${lead.id}`, { method: "DELETE" });
+    setDeleting(false);
+
+    if (res.ok) {
+      router.push("/admin/leads");
+      router.refresh();
+      return;
+    }
+
+    window.alert("No se pudo eliminar la solicitud. Intenta de nuevo.");
+  };
+
   if (error) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-16">
+      <AdminShell title="Solicitud no encontrada" backHref="/admin/leads" backLabel="Solicitudes">
         <p className="text-red-600">{error}</p>
         <Link href="/admin/leads" className="mt-4 inline-block text-coodel-primary-light underline">
-          Volver
+          Volver al listado
         </Link>
-      </div>
+      </AdminShell>
     );
   }
 
   if (!lead) {
-    return <p className="px-4 py-16 text-center text-gray-500">Cargando…</p>;
+    return (
+      <AdminShell title="Cargando solicitud…" backHref="/admin/leads" backLabel="Solicitudes">
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-20 animate-pulse rounded-xl bg-white" />
+            ))}
+          </div>
+          <div className="h-64 animate-pulse rounded-xl bg-white" />
+        </div>
+      </AdminShell>
+    );
   }
 
-  const datos = lead.datosFormulario ?? {};
-  const files = ["cedulaFrontal", "cedulaReverso", "videoVerificacion", "firma"] as const;
+  const adjuntos = lead.adjuntos ?? [];
 
   return (
-    <div className="min-h-screen bg-coodel-surface">
-      <div className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 md:px-6">
-          <div>
-            <Link href="/admin/leads" className="text-xs text-coodel-primary-light hover:underline">
-              ← Leads
-            </Link>
-            <h1 className="text-xl font-bold text-coodel-dark">{lead.nombre}</h1>
-            <p className="font-mono text-xs text-gray-500">{lead.id}</p>
+    <AdminShell
+      title={lead.nombre}
+      subtitle={`${TIPO_CREDITO_LABELS[lead.tipoCredito] ?? lead.tipoCredito} · ${lead.cedula}`}
+      backHref="/admin/leads"
+      backLabel="Solicitudes"
+      actions={
+        <select
+          value={lead.estado}
+          disabled={saving}
+          onChange={(e) => void updateEstado(e.target.value)}
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium capitalize shadow-sm"
+        >
+          <option value="incompleto">Incompleta</option>
+          <option value="recibido">Recibida</option>
+          <option value="revisado">Revisada</option>
+          <option value="contactado">Contactada</option>
+          <option value="descartado">Descartada</option>
+        </select>
+      }
+    >
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <StatusBadge estado={lead.estado} />
+        <span className="text-xs text-gray-400">
+          ID {lead.id.slice(0, 8)}… · {new Date(lead.fechaCreacion).toLocaleString("es-CO")}
+        </span>
+      </div>
+
+      {lead.estado === "incompleto" && (
+        <section className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-amber-900">Solicitud incompleta</h2>
+              <p className="mt-1 text-sm text-amber-800">
+                El usuario abandonó el formulario antes de enviarlo. Puedes contactarlo para
+                retomar el crédito.
+              </p>
+            </div>
+            {lead.pasoActualFormulario && (
+              <p className="text-sm font-medium text-amber-900">
+                Último paso: {lead.pasoActualFormulario}
+              </p>
+            )}
           </div>
-          <select
-            value={lead.estado}
-            disabled={saving}
-            onChange={(e) => void updateEstado(e.target.value)}
-            className="border border-gray-300 px-3 py-2 text-sm capitalize"
-          >
-            <option value="recibido">recibido</option>
-            <option value="revisado">revisado</option>
-            <option value="contactado">contactado</option>
-            <option value="descartado">descartado</option>
-          </select>
+          {lead.progresoFormulario !== null && (
+            <div className="mt-4">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="font-medium text-amber-900">Progreso</span>
+                <span className="font-semibold text-amber-900">{lead.progresoFormulario}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-amber-100">
+                <div
+                  className="h-full rounded-full bg-amber-500 transition-all"
+                  style={{ width: `${lead.progresoFormulario}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <LeadSummaryCard
+          label="Monto solicitado"
+          value={lead.capitalSolicitado ? formatCOP(lead.capitalSolicitado) : "—"}
+          highlight
+        />
+        <LeadSummaryCard
+          label="Cuotas"
+          value={lead.cantidadCuotas ? String(lead.cantidadCuotas) : "—"}
+        />
+        <LeadSummaryCard
+          label="Valor cuota"
+          value={lead.valorCuota ? formatCOP(lead.valorCuota) : "—"}
+        />
+        <LeadSummaryCard label="Teléfono" value={lead.telefono} />
+      </div>
+
+      <div className="mb-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm md:p-6">
+            <h2 className="mb-4 text-lg font-semibold text-coodel-dark">Contacto y origen</h2>
+            <LeadInfoGrid
+              fields={[
+                { label: "Nombre", value: lead.nombre },
+                { label: "Cédula", value: lead.cedula },
+                { label: "Teléfono", value: lead.telefono },
+                { label: "Email", value: lead.email ?? "—" },
+                { label: "Origen", value: lead.origen },
+                {
+                  label: "Hábeas data",
+                  value: lead.aceptaTerminos ? "Aceptado" : "No aceptado",
+                },
+                {
+                  label: "Fecha solicitud",
+                  value: new Date(lead.fechaCreacion).toLocaleString("es-CO"),
+                },
+              ]}
+            />
+          </section>
+
+          {lead.secciones.map((section) => (
+            <section
+              key={section.id}
+              className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm md:p-6"
+            >
+              <h2 className="mb-4 text-lg font-semibold text-coodel-dark">{section.title}</h2>
+              <LeadInfoGrid fields={section.fields} />
+            </section>
+          ))}
+        </div>
+
+        <div className="space-y-6">
+          <LeadAttachmentGallery attachments={adjuntos} />
+          <LeadUbicacionSection lead={lead} />
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-4xl gap-6 px-4 py-6 md:px-6">
-        <section className="border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 font-semibold text-coodel-dark">Datos principales</h2>
-          <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-gray-500">Crédito</dt>
-              <dd>{lead.tipoCredito}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500">Cédula</dt>
-              <dd>{lead.cedula}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500">Teléfono</dt>
-              <dd>{lead.telefono}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500">Email</dt>
-              <dd>{lead.email || "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500">Origen</dt>
-              <dd>{lead.origen}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500">Hábeas data</dt>
-              <dd>{lead.aceptaTerminos ? "Aceptado" : "No"}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500">Ciudad</dt>
-              <dd>{lead.ciudad || "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500">Fecha</dt>
-              <dd>{new Date(lead.fechaCreacion).toLocaleString("es-CO")}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 font-semibold text-coodel-dark">Adjuntos</h2>
-          <ul className="space-y-2 text-sm">
-            {files.map((field) => {
-              const url = attachmentUrl(datos[field]);
-              return (
-                <li key={field} className="flex items-center justify-between gap-3 border-b border-gray-100 py-2">
-                  <span className="text-gray-600">{field}</span>
-                  {url ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-semibold text-coodel-primary-light hover:underline"
-                    >
-                      Abrir
-                    </a>
-                  ) : (
-                    <span className="text-gray-400">Sin URL</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        <section className="border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 font-semibold text-coodel-dark">Formulario completo (JSON)</h2>
-          <pre className="max-h-96 overflow-auto bg-coodel-surface p-3 text-xs text-coodel-body">
-            {JSON.stringify(datos, null, 2)}
-          </pre>
-        </section>
-
+      <div className="flex flex-col gap-3 border-t border-gray-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="outline" type="button" onClick={() => router.push("/admin/leads")}>
           Volver al listado
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          loading={deleting}
+          disabled={deleting || saving}
+          onClick={() => void deleteSolicitud()}
+          className="border-red-200 text-red-700 hover:bg-red-50"
+        >
+          Eliminar solicitud
+        </Button>
       </div>
-    </div>
+    </AdminShell>
   );
 }

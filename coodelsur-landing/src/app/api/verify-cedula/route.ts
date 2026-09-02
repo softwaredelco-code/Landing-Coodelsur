@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 const bodySchema = z.object({
   documentType: z.string().min(1),
-  documentNumber: z.string().min(5),
+  documentNumber: z.string().min(1, "Número de documento requerido"),
   nombre: z.string().min(3),
   fechaNacimiento: z.string().min(1),
   fechaExpedicion: z.string().min(1),

@@ -32,6 +32,39 @@ export const SECTORES_DOMICILIO = [
   { label: "Rural", value: "rural" },
 ];
 
+export const TIPOS_REFERENCIA = [
+  { label: "Familiar", value: "familiar" },
+  { label: "Personal", value: "personal" },
+];
+
+export const PARENTESCOS_REFERENCIA_FAMILIAR = [
+  { label: "Padre", value: "padre" },
+  { label: "Madre", value: "madre" },
+  { label: "Hijo/a", value: "hijo" },
+  { label: "Hermano/a", value: "hermano" },
+  { label: "Cónyuge o pareja", value: "conyuge" },
+  { label: "Tío/a", value: "tio" },
+  { label: "Primo/a", value: "primo" },
+  { label: "Abuelo/a", value: "abuelo" },
+  { label: "Suegro/a", value: "suegro" },
+  { label: "Cuñado/a", value: "cunado" },
+  { label: "Otro", value: "otro" },
+];
+
+export const PARENTESCOS_REFERENCIA_PERSONAL = [
+  { label: "Amigo/a", value: "amigo" },
+  { label: "Compañero/a de trabajo", value: "companero_trabajo" },
+  { label: "Vecino/a", value: "vecino" },
+  { label: "Conocido/a", value: "conocido" },
+  { label: "Otro", value: "otro" },
+];
+
+export function opcionesParentescoReferencia(tipoReferencia: string) {
+  return tipoReferencia === "personal"
+    ? PARENTESCOS_REFERENCIA_PERSONAL
+    : PARENTESCOS_REFERENCIA_FAMILIAR;
+}
+
 export const ESTRATOS = [
   { label: "1", value: "1" },
   { label: "2", value: "2" },
@@ -44,16 +77,19 @@ export const ESTRATOS = [
 export const TIPOS_CUENTA = [
   { label: "Ahorros", value: "ahorros" },
   { label: "Corriente", value: "corriente" },
+  { label: "Llave bancaria (Bre-B)", value: "llave" },
 ];
 
+/** Destinos del crédito para Microcrédito Small ($200.000 – $600.000). */
 export const DESTINOS_CREDITO = [
   { label: "Capital de trabajo", value: "capital_trabajo" },
-  { label: "Compra de mercancía", value: "mercancia" },
-  { label: "Gastos personales", value: "gastos_personales" },
-  { label: "Educación", value: "educacion" },
-  { label: "Salud", value: "salud" },
-  { label: "Mejoras de vivienda", value: "vivienda" },
-  { label: "Consolidación de deudas", value: "deudas" },
+  { label: "Compra de mercancía o insumos", value: "mercancia" },
+  { label: "Compra de equipos o herramientas", value: "equipos_herramientas" },
+  { label: "Gastos operativos del negocio", value: "gastos_negocio" },
+  { label: "Gastos personales o familiares", value: "gastos_personales" },
+  { label: "Salud o medicamentos", value: "salud" },
+  { label: "Educación o capacitación", value: "educacion" },
+  { label: "Transporte o movilidad", value: "transporte" },
   { label: "Otro", value: "otro" },
 ];
 

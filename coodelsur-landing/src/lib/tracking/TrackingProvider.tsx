@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { isAnalyticsEnabled, trackPageView } from "./analytics";
 import {
   parseUtmFromSearchParams,
   serializeUtm,
@@ -23,6 +24,7 @@ export function getUtmFromCookie(): string | null {
 }
 
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -31,6 +33,13 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       setCookie(UTM_COOKIE_NAME, serializeUtm(utm), UTM_COOKIE_MAX_AGE);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!isAnalyticsEnabled() || pathname.startsWith("/admin")) return;
+
+    const query = searchParams.toString();
+    trackPageView(query ? `${pathname}?${query}` : pathname);
+  }, [pathname, searchParams]);
 
   return <>{children}</>;
 }

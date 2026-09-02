@@ -8,8 +8,10 @@ import {
   ESTADOS_CIVILES,
   ESTRATOS,
   GENEROS,
+  PARENTESCOS_REFERENCIA_FAMILIAR,
   SECTORES_DOMICILIO,
   SI_NO,
+  TIPOS_REFERENCIA,
   TIPOS_CUENTA,
   TIPOS_IDENTIFICACION,
 } from "./opciones";
@@ -122,6 +124,7 @@ export const formSectionsNanocredito: FormSectionConfig[] = [
     fields: [
       { name: "tieneVivienda", label: "¿Tiene vivienda?", type: "radio", options: SI_NO, required: true },
       { name: "tieneVehiculo", label: "¿Tiene vehículo?", type: "radio", options: SI_NO, required: true },
+      { name: "placaVehiculo", label: "Placa del vehículo", type: "text", colSpan: 2 },
     ],
   },
   {
@@ -136,8 +139,28 @@ export const formSectionsNanocredito: FormSectionConfig[] = [
   },
   {
     id: "referencia",
-    title: "Referencia familiar",
+    title: "Referencia personal o familiar",
     fields: [
+      {
+        name: "referenciaTipo",
+        label: "Tipo de referencia",
+        type: "select",
+        options: TIPOS_REFERENCIA,
+        required: true,
+      },
+      {
+        name: "referenciaParentesco",
+        label: "Parentesco o relación",
+        type: "select",
+        options: PARENTESCOS_REFERENCIA_FAMILIAR,
+        required: true,
+      },
+      {
+        name: "referenciaParentescoOtro",
+        label: "Parentesco o relación (otro)",
+        type: "text",
+        colSpan: 2,
+      },
       {
         name: "referenciaFamiliarNombre",
         label: "Nombre y apellido",
@@ -160,7 +183,7 @@ export const formSectionsNanocredito: FormSectionConfig[] = [
         options: opcionesBancos,
         required: true,
       },
-      { name: "numeroCuenta", label: "Número de cuenta", type: "text", required: true, colSpan: 2 },
+      { name: "numeroCuenta", label: "Número de cuenta o llave bancaria", type: "text", required: true, colSpan: 2 },
     ],
   },
   {

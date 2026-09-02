@@ -1,7 +1,7 @@
-import { prisma } from "@/lib/prisma";
+import { loadLeadForAdminDetail } from "@/lib/leads/load-admin-lead-detail";
+import { deleteLead } from "@/lib/leads/delete-lead";
 import { NextResponse } from "next/server";
 import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/lib/admin/auth";
-import { getLeadFromFile, isDbConnectionError } from "@/lib/leads/file-store";
 
 export async function GET(
   request: Request,
@@ -16,22 +16,42 @@ export async function GET(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  try {
-    const lead = await prisma.lead.findUnique({ where: { id: params.id } });
-    if (!lead) {
-      const fileLead = getLeadFromFile(params.id);
-      if (!fileLead) {
-        return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-      }
-      return NextResponse.json({ lead: fileLead, source: "file" });
-    }
-    return NextResponse.json({ lead, source: "database" });
-  } catch (error) {
-    if (!isDbConnectionError(error)) throw error;
-    const fileLead = getLeadFromFile(params.id);
-    if (!fileLead) {
-      return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-    }
-    return NextResponse.json({ lead: fileLead, source: "file" });
+  const lead = await loadLeadForAdminDetail(params.id);
+  if (!lead) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 });
   }
+
+  return NextResponse.json(
+    { lead, source: "database" },
+    {
+      headers: {
+        "Cache-Control": "private, no-store",
+      },
+    },
+  );
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } },
+) {
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  const token = readCookie(request.headers.get("cookie"), ADMIN_COOKIE);
+  if (!isValidAdminToken(token, password)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const result = await deleteLead(params.id);
+  if (!result) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    attachmentsRemoved: result.attachmentsRemoved,
+    source: result.storage,
+  });
 }

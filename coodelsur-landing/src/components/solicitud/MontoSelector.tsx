@@ -20,6 +20,7 @@ import {
   type ResolucionMonto,
 } from "@/config/creditos/montos";
 import { formatCOP } from "@/lib/utils";
+import { trackEvent } from "@/lib/tracking/analytics";
 import type { TipoCredito } from "@/types/credito";
 import { useMemo, useState } from "react";
 
@@ -61,26 +62,29 @@ export function MontoSelector({ initialMonto, onConfirm }: MontoSelectorProps) {
 
   const handleConfirm = () => {
     if (!resolucion.ok || !resolucion.rango) return;
+    trackEvent("select_monto", {
+      monto,
+      tipo_credito: resolucion.rango.tipo,
+      producto: resolucion.rango.nombre,
+    });
     onConfirm(resolucion);
   };
 
   return (
     <section id="solicitar" className="bg-coodel-surface py-12 md:py-16">
       <div className="mx-auto max-w-3xl px-4 md:px-6">
-        <header className="mb-8">
+        <header className="mb-8 text-center md:text-left">
           <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-coodel-accent">
-            Solicitud de crédito
+            Solicitud en línea
           </p>
-          <h1 className="text-3xl font-bold text-coodel-dark md:text-4xl">
-            ¿Cuánto necesitas?
-          </h1>
+          <h2 className="text-3xl font-bold text-coodel-dark md:text-4xl">¿Cuánto necesitas?</h2>
           <p className="mt-3 text-coodel-body">
-            Indica el monto. El sistema identifica el tipo de crédito correspondiente.
+            Indica el monto y te guiamos al formulario correspondiente.
           </p>
           <p className="mt-2 text-xs text-gray-500">{descripcionRangosParaUi()}</p>
         </header>
 
-        <div className="border border-gray-200 bg-white p-5 shadow-sm md:p-8">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-8">
           <p className="text-sm font-medium text-coodel-dark">Monto solicitado</p>
           <p className="mt-1 text-2xl font-bold text-coodel-primary">{formatCOP(monto)}</p>
 

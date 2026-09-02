@@ -1,8 +1,9 @@
 "use client";
 
-import { FileUpload } from "@/components/forms/FileUpload";
+import { CameraCapture } from "@/components/forms/CameraCapture";
 import { GeolocationCapture } from "@/components/forms/GeolocationCapture";
 import { TermsAcceptance } from "@/components/forms/TermsAcceptance";
+import { VideoRecorder } from "@/components/forms/VideoRecorder";
 import type { NanocreditoFormValues } from "@/lib/validation/nanocredito";
 import dynamic from "next/dynamic";
 import { Controller, useFormContext, useWatch } from "react-hook-form";
@@ -32,14 +33,12 @@ export function SeccionVerificacion() {
         name="cedulaFrontal"
         control={control}
         render={({ field, fieldState }) => (
-          <FileUpload
+          <CameraCapture
             id="cedulaFrontal"
             label="Foto de la cédula — cara frontal"
-            accept="image/*"
-            capture="environment"
-            kind="image"
+            facingMode="environment"
             required
-            helperText="Usa la cámara trasera del celular o sube una imagen nítida."
+            helperText="Funciona en celular y computador. Usa la cámara trasera o sube una imagen nítida."
             value={field.value}
             onChange={field.onChange}
             error={fieldState.error?.message}
@@ -51,14 +50,12 @@ export function SeccionVerificacion() {
         name="cedulaReverso"
         control={control}
         render={({ field, fieldState }) => (
-          <FileUpload
+          <CameraCapture
             id="cedulaReverso"
             label="Foto de la cédula — cara posterior"
-            accept="image/*"
-            capture="environment"
-            kind="image"
+            facingMode="environment"
             required
-            helperText="Foto del reverso del documento."
+            helperText="Toma el reverso con la cámara o súbelo desde tu galería."
             value={field.value}
             onChange={field.onChange}
             error={fieldState.error?.message}
@@ -71,14 +68,12 @@ export function SeccionVerificacion() {
           name="videoVerificacion"
           control={control}
           render={({ field, fieldState }) => (
-            <FileUpload
+            <VideoRecorder
               id="videoVerificacion"
               label="Video de 3 segundos"
-              accept="video/*"
-              capture="user"
-              kind="video"
+              durationSeconds={3}
               required
-              helperText="Graba un video corto de tu rostro (cámara frontal) para verificación de identidad."
+              helperText="Graba un video corto de tu rostro con la cámara frontal. También puedes subir un video si tu navegador no permite grabar."
               value={field.value}
               onChange={field.onChange}
               error={fieldState.error?.message}
@@ -124,7 +119,7 @@ export function SeccionVerificacion() {
               title="Firma de aceptación"
               helperText={
                 aceptaTerminos
-                  ? "Firma para confirmar que aceptas la autorización de hábeas data y esta solicitud."
+                  ? "Puedes firmar con el dedo o el mouse, o subir una imagen de tu firma."
                   : "Primero lee y acepta los términos para habilitar la firma."
               }
             />

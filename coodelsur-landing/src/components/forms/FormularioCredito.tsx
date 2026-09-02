@@ -1,5 +1,7 @@
 "use client";
 
+/** Formulario multi-paso Microcrédito Small (8 pasos, Zod + reglas cruzadas). */
+
 import { ConfirmacionSolicitud } from "@/components/forms/ConfirmacionSolicitud";
 import { FormSection } from "@/components/forms/FormSection";
 import { SeccionActivos } from "@/components/forms/sections/SeccionActivos";
@@ -11,9 +13,18 @@ import { SeccionLaboral } from "@/components/forms/sections/SeccionLaboral";
 import { SeccionReferenciaFamiliar } from "@/components/forms/sections/SeccionReferenciaFamiliar";
 import { SeccionVerificacion } from "@/components/forms/sections/SeccionVerificacion";
 import { Button } from "@/components/ui/Button";
+import { ParametrosAmortizacionProvider } from "@/contexts/ParametrosAmortizacionContext";
+import { useNanocreditoDraft } from "@/hooks/useNanocreditoDraft";
+import {
+  clearNanocreditoServerDraftId,
+  getNanocreditoServerDraftId,
+  syncNanocreditoDraftToServer,
+  useNanocreditoServerDraft,
+} from "@/hooks/useNanocreditoServerDraft";
 import { calcularDesgloseCuota } from "@/lib/credito/amortizacion";
 import {
   NANOCREDITO_STEPS,
+  collectStepCrossFieldErrors,
   nanocreditoDefaultValues,
   nanocreditoSchema,
   sanitizeNanocreditoForLog,
@@ -21,9 +32,10 @@ import {
 } from "@/lib/validation/nanocredito";
 import { deserializeUtm } from "@/lib/tracking/utm";
 import { getUtmFromCookie } from "@/lib/tracking/TrackingProvider";
+import { trackEvent } from "@/lib/tracking/analytics";
 import type { CreditoConfig } from "@/types/credito";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FormProvider, useForm, type FieldErrors, type Path } from "react-hook-form";
 
 interface FormularioCreditoProps {
@@ -45,32 +57,44 @@ const STEP_COMPONENTS = [
 
 const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
-export function FormularioCredito({ config, initialMonto }: FormularioCreditoProps) {
-  const [step, setStep] = useState(0);
+export function FormularioCredito(props: FormularioCreditoProps) {
+  return (
+    <ParametrosAmortizacionProvider>
+      <FormularioCreditoInner {...props} />
+    </ParametrosAmortizacionProvider>
+  );
+}
+
+function FormularioCreditoInner({ config, initialMonto }: FormularioCreditoProps) {
   const [submitted, setSubmitted] = useState(false);
   const [resumen, setResumen] = useState<NanocreditoFormValues | null>(null);
   const [leadId, setLeadId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const defaultValues = {
-    ...nanocreditoDefaultValues,
-    tipoCredito: "microcredito_small" as const,
-    ...(typeof initialMonto === "number" && Number.isFinite(initialMonto)
-      ? (() => {
-          const plazo = Number(nanocreditoDefaultValues.cantidadCuotas || 12);
-          const desglose = calcularDesgloseCuota("microcredito_small", initialMonto, plazo);
-          return {
-            capitalSeleccionado: initialMonto,
-            valorCuota: desglose.valorCuotaTotal,
-            valorCreditoFinanciado: desglose.valorCreditoFinanciado,
-            cuotaCapitalInteres: desglose.cuotaCapitalInteres,
-            cuotaFianzaMensual: desglose.fianzaMensual,
-            cuotaVidaDeudoresMensual: desglose.vidaDeudoresMensual,
-          };
-        })()
-      : {}),
-  } as NanocreditoFormValues;
+  const defaultValues = useMemo(() => {
+    const base = {
+      ...nanocreditoDefaultValues,
+      tipoCredito: "microcredito_small" as const,
+    } as NanocreditoFormValues;
+
+    if (typeof initialMonto === "number" && Number.isFinite(initialMonto)) {
+      const plazo = Number(nanocreditoDefaultValues.cantidadCuotas || 2);
+      const desglose = calcularDesgloseCuota("microcredito_small", initialMonto, plazo);
+      return {
+        ...base,
+        capitalSeleccionado: initialMonto,
+        valorCuota: desglose.valorCuotaTotal,
+        valorCreditoFinanciado: desglose.valorCreditoFinanciado,
+        estudioCredito: desglose.estudioCredito,
+        cuotaCapitalInteres: desglose.cuotaCapitalInteres,
+        cuotaFianzaMensual: desglose.fianzaMensual,
+        cuotaVidaDeudoresMensual: desglose.vidaDeudoresMensual,
+      };
+    }
+
+    return base;
+  }, [initialMonto]);
 
   const methods = useForm<NanocreditoFormValues>({
     resolver: zodResolver(nanocreditoSchema),
@@ -78,8 +102,30 @@ export function FormularioCredito({ config, initialMonto }: FormularioCreditoPro
     mode: "onTouched",
   });
 
-  const { handleSubmit, trigger, reset } = methods;
+  const { handleSubmit, trigger, reset, watch, getValues, setError, clearErrors } = methods;
   const totalSteps = NANOCREDITO_STEPS.length;
+
+  const {
+    step,
+    setStep,
+    draftMessage,
+    dismissDraftMessage,
+    clearDraft,
+  } = useNanocreditoDraft({
+    watch,
+    getValues,
+    reset,
+    baseValues: defaultValues,
+    totalSteps,
+    enabled: !submitted,
+  });
+
+  useNanocreditoServerDraft({
+    watch,
+    getValues,
+    step,
+    enabled: !submitted,
+  });
   const current = NANOCREDITO_STEPS[step];
   const StepFields = STEP_COMPONENTS[step];
   const progress = ((step + 1) / totalSteps) * 100;
@@ -91,8 +137,30 @@ export function FormularioCredito({ config, initialMonto }: FormularioCreditoPro
   const goNext = async () => {
     const fields = [...current.fields] as Path<NanocreditoFormValues>[];
     const valid = await trigger(fields, { shouldFocus: true });
-    if (!valid) return;
-    setStep((prev) => Math.min(prev + 1, totalSteps - 1));
+
+    const crossFieldErrors = collectStepCrossFieldErrors(current.id, getValues());
+    for (const field of fields) {
+      clearErrors(field);
+    }
+    for (const error of crossFieldErrors) {
+      setError(error.path, { type: "manual", message: error.message });
+    }
+
+    if (!valid || crossFieldErrors.length > 0) {
+      if (crossFieldErrors.length > 0) {
+        await trigger(crossFieldErrors[0].path, { shouldFocus: true });
+      }
+      return;
+    }
+
+    const nextStep = Math.min(step + 1, totalSteps - 1);
+    setStep(nextStep);
+    trackEvent("form_step", {
+      step_number: nextStep + 1,
+      step_name: NANOCREDITO_STEPS[nextStep]?.id ?? "unknown",
+      tipo_credito: getValues("tipoCredito"),
+    });
+    void syncNanocreditoDraftToServer(nextStep, getValues);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -124,6 +192,7 @@ export function FormularioCredito({ config, initialMonto }: FormularioCreditoPro
         setResumen(data);
         setLeadId(null);
         setSubmitted(true);
+        clearDraft();
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
@@ -133,6 +202,7 @@ export function FormularioCredito({ config, initialMonto }: FormularioCreditoPro
       const payload = {
         ...data,
         utm,
+        draftLeadId: getNanocreditoServerDraftId() ?? undefined,
         geoCliente: data.geolocalizacion
           ? { lat: data.geolocalizacion.lat, lng: data.geolocalizacion.lng }
           : undefined,
@@ -158,6 +228,13 @@ export function FormularioCredito({ config, initialMonto }: FormularioCreditoPro
       setLeadId(result.id ?? null);
       setResumen(data);
       setSubmitted(true);
+      trackEvent("generate_lead", {
+        tipo_credito: data.tipoCredito,
+        monto: data.capitalSeleccionado,
+        lead_id: result.id,
+      });
+      clearDraft();
+      clearNanocreditoServerDraftId();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("[FormularioCredito] submit", error);
@@ -172,7 +249,10 @@ export function FormularioCredito({ config, initialMonto }: FormularioCreditoPro
   };
 
   const nuevaSolicitud = () => {
+    clearDraft();
+    clearNanocreditoServerDraftId();
     reset(defaultValues);
+    dismissDraftMessage();
     setSubmitted(false);
     setResumen(null);
     setLeadId(null);
@@ -190,6 +270,20 @@ export function FormularioCredito({ config, initialMonto }: FormularioCreditoPro
     <FormProvider {...methods}>
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate className="flex flex-col gap-5">
         <input type="hidden" {...methods.register("tipoCredito")} />
+
+        {draftMessage && (
+          <div className="flex items-start justify-between gap-3 border border-coodel-accent/30 bg-coodel-accent/5 px-4 py-3 text-sm text-coodel-dark">
+            <p>{draftMessage}</p>
+            <button
+              type="button"
+              onClick={dismissDraftMessage}
+              className="shrink-0 text-xs text-gray-500 underline hover:text-coodel-primary"
+            >
+              Entendido
+            </button>
+          </div>
+        )}
+
         <div className="border border-gray-200 bg-white px-4 py-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between text-xs font-medium text-gray-500">
             <span>

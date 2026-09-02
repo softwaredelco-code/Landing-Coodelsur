@@ -7,6 +7,7 @@ import {
   listLeadsFromFile,
   updateLeadEstadoInFile,
 } from "@/lib/leads/file-store";
+import { mapLeadListRow } from "@/lib/leads/lead-summary";
 import type { LeadEstado } from "@prisma/client";
 
 function requireAdmin(request: Request): boolean {
@@ -62,12 +63,28 @@ export async function GET(request: Request) {
           aceptaTerminos: true,
           ciudad: true,
           fechaCreacion: true,
+          capitalSolicitado: true,
+          progresoFormulario: true,
+          pasoActualFormulario: true,
         },
       }),
       prisma.lead.count({ where }),
     ]);
 
-    return NextResponse.json({ leads, total, take, skip, source: "database" });
+    return NextResponse.json(
+      {
+        leads: leads.map(mapLeadListRow),
+        total,
+        take,
+        skip,
+        source: "database",
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      },
+    );
   } catch (error) {
     if (!isDbConnectionError(error)) throw error;
 
@@ -85,7 +102,7 @@ export async function GET(request: Request) {
     }
     const total = leads.length;
     return NextResponse.json({
-      leads: leads.slice(skip, skip + take),
+      leads: leads.slice(skip, skip + take).map(mapLeadListRow),
       total,
       take,
       skip,

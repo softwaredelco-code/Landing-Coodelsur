@@ -1,5 +1,6 @@
 "use client";
 
+import { Input } from "@/components/ui/Input";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SI_NO } from "@/config/creditos/opciones";
 import type { NanocreditoFormValues } from "@/lib/validation/nanocredito";
@@ -8,8 +9,13 @@ import { Controller, useFormContext } from "react-hook-form";
 export function SeccionActivos() {
   const {
     control,
+    register,
+    watch,
+    setValue,
     formState: { errors },
   } = useFormContext<NanocreditoFormValues>();
+
+  const tieneVehiculo = watch("tieneVehiculo");
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -40,13 +46,34 @@ export function SeccionActivos() {
             options={SI_NO}
             value={field.value ?? ""}
             required
-            onChange={(event) => field.onChange(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              field.onChange(value);
+              if (value !== "si") {
+                setValue("placaVehiculo", "", { shouldValidate: true });
+              }
+            }}
             onBlur={field.onBlur}
             ref={field.ref}
             error={errors.tieneVehiculo?.message}
           />
         )}
       />
+      {tieneVehiculo === "si" && (
+        <div className="md:col-span-2">
+          <Input
+            label="Placa del vehículo"
+            placeholder="Ej. ABC123"
+            required
+            autoComplete="off"
+            helperText="Obligatorio si tienes vehículo."
+            error={errors.placaVehiculo?.message}
+            {...register("placaVehiculo", {
+              setValueAs: (value) => String(value ?? "").toUpperCase().trim(),
+            })}
+          />
+        </div>
+      )}
     </div>
   );
 }

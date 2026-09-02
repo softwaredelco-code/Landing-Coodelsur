@@ -1,8 +1,16 @@
+"use client";
+
 import { Logo } from "@/components/ui/Logo";
 import { siteConfig, whatsappUrl } from "@/config/site";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function Footer() {
+  const pathname = usePathname();
+  if (pathname?.startsWith("/admin")) {
+    return null;
+  }
+
   return (
     <footer className="border-t border-white/10 bg-coodel-primary text-white">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-8 text-center md:flex-row md:px-6 md:text-left">

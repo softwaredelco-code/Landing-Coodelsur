@@ -1,6 +1,7 @@
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { WhatsAppCTA } from "@/components/layout/WhatsAppCTA";
+import { GoogleAnalytics } from "@/components/tracking/GoogleAnalytics";
 import { TrackingProvider } from "@/lib/tracking/TrackingProvider";
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={poppins.variable}>
       <body className="font-sans">
+        <GoogleAnalytics />
         <Suspense fallback={null}>
           <TrackingProvider>
             <Header />

@@ -30,6 +30,10 @@ yarn-error.log*
 # local lead fallback store (cuando no hay PostgreSQL)
 /data
 
+# archivos temporales de Office
+~$*
+docs/~$*
+
 # vercel
 .vercel
 

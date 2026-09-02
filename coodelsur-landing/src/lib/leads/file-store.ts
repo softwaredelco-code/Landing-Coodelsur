@@ -128,6 +128,34 @@ export function updateLeadEstadoInFile(id: string, estado: string): StoredLead |
   return updated;
 }
 
+export function updateLeadInFile(
+  id: string,
+  input: Partial<
+    Omit<StoredLead, "id" | "fechaCreacion" | "fechaActualizacion" | "storage">
+  >,
+): StoredLead | null {
+  const leads = ensureStore();
+  const index = leads.findIndex((lead) => lead.id === id);
+  if (index < 0) return null;
+  const current = leads[index]!;
+  const updated: StoredLead = {
+    ...current,
+    ...input,
+    fechaActualizacion: new Date().toISOString(),
+  };
+  leads[index] = updated;
+  persist(leads);
+  return updated;
+}
+
+export function deleteLeadFromFile(id: string): boolean {
+  const leads = ensureStore();
+  const next = leads.filter((lead) => lead.id !== id);
+  if (next.length === leads.length) return false;
+  persist(next);
+  return true;
+}
+
 export function isDbConnectionError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = "code" in error ? String((error as { code?: string }).code) : "";

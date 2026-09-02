@@ -8,7 +8,11 @@ import {
   GENEROS,
   TIPOS_IDENTIFICACION,
 } from "@/config/creditos/opciones";
-import type { NanocreditoFormValues } from "@/lib/validation/nanocredito";
+import {
+  formatDocumentInput,
+  getDocumentFormatHint,
+  isValidDocumentFormat,
+} from "@/lib/identity/cedula-local";
 import { useCallback, useState } from "react";
 import { useFormContext } from "react-hook-form";
 
@@ -23,6 +27,7 @@ export function SeccionDatosGenerales() {
   const {
     register,
     watch,
+    setValue,
     formState: { errors },
   } = useFormContext<NanocreditoFormValues>();
 
@@ -36,7 +41,14 @@ export function SeccionDatosGenerales() {
   const fechaExpedicion = watch("fechaExpedicion");
 
   const verifyDocument = useCallback(async () => {
-    if (!tipoIdentificacion || !cedula || cedula.length < 5 || !nombre || !fechaNacimiento || !fechaExpedicion) {
+    if (
+      !tipoIdentificacion ||
+      !cedula ||
+      !isValidDocumentFormat(tipoIdentificacion, cedula) ||
+      !nombre ||
+      !fechaNacimiento ||
+      !fechaExpedicion
+    ) {
       setVerification(null);
       return;
     }
@@ -83,6 +95,9 @@ export function SeccionDatosGenerales() {
         ? "border-red-200 bg-red-50 text-red-800"
         : "border-red-200 bg-red-50 text-red-800";
 
+  const cedulaField = register("cedula");
+  const documentHint = tipoIdentificacion ? getDocumentFormatHint(tipoIdentificacion) : undefined;
+
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div className="md:col-span-2">
@@ -119,14 +134,25 @@ export function SeccionDatosGenerales() {
       />
       <Input
         label="Número de identificación"
-        inputMode="numeric"
+        inputMode={tipoIdentificacion === "PAS" ? "text" : "numeric"}
+        autoComplete="off"
         required
+        helperText={documentHint}
+        maxLength={tipoIdentificacion === "TI" ? 11 : tipoIdentificacion === "PAS" ? 15 : 10}
         error={errors.cedula?.message}
-        {...register("cedula", {
-          onBlur: () => {
-            void verifyDocument();
-          },
-        })}
+        name={cedulaField.name}
+        ref={cedulaField.ref}
+        value={cedula ?? ""}
+        onChange={(event) => {
+          const formatted = tipoIdentificacion
+            ? formatDocumentInput(tipoIdentificacion, event.target.value)
+            : event.target.value;
+          setValue("cedula", formatted, { shouldDirty: true, shouldValidate: true });
+        }}
+        onBlur={(event) => {
+          void cedulaField.onBlur(event);
+          void verifyDocument();
+        }}
       />
       <Input
         label="Teléfono celular"

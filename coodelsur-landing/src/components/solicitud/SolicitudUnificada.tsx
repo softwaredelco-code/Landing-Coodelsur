@@ -42,17 +42,17 @@ export function SolicitudUnificada({ initialMonto }: SolicitudUnificadaProps) {
     setResolucion(confirmed);
     if (confirmed.rango.formularioDisponible) {
       setFase("formulario");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollToSolicitud();
       return;
     }
     setFase("no_disponible");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollToSolicitud();
   };
 
   const volverAMonto = () => {
     setFase("monto");
     setResolucion(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollToSolicitud();
   };
 
   if (fase === "monto") {
@@ -61,7 +61,7 @@ export function SolicitudUnificada({ initialMonto }: SolicitudUnificadaProps) {
 
   if (fase === "no_disponible" && resolucion) {
     return (
-      <section className="bg-coodel-surface py-12 md:py-16">
+      <section id="solicitar" className="bg-coodel-surface py-12 md:py-16">
         <div className="mx-auto max-w-3xl px-4 md:px-6">
           <div className="border border-amber-200 bg-white p-6 md:p-8">
             <p className="text-sm font-semibold uppercase tracking-widest text-amber-700">
@@ -93,7 +93,7 @@ export function SolicitudUnificada({ initialMonto }: SolicitudUnificadaProps) {
 
   if (fase === "formulario" && resolucion && config) {
     return (
-      <section className="bg-coodel-surface py-8 md:py-12">
+      <section id="solicitar" className="bg-coodel-surface py-8 md:py-12">
         <div className="mx-auto max-w-3xl px-4 md:px-6">
           <div className="mb-6 border border-coodel-primary/10 bg-coodel-primary px-5 py-5 text-white">
             <button
@@ -119,4 +119,10 @@ export function SolicitudUnificada({ initialMonto }: SolicitudUnificadaProps) {
   }
 
   return <MontoSelector initialMonto={initialMonto} onConfirm={handleConfirmMonto} />;
+}
+
+function scrollToSolicitud() {
+  requestAnimationFrame(() => {
+    document.getElementById("solicitar")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }

@@ -1,7 +1,13 @@
-export const BANCOS_COLOMBIA = [
+const BANCOS_PRINCIPALES = [
   "Bancolombia",
-  "Banco de Bogotá",
+  "Nequi",
+  "Daviplata",
   "Davivienda",
+  "Bancolombia A la Mano",
+] as const;
+
+const BANCOS_OTROS = [
+  "Banco de Bogotá",
   "BBVA Colombia",
   "Banco de Occidente",
   "Banco Popular",
@@ -10,9 +16,6 @@ export const BANCOS_COLOMBIA = [
   "Scotiabank Colpatria",
   "Itaú",
   "Banco AV Villas",
-  "Nequi",
-  "Daviplata",
-  "Bancolombia A la Mano",
   "Banco Falabella",
   "Banco Pichincha",
   "Bancoomeva",
@@ -25,6 +28,8 @@ export const BANCOS_COLOMBIA = [
   "CFA Cooperativa Financiera",
   "Otro",
 ] as const;
+
+export const BANCOS_COLOMBIA = [...BANCOS_PRINCIPALES, ...BANCOS_OTROS] as const;
 
 export const opcionesBancos = BANCOS_COLOMBIA.map((banco) => ({
   label: banco,

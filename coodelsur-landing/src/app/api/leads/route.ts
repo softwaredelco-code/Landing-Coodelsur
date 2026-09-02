@@ -6,6 +6,7 @@ import {
 } from "@/lib/identity/verify-document";
 import { getClientIp } from "@/lib/utils";
 import { montoCoincideConTipo, resolverTipoPorMonto } from "@/config/creditos/montos";
+import { warmParametrosCache } from "@/lib/credito/parametros-store";
 import { nanocreditoSchema } from "@/lib/validation/nanocredito";
 import { buildFormSchema, leadApiSchema } from "@/lib/validation/schemas";
 import { NextResponse } from "next/server";
@@ -24,7 +25,10 @@ export const maxDuration = 60;
  */
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Record<string, unknown>;
+    const [, body] = await Promise.all([
+      warmParametrosCache(),
+      request.json() as Promise<Record<string, unknown>>,
+    ]);
     const ip = getClientIp(request);
 
     const tipoRaw = String(body.tipoCredito ?? "");
@@ -114,7 +118,12 @@ export async function POST(request: Request) {
 
     leadData.datosFormulario.cedulaVerificacion = buildCedulaVerificacionPayload(cedulaVerificacion);
 
-    const lead = await createLead({ ...leadData, ip });
+    const draftLeadId =
+      typeof body.draftLeadId === "string" && body.draftLeadId.trim()
+        ? body.draftLeadId.trim()
+        : null;
+
+    const lead = await createLead({ ...leadData, ip, draftLeadId });
 
     void sendLeadConfirmationEmail({
       to: leadData.email ?? "",

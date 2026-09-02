@@ -1,12 +1,33 @@
+/**
+ * Validación y verificación de documentos de identidad colombianos.
+ *
+ * Formato CC: 6, 7 o 10 dígitos. Integración opcional con Verifik/Registraduría.
+ *
+ * @see cedula-local.ts — validación offline usada en el formulario
+ * @see POST /api/verify-cedula — endpoint de verificación externa
+ */
+
 /** Normaliza número de documento: solo dígitos. */
 export function normalizeDocumentNumber(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-/** Validación básica de cédula colombiana (CC): 6–10 dígitos. */
+/** Longitudes válidas de cédula de ciudadanía colombiana (Registraduría). */
+export const COLOMBIAN_CC_LENGTHS = [6, 7, 10] as const;
+
+export function isValidColombianCcLength(digitCount: number): boolean {
+  return (COLOMBIAN_CC_LENGTHS as readonly number[]).includes(digitCount);
+}
+
+/** Cédula de ciudadanía colombiana: exactamente 6, 7 o 10 dígitos numéricos. */
 export function isValidCcFormat(documentNumber: string): boolean {
   const digits = normalizeDocumentNumber(documentNumber);
-  return /^\d{6,10}$/.test(digits);
+  if (!/^\d+$/.test(digits)) return false;
+  return isValidColombianCcLength(digits.length);
+}
+
+export function getColombianCcFormatMessage(): string {
+  return "La cédula de ciudadanía debe tener 6, 7 o 10 dígitos (solo números, formato colombiano).";
 }
 
 /** Convierte YYYY-MM-DD (input date) a DD/MM/YYYY (Verifik). */
@@ -38,7 +59,7 @@ export interface CedulaVerificationResult {
 function normalizeName(value: string): string {
   return value
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
@@ -93,7 +114,7 @@ export async function verifyCedulaWithProvider(input: {
   if (!isValidCcFormat(documentNumber)) {
     return {
       status: "invalid_format",
-      message: "El número de cédula no tiene un formato válido (6 a 10 dígitos).",
+      message: getColombianCcFormatMessage(),
       documentType,
       documentNumber,
     };
@@ -121,6 +142,7 @@ export async function verifyCedulaWithProvider(input: {
         Authorization: `Bearer ${apiKey}`,
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(4000),
     });
 
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;

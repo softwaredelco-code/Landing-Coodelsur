@@ -9,21 +9,29 @@ datasource db {
 }
 
 enum LeadEstado {
-  recibido
-  revisado
-  contactado
-  descartado
+  incompleto   // Borrador parcial del formulario
+  recibido     // Solicitud enviada por el usuario
+  revisado     // Revisión interna completada
+  contactado   // Equipo comercial contactó al solicitante
+  descartado   // Solicitud descartada
 }
 
+/// Solicitud de crédito (Microcrédito Small y futuros productos).
 model Lead {
   id                       String     @id @default(uuid())
-  tipoCredito              String
+  tipoCredito              String     // ej. microcredito_small
   nombre                   String
   cedula                   String
   telefono                 String
   email                    String?
+  /// Monto en COP — desnormalizado para listados admin
+  capitalSolicitado        Int?
+  /// 0–100 — progreso del formulario incompleto
+  progresoFormulario       Int?
+  pasoActualFormulario     String?
+  /// Payload completo del formulario + metadata de adjuntos (paths, no binarios)
   datosFormulario          Json
-  origen                   String
+  origen                   String     // web, witme, etc.
   estado                   LeadEstado @default(recibido)
   aceptaTerminos           Boolean    @default(false)
   fechaAceptacionTerminos  DateTime?
@@ -46,4 +54,18 @@ model Lead {
   @@index([cedula])
   @@index([fechaCreacion])
   @@index([utmSource])
+}
+
+/// Parámetros de amortización por producto (editables desde el panel admin).
+model CreditoParametros {
+  tipoCredito             String   @id
+  nombreVisible           String
+  tasaMensual             Float
+  estudioCreditoModo      String   // fijo | porcentaje
+  estudioCreditoValor     Float
+  fianzaMensualPorcentaje Float
+  vidaDeudoresPorcentaje  Float
+  plazosPermitidos        Int[]
+  activo                  Boolean  @default(true)
+  fechaActualizacion      DateTime @updatedAt
 }

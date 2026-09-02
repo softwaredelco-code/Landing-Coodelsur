@@ -9,7 +9,7 @@
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { getParametrosAmortizacion, opcionesPlazosCuotas } from "@/config/creditos/amortizacion";
+import { useParametrosAmortizacion } from "@/contexts/ParametrosAmortizacionContext";
 import {
   DESTINOS_CREDITO,
   ORIGENES_OTROS_INGRESOS,
@@ -37,18 +37,27 @@ export function SeccionDatosCredito() {
   const cuotas = Number(watch("cantidadCuotas") || 0);
   const tipoCredito = watch("tipoCredito") || "microcredito_small";
   const origenOtrosIngresos = watch("origenOtrosIngresos");
-  const parametros = getParametrosAmortizacion(tipoCredito);
+  const parametros = useParametrosAmortizacion(tipoCredito);
+  const opcionesCuotas = useMemo(
+    () =>
+      parametros.plazosPermitidos.map((n) => ({
+        label: `${n} cuotas`,
+        value: String(n),
+      })),
+    [parametros.plazosPermitidos],
+  );
 
   const desglose = useMemo(() => {
     if (capital <= 0 || cuotas <= 0) return null;
-    return calcularDesgloseCuota(tipoCredito, capital, cuotas);
-  }, [capital, cuotas, tipoCredito]);
+    return calcularDesgloseCuota(tipoCredito, capital, cuotas, parametros);
+  }, [capital, cuotas, tipoCredito, parametros]);
 
   useEffect(() => {
     if (!desglose) return;
 
     setValue("valorCuota", desglose.valorCuotaTotal, { shouldDirty: true, shouldValidate: true });
     setValue("valorCreditoFinanciado", desglose.valorCreditoFinanciado, { shouldDirty: true });
+    setValue("estudioCredito", desglose.estudioCredito, { shouldDirty: true });
     setValue("cuotaCapitalInteres", desglose.cuotaCapitalInteres, { shouldDirty: true });
     setValue("cuotaFianzaMensual", desglose.fianzaMensual, { shouldDirty: true });
     setValue("cuotaVidaDeudoresMensual", desglose.vidaDeudoresMensual, { shouldDirty: true });
@@ -102,7 +111,7 @@ export function SeccionDatosCredito() {
 
       <Select
         label="Cantidad de cuotas"
-        options={opcionesPlazosCuotas(tipoCredito)}
+        options={opcionesCuotas}
         placeholder="Seleccionar..."
         required
         error={errors.cantidadCuotas?.message}
@@ -116,7 +125,7 @@ export function SeccionDatosCredito() {
           {formatCOP(desglose?.valorCuotaTotal ?? Number(watch("valorCuota") || 0))}
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          Calculado con tasa del {(parametros.tasaMensual * 100).toFixed(2).replace(".", ",")} %
+          Calculado con tasa del {(parametros.tasaMensual * 100).toFixed(1).replace(".", ",")} %
           mensual, fianza ({(parametros.fianzaMensualPorcentaje * 100).toFixed(2).replace(".", ",")}{" "}
           % del monto) y vida deudores (
           {(parametros.vidaDeudoresPorcentaje * 100).toFixed(4).replace(".", ",")} % del monto).
@@ -148,8 +157,9 @@ export function SeccionDatosCredito() {
             </li>
           </ul>
           <p className="mt-2 text-xs text-gray-500">
-            Monto financiado para amortización: {formatCOP(desglose.valorCreditoFinanciado)} (capital
-            solicitado + costos asociados).
+            Estudio de crédito (cargo único de {formatCOP(desglose.estudioCredito)}): incluido en la
+            base de amortización ({formatCOP(desglose.valorCreditoFinanciado)} = capital solicitado +
+            estudio).
           </p>
         </div>
       )}

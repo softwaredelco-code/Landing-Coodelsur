@@ -24,6 +24,7 @@ export const siteConfig = {
     },
   ],
   nav: [
+    { label: "Inicio", href: "/#inicio" },
     { label: "Solicitar", href: "/#solicitar" },
     { label: "Contacto", href: "/#contacto" },
   ],
