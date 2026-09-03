@@ -1,0 +1,1 @@
+export { FormularioConsumo } from "./FormularioConsumo";

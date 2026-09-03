@@ -1,0 +1,1 @@
+export { FormularioMicrocreditoSmall } from "./FormularioMicrocreditoSmall";

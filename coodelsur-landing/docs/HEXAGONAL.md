@@ -103,13 +103,40 @@ coodelsur-landing/
 
 ## Flujo de una solicitud
 
-1. Usuario envía formulario → `presentation/components/forms/FormularioCredito.tsx`
+1. Usuario envía formulario → `presentation/components/forms/registry.tsx` (`FormularioPorTipo`)
 2. `POST /api/leads` → `app/api/leads/route.ts` (adaptador delgado)
-3. Valida con `shared/validation/nanocredito.ts`
+3. Valida con `shared/validation/<producto>/`
 4. Ejecuta `application/lead/create-lead.ts`
 5. Sube adjuntos vía `infrastructure/storage/upload.ts`
 6. Persiste con `infrastructure/database/prisma.ts`
-7. Schema definido en `database/prisma/schema.prisma`
+
+## Modelo de datos
+
+Modelos en `database/prisma/schema.prisma`:
+
+- **`Lead`** — solicitud de crédito (`tipoCredito`, `datosFormulario` JSON, campos desnormalizados para admin).
+- **`CreditoParametros`** — tasas y plazos editables en `/admin/parametros`.
+
+Estados del lead: `incompleto` → `recibido` → `revisado` → `contactado` / `descartado`.
+
+## Borradores incompletos
+
+1. `useNanocreditoServerDraft` guarda cada ~2 s y al cambiar de paso.
+2. `POST /api/leads/draft` → estado `incompleto` en BD.
+3. Al enviar formulario completo, el mismo registro pasa a `recibido`.
+
+## Seguridad
+
+| Recurso | Protección |
+|---------|------------|
+| Panel admin | Cookie firmada (`ADMIN_PASSWORD`) |
+| APIs admin | Verificación en cada route |
+| Storage | Service role solo en servidor; adjuntos vía proxy admin |
+| Webhook Witme | Bearer `WITME_API_KEY` |
+
+## Fallback de desarrollo
+
+`LEAD_STORE=file` escribe en `data/leads.json` si PostgreSQL falla. **No usar en producción.**
 
 ## Alias de importación (TypeScript)
 
@@ -117,7 +144,7 @@ coodelsur-landing/
 import { createLead } from "@/application/lead/create-lead";
 import { calcularDesgloseCuota } from "@/domain/credito/amortizacion";
 import { prisma } from "@/infrastructure/database/prisma";
-import { FormularioCredito } from "@/presentation/components/forms/FormularioCredito";
+import { FormularioPorTipo } from "@/presentation/components/forms/registry";
 import { nanocreditoSchema } from "@/shared/validation/nanocredito";
 ```
 
@@ -132,7 +159,7 @@ import { nanocreditoSchema } from "@/shared/validation/nanocredito";
 
 ## Documentos relacionados
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — flujos y decisiones técnicas
-- [CODEBASE.md](./CODEBASE.md) — mapa de archivos (actualizar tras migración)
+- [CODEBASE.md](./CODEBASE.md) — mapa de archivos
 - [BACKEND_SETUP.md](./BACKEND_SETUP.md) — PostgreSQL / Supabase
-- [src/README.md](../src/README.md) — resumen rápido en el código
+- [GUIA-NUEVO-FORMULARIO.md](./GUIA-NUEVO-FORMULARIO.md) — implementar urbano/rural
+- [src/README.md](../src/README.md) — resumen en el código

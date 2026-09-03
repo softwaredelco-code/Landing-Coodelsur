@@ -1,6 +1,6 @@
 # Mapa del código fuente
 
-Referencia rápida de módulos, responsabilidades y puntos de entrada. Para arquitectura de alto nivel ver [ARCHITECTURE.md](./ARCHITECTURE.md) y [HEXAGONAL.md](./HEXAGONAL.md).
+Referencia rápida de módulos y puntos de entrada. Arquitectura: [HEXAGONAL.md](./HEXAGONAL.md).
 
 ## Capas hexagonales
 
@@ -21,7 +21,7 @@ Referencia rápida de módulos, responsabilidades y puntos de entrada. Para arqu
 | `/` | `page.tsx` | Landing: hero, productos, contacto |
 | `/solicitar` | `solicitar/page.tsx` | Selector de monto + formulario |
 | `/credito/[slug]` | `credito/[slug]/page.tsx` | Entrada directa por producto |
-| `/gracias` | `gracias/page.tsx` | Confirmación post-envío |
+| `/solicitud-enviada` | `solicitud-enviada/page.tsx` | Confirmación post-envío |
 | `/admin` | `admin/page.tsx` | Login del panel |
 | `/admin/leads` | `admin/leads/page.tsx` | Listado de solicitudes |
 | `/admin/leads/[id]` | `admin/leads/[id]/page.tsx` | Detalle + cambio de estado |

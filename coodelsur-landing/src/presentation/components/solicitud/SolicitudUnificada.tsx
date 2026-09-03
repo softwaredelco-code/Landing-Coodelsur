@@ -7,7 +7,7 @@
  * 3) Si no → mensaje + contacto
  */
 
-import { FormularioCredito } from "@/presentation/components/forms/FormularioCredito";
+import { FormularioPorTipo } from "@/presentation/components/forms/registry";
 import { MontoSelector } from "@/presentation/components/solicitud/MontoSelector";
 import { Button } from "@/presentation/components/ui/Button";
 import { getCreditoConfig } from "@/shared/config/creditos";
@@ -112,7 +112,11 @@ export function SolicitudUnificada({ initialMonto }: SolicitudUnificadaProps) {
             </p>
           </div>
 
-          <FormularioCredito config={config} initialMonto={resolucion.monto} />
+          <FormularioPorTipo
+            tipo={resolucion.rango.tipo}
+            config={config}
+            initialMonto={resolucion.monto}
+          />
         </div>
       </section>
     );

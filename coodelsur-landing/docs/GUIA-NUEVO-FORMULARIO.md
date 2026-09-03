@@ -44,7 +44,7 @@ npm run dev
 
 Documentación complementaria:
 - [BACKEND_SETUP.md](./BACKEND_SETUP.md) — Supabase, Docker, variables
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — capas y flujos
+- [HEXAGONAL.md](./HEXAGONAL.md) — capas y flujos
 - [CODEBASE.md](./CODEBASE.md) — mapa de archivos
 - [FORMULARIO.md](./FORMULARIO.md) — detalle del Small actual
 - [FLUJO_MONTO.md](./FLUJO_MONTO.md) — selector y resolución por monto
@@ -389,7 +389,7 @@ src/hooks/
 3. ¿Mismos adjuntos que Small (cédula + video + firma)?
 4. ¿Plazos y tasas definitivas?
 5. ¿Borrador incompleto en admin es requisito desde el día 1?
-6. ¿Integración Witme aplica al nuevo producto? (ver `docs/WITME_FORMULARIO.md`)
+6. ¿Integración Witme aplica al nuevo producto? (ver [WITME.md](./WITME.md))
 
 ---
 
@@ -400,8 +400,7 @@ src/hooks/
 | [FORMULARIO.md](./FORMULARIO.md) | Detalle funcional del Small |
 | [API.md](./API.md) | Contratos REST |
 | [ADMIN.md](./ADMIN.md) | Panel y estados de lead |
-| [manual-tecnico-coodelsur.docx](./manual-tecnico-coodelsur.docx) | Manual técnico completo (Word) |
-| [formulario-microcredito-small-campos-witme.docx](./formulario-microcredito-small-campos-witme.docx) | Catálogo de campos Small (referencia de formato) |
+| [HEXAGONAL.md](./HEXAGONAL.md) | Arquitectura y carpetas por capa |
 
 ---
 

@@ -1,5 +1,6 @@
-import { FormularioCredito } from "@/presentation/components/forms/FormularioCredito";
-import { getCreditoConfig, isCreditoDisponible, isTipoCredito } from "@/shared/config/creditos";
+import { FormularioPorTipo } from "@/presentation/components/forms/registry";
+import { creditosConfig, getCreditoConfig, isTipoCredito } from "@/shared/config/creditos";
+import type { TipoCredito } from "@/shared/types/credito";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,8 +9,18 @@ interface CreditoPageProps {
   params: { slug: string };
 }
 
+const SLUGS_LEGACY = ["nanocredito", "microcredito"] as const;
+
+function resolveTipo(slug: string): TipoCredito | null {
+  if (slug === "nanocredito") return "microcredito_small";
+  if (slug === "microcredito") return "microcredito_rural";
+  if (isTipoCredito(slug)) return slug;
+  return null;
+}
+
 export function generateStaticParams() {
-  return [{ slug: "microcredito_small" }, { slug: "nanocredito" }];
+  const tipos = Object.keys(creditosConfig) as TipoCredito[];
+  return [...tipos, ...SLUGS_LEGACY].map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: CreditoPageProps): Promise<Metadata> {
@@ -22,11 +33,8 @@ export async function generateMetadata({ params }: CreditoPageProps): Promise<Me
 }
 
 export default function CreditoPage({ params }: CreditoPageProps) {
-  const slugOk =
-    isTipoCredito(params.slug) || params.slug === "nanocredito" || params.slug === "microcredito";
-  if (!slugOk || !isCreditoDisponible(params.slug)) {
-    notFound();
-  }
+  const tipo = resolveTipo(params.slug);
+  if (!tipo) notFound();
 
   const config = getCreditoConfig(params.slug);
   if (!config) notFound();
@@ -59,7 +67,7 @@ export default function CreditoPage({ params }: CreditoPageProps) {
       </div>
 
       <div className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-10">
-        <FormularioCredito config={config} />
+        <FormularioPorTipo tipo={tipo} config={config} />
       </div>
     </div>
   );

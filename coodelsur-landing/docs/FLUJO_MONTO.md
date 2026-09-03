@@ -16,7 +16,7 @@ Solo entre $1M y $5M puede pedir confirmación (rural vs urbano).
 Nota: $600.000 queda en Small (“hasta 600.000”). Urbano arranca en $600.001.
 Entre $1M y $5M hay solape rural/urbano → el usuario elige.
 
-Fuente de verdad: [`src/config/creditos/montos.ts`](../src/config/creditos/montos.ts)
+Fuente de verdad: `src/shared/config/creditos/montos.ts`
 
 ## Flujo UX
 
@@ -24,30 +24,29 @@ Fuente de verdad: [`src/config/creditos/montos.ts`](../src/config/creditos/monto
 flowchart TD
   Entrada["/ o /solicitar?monto="] --> Selector["MontoSelector"]
   Selector --> Detect{"resolverTipoPorMonto"}
-  Detect -->|un candidato Small| Form["FormularioCredito"]
+  Detect -->|un candidato Small| Form["FormularioPorTipo"]
   Detect -->|1M–5M solape| Eleccion["Elegir rural o urbano"]
   Eleccion --> Prox["Pantalla próximamente + WhatsApp"]
   Detect -->|urbano/rural sin form| Prox
   Detect -->|fuera de rango| ErrorUi["Mensaje de rango inválido"]
   Form --> Api["POST /api/leads"]
-  Api --> Store["Lead en DB o data/leads.json"]
+  Api --> Store["Lead en PostgreSQL"]
 ```
 
 1. Landing `/` o `/solicitar` muestra el selector de monto.
 2. Al continuar, `SolicitudUnificada` decide la fase.
-3. Si es Microcrédito Small, abre el formulario con el monto precargado.
+3. Si el producto tiene formulario activo, abre `FormularioPorTipo` con monto precargado.
 4. La API valida de nuevo que el monto coincida con `tipoCredito`.
 
 ## Archivos clave
 
 | Capa | Archivo | Rol |
 |------|---------|-----|
-| Config | `src/config/creditos/montos.ts` | Rangos + detección |
-| UI | `src/components/solicitud/MontoSelector.tsx` | Entrada de monto + elección |
-| UI | `src/components/solicitud/SolicitudUnificada.tsx` | Orquestación |
-| Form | `src/components/forms/FormularioCredito.tsx` | `initialMonto` |
+| Config | `src/shared/config/creditos/montos.ts` | Rangos + detección |
+| UI | `src/presentation/components/solicitud/MontoSelector.tsx` | Entrada de monto |
+| UI | `src/presentation/components/solicitud/SolicitudUnificada.tsx` | Orquestación |
+| Form | `src/presentation/components/forms/registry.tsx` | Dispatch por producto |
 | API | `src/app/api/leads/route.ts` | `montoCoincideConTipo` |
-| Validación | `src/lib/validation/nanocredito.ts` | Schema Small (literal `microcredito_small`) |
 
 ## Campañas / redirecciones
 
@@ -56,17 +55,13 @@ https://tu-dominio.com/solicitar?monto=400000
 ```
 
 El query `monto` precarga el selector (aún debe confirmar Continuar).
-Slug histórico `/credito/nanocredito` sigue resolviendo a Microcrédito Small.
+
+Rutas por producto: ver `src/shared/config/creditos/formularios.ts`
 
 ## Extender a rural / urbano
 
-1. Implementar formulario + schema del producto.
-2. En `montos.ts`, poner `formularioDisponible: true`.
-3. En `SolicitudUnificada` / `FormularioCredito`, resolver el componente según `rango.tipo`.
-4. En la API, mapear el schema como con `microcredito_small`.
+Ver [GUIA-NUEVO-FORMULARIO.md](./GUIA-NUEVO-FORMULARIO.md).
 
 ## Seguridad
 
-El cliente puede alterar `tipoCredito` en el JSON. La API rechaza el request si
-`capitalSeleccionado` no está dentro del rango del tipo declarado
-(`montoCoincideConTipo`).
+La API rechaza el request si `capitalSeleccionado` no está dentro del rango del tipo declarado (`montoCoincideConTipo`).

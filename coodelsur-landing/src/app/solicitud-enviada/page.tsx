@@ -4,10 +4,11 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Solicitud enviada",
+  description: "Confirmación de recepción de tu solicitud de crédito Coodelsur.",
   robots: { index: false },
 };
 
-export default function GraciasPage() {
+export default function SolicitudEnviadaPage() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center bg-coodel-surface px-4 py-16">
       <div className="max-w-lg border border-gray-200 bg-white p-8 text-center shadow-sm md:p-12">
@@ -17,7 +18,7 @@ export default function GraciasPage() {
           </svg>
         </div>
         <h1 className="mb-3 text-2xl font-bold text-coodel-dark md:text-3xl">
-          ¡Solicitud recibida!
+          Solicitud recibida
         </h1>
         <p className="mb-8 text-coodel-body">
           Hemos recibido tu solicitud de crédito. Un asesor de Coodelsur se comunicará contigo
@@ -25,7 +26,7 @@ export default function GraciasPage() {
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link href="/">
-            <Button variant="primary">Volver a formularios</Button>
+            <Button variant="primary">Volver al inicio</Button>
           </Link>
           <Link href="/#contacto">
             <Button variant="outline">Contacto</Button>

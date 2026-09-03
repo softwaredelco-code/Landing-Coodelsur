@@ -32,17 +32,17 @@ npm run dev
 
 ## Documentación
 
-Toda la documentación técnica está en **[docs/](./docs/README.md)**:
+Toda la documentación está en **[docs/](./docs/README.md)**:
 
 - [Arquitectura hexagonal](./docs/HEXAGONAL.md)
-- [Arquitectura](./docs/ARCHITECTURE.md)
 - [Mapa del código](./docs/CODEBASE.md)
-- [Formulario](./docs/FORMULARIO.md)
-- [API REST](./docs/API.md)
-- [Panel admin](./docs/ADMIN.md)
 - [Backend setup](./docs/BACKEND_SETUP.md)
 - [Despliegue](./docs/DESPLIEGUE.md)
+- [API REST](./docs/API.md)
+- [Panel admin](./docs/ADMIN.md)
+- [Formulario Small](./docs/FORMULARIO.md)
 - [Flujo por monto](./docs/FLUJO_MONTO.md)
+- [Guía nuevo formulario](./docs/GUIA-NUEVO-FORMULARIO.md)
 
 ## Scripts
 

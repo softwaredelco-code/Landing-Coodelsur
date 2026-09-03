@@ -15,13 +15,13 @@ Producto activo: **`microcredito_small`** — montos **$200.000 – $600.000**, 
 | 7 | `bancarios` | Cuenta o llave Bre-B |
 | 8 | `verificacion` | Fotos cédula, video, firma, hábeas data |
 
-Definición de pasos: `NANOCREDITO_STEPS` en `src/lib/validation/nanocredito.ts`.
+Definición de pasos: `NANOCREDITO_STEPS` en `src/shared/validation/nanocredito.ts`.
 
 ## Validaciones destacadas
 
 ### Cédula de ciudadanía (CC)
 
-Solo **6, 7 o 10 dígitos** numéricos (`src/lib/identity/cedula.ts`).
+Solo **6, 7 o 10 dígitos** numéricos (`src/domain/identity/cedula.ts`).
 
 ### Celular
 
@@ -62,9 +62,9 @@ Guardado servidor: mínimo celular, cédula válida, o nombre+email.
 ## Archivos clave
 
 ```
-src/components/forms/FormularioCredito.tsx    # Orquestador
-src/components/forms/sections/              # Un componente por paso
-src/lib/validation/nanocredito.ts           # Schema Zod + pasos
-src/hooks/useNanocreditoDraft.ts            # Borrador local
-src/hooks/useNanocreditoServerDraft.ts      # Borrador servidor
+src/presentation/components/forms/microcredito-small/FormularioMicrocreditoSmall.tsx
+src/presentation/components/forms/microcredito-small/sections/
+src/shared/validation/nanocredito.ts
+src/presentation/hooks/useNanocreditoDraft.ts
+src/presentation/hooks/useNanocreditoServerDraft.ts
 ```

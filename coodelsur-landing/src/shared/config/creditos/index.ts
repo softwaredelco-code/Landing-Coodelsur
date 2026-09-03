@@ -1,5 +1,17 @@
 import type { CreditoConfig, TipoCredito } from "@/shared/types/credito";
 import { microcreditoSmallConfig } from "./nanocredito";
+import { microcreditoUrbanoConfig } from "./urbano";
+import { microcreditoRuralConfig } from "./rural";
+import { consumoConfig } from "./consumo";
+import { comercialConfig } from "./comercial";
+import { libranzaConfig } from "./libranza";
+
+export {
+  FORMULARIOS_PRODUCTO,
+  FORMULARIOS_IMPLEMENTADOS,
+  isFormularioImplementado,
+  getFormularioRuta,
+} from "./formularios";
 
 export {
   RANGOS_MONTO_CREDITO,
@@ -20,67 +32,60 @@ export {
 
 /**
  * Catálogo de productos Coodelsur.
- * Solo `disponible: true` tiene formulario activo en la app.
+ * Solo productos con `disponible: true` y formulario implementado están activos en la app.
  */
 const creditosCatalogo: Omit<CreditoConfig, "sections">[] = [
   {
     slug: "microcredito_small",
-    nombre: "Microcrédito Small",
+    nombre: microcreditoSmallConfig.nombre,
     descripcionCorta: microcreditoSmallConfig.descripcionCorta,
     descripcion: microcreditoSmallConfig.descripcion,
     disponible: true,
   },
   {
     slug: "microcredito_rural",
-    nombre: "Microcrédito rural",
-    descripcionCorta: "Crédito rural desde $1.000.000 hasta $5.000.000.",
-    descripcion:
-      "Microcrédito rural orientado a actividades del sector rural, con montos entre $1.000.000 y $5.000.000.",
+    nombre: microcreditoRuralConfig.nombre,
+    descripcionCorta: microcreditoRuralConfig.descripcionCorta,
+    descripcion: microcreditoRuralConfig.descripcion,
     disponible: false,
   },
   {
     slug: "microcredito_urbano",
-    nombre: "Microcrédito urbano",
-    descripcionCorta: "Crédito urbano desde $600.001 hasta $20.000.000.",
-    descripcion:
-      "Microcrédito urbano para necesidades en zona urbana, con montos desde $600.001 hasta $20.000.000.",
+    nombre: microcreditoUrbanoConfig.nombre,
+    descripcionCorta: microcreditoUrbanoConfig.descripcionCorta,
+    descripcion: microcreditoUrbanoConfig.descripcion,
     disponible: false,
   },
   {
     slug: "consumo",
-    nombre: "Crédito de Consumo",
-    descripcionCorta: "Libre inversión para bienes o servicios.",
-    descripcion: "Crédito de consumo de libre disposición.",
+    nombre: consumoConfig.nombre,
+    descripcionCorta: consumoConfig.descripcionCorta,
+    descripcion: consumoConfig.descripcion,
     disponible: false,
   },
   {
     slug: "comercial",
-    nombre: "Crédito Comercial",
-    descripcionCorta: "Financiamiento empresarial y capital de trabajo.",
-    descripcion: "Crédito comercial para empresas.",
+    nombre: comercialConfig.nombre,
+    descripcionCorta: comercialConfig.descripcionCorta,
+    descripcion: comercialConfig.descripcion,
     disponible: false,
   },
   {
     slug: "libranza",
-    nombre: "Libranza",
-    descripcionCorta: "Descuento directo de nómina.",
-    descripcion: "Crédito por libranza con descuento de nómina.",
+    nombre: libranzaConfig.nombre,
+    descripcionCorta: libranzaConfig.descripcionCorta,
+    descripcion: libranzaConfig.descripcion,
     disponible: false,
   },
 ];
 
-function stub(slug: TipoCredito): CreditoConfig {
-  const meta = creditosCatalogo.find((c) => c.slug === slug)!;
-  return { ...meta, sections: [] };
-}
-
 export const creditosConfig: Record<TipoCredito, CreditoConfig> = {
   microcredito_small: microcreditoSmallConfig,
-  microcredito_rural: stub("microcredito_rural"),
-  microcredito_urbano: stub("microcredito_urbano"),
-  consumo: stub("consumo"),
-  comercial: stub("comercial"),
-  libranza: stub("libranza"),
+  microcredito_rural: microcreditoRuralConfig,
+  microcredito_urbano: microcreditoUrbanoConfig,
+  consumo: consumoConfig,
+  comercial: comercialConfig,
+  libranza: libranzaConfig,
 };
 
 export const creditosList = creditosCatalogo.map((item) => creditosConfig[item.slug]);
