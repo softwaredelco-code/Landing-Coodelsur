@@ -1,5 +1,5 @@
-import { FormularioCredito } from "@/components/forms/FormularioCredito";
-import { getCreditoConfig, isCreditoDisponible, isTipoCredito } from "@/config/creditos";
+import { FormularioCredito } from "@/presentation/components/forms/FormularioCredito";
+import { getCreditoConfig, isCreditoDisponible, isTipoCredito } from "@/shared/config/creditos";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";

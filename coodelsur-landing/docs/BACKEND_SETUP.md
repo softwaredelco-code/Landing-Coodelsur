@@ -14,7 +14,7 @@ Guía para conectar PostgreSQL, Supabase Storage y verificar que el entorno resp
 3. **Connect → Session pooler** → `DIRECT_URL` (puerto `5432`).
 4. **Settings → API Keys** → `SUPABASE_URL` + Secret key → `SUPABASE_SERVICE_ROLE_KEY`.
 5. **Storage → New bucket** → `lead-attachments`.
-6. Sincronizar schema:
+6. Sincronizar schema (ubicación: `database/prisma/schema.prisma`):
 
 ```bash
 npm run db:push
@@ -56,5 +56,8 @@ Ejecuta `prisma generate` y consulta `/api/health`.
 | `Invalid Compact JWS` en Storage | Clave `sb_secret_` mal usada | Ya corregido en `supabaseStorageHeaders` |
 | Admin vacío pero hay datos | Caché navegador | Ctrl+Shift+R en `/admin/leads` |
 | Lentitud en admin | Pooler incorrecto | Usar puerto 6543 en `DATABASE_URL` |
+| `EPERM` en Prisma (Windows) | Dev server bloquea DLL | Cerrar `npm run dev` → `npx prisma generate` |
+| Errores webpack `./948.js` | Caché `.next` corrupta | Borrar `.next` y reiniciar dev |
+| Panel Problemas con rutas `src/lib/` | Migración sin commitear | Recargar ventana IDE + commit |
 
 Ver también: [DESPLIEGUE.md](./DESPLIEGUE.md), [API.md](./API.md).

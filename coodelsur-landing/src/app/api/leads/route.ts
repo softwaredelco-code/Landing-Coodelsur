@@ -1,16 +1,16 @@
-import { createLead, extractLeadFromFormBody } from "@/lib/leads/create-lead";
-import { sendLeadConfirmationEmail } from "@/lib/email/lead-confirmation";
+import { createLead, extractLeadFromFormBody } from "@/application/lead/create-lead";
+import { sendLeadConfirmationEmail } from "@/infrastructure/email/lead-confirmation";
 import {
   buildCedulaVerificacionPayload,
   verifyDocumentComplete,
-} from "@/lib/identity/verify-document";
-import { getClientIp } from "@/lib/utils";
-import { montoCoincideConTipo, resolverTipoPorMonto } from "@/config/creditos/montos";
-import { warmParametrosCache } from "@/lib/credito/parametros-store";
-import { nanocreditoSchema } from "@/lib/validation/nanocredito";
-import { buildFormSchema, leadApiSchema } from "@/lib/validation/schemas";
+} from "@/application/identity/verify-document";
+import { getClientIp } from "@/shared/utils";
+import { montoCoincideConTipo, resolverTipoPorMonto } from "@/shared/config/creditos/montos";
+import { warmParametrosCache } from "@/infrastructure/database/parametros-store";
+import { nanocreditoSchema } from "@/shared/validation/nanocredito";
+import { buildFormSchema, leadApiSchema } from "@/shared/validation/schemas";
 import { NextResponse } from "next/server";
-import type { TipoCredito, UtmParams } from "@/types/credito";
+import type { TipoCredito, UtmParams } from "@/shared/types/credito";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

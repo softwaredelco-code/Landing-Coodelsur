@@ -34,6 +34,7 @@ npm run dev
 
 Toda la documentación técnica está en **[docs/](./docs/README.md)**:
 
+- [Arquitectura hexagonal](./docs/HEXAGONAL.md)
 - [Arquitectura](./docs/ARCHITECTURE.md)
 - [Mapa del código](./docs/CODEBASE.md)
 - [Formulario](./docs/FORMULARIO.md)
@@ -53,20 +54,22 @@ npm run db:studio        # Explorador Prisma
 npm run verify:backend   # Health check
 ```
 
-## Estructura
+## Estructura (arquitectura hexagonal)
 
 ```
+database/prisma/        # Schema PostgreSQL (Lead, CreditoParametros)
 src/
-├── app/              # Páginas y API routes
-├── components/       # UI, landing, formularios
-├── config/           # Productos y reglas de crédito
-├── hooks/            # Borradores (local + servidor)
-├── lib/              # Lógica de negocio
-└── types/            # Tipos compartidos
-docs/                 # Documentación
-prisma/               # Schema PostgreSQL
-scripts/              # verify-backend.js
+├── app/                # Adaptador HTTP — páginas y API (Next.js)
+├── domain/             # Núcleo de negocio (reglas puras)
+├── application/        # Casos de uso (create-lead, save-draft…)
+├── infrastructure/     # DB, Storage, email, auth
+├── presentation/       # UI React (componentes, hooks)
+└── shared/             # Config, tipos, validación Zod
+docs/                   # Documentación
+scripts/                # Utilidades CLI
 ```
+
+Guía completa: [docs/HEXAGONAL.md](./docs/HEXAGONAL.md)
 
 ## Variables críticas
 

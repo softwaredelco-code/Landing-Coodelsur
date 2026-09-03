@@ -1,13 +1,13 @@
 "use client";
 
-import { AdminShell } from "@/components/admin/AdminShell";
-import { LeadAttachmentGallery } from "@/components/admin/LeadAttachmentGallery";
-import { LeadInfoGrid, LeadSummaryCard } from "@/components/admin/LeadInfoGrid";
-import { LeadUbicacionSection } from "@/components/admin/LeadUbicacionSection";
-import { StatusBadge } from "@/components/admin/StatusBadge";
-import { Button } from "@/components/ui/Button";
-import type { AdminLeadDetail } from "@/lib/leads/admin-lead-detail";
-import { formatCOP } from "@/lib/utils";
+import { AdminShell } from "@/presentation/components/admin/AdminShell";
+import { LeadAttachmentGallery } from "@/presentation/components/admin/LeadAttachmentGallery";
+import { LeadInfoGrid, LeadSummaryCard } from "@/presentation/components/admin/LeadInfoGrid";
+import { LeadUbicacionSection } from "@/presentation/components/admin/LeadUbicacionSection";
+import { StatusBadge } from "@/presentation/components/admin/StatusBadge";
+import { Button } from "@/presentation/components/ui/Button";
+import type { AdminLeadDetail } from "@/application/lead/admin-lead-detail";
+import { formatCOP } from "@/shared/utils";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";

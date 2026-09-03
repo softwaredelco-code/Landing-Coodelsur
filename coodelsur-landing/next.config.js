@@ -6,6 +6,10 @@ const nextConfig = {
         protocol: "https",
         hostname: "coodelsursas.com.co",
       },
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+      },
     ],
   },
 };

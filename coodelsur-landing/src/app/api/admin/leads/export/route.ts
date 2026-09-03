@@ -1,9 +1,9 @@
-import { adminUnauthorizedResponse, isAdminRequest } from "@/lib/admin/require-admin";
+import { adminUnauthorizedResponse, isAdminRequest } from "@/infrastructure/auth/require-admin";
 import {
   buildExportFilename,
   buildLeadsExcelBuffer,
-} from "@/lib/leads/export-leads-excel";
-import { fetchLeadsForExport } from "@/lib/leads/fetch-leads-for-export";
+} from "@/application/lead/export-leads-excel";
+import { fetchLeadsForExport } from "@/application/lead/fetch-leads-for-export";
 import type { LeadEstado } from "@prisma/client";
 import { NextResponse } from "next/server";
 

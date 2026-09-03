@@ -2,7 +2,9 @@
 
 ## Visión general
 
-Aplicación **Next.js 14** (App Router) que captura solicitudes de **Microcrédito Small**, las persiste en **PostgreSQL** (Supabase), almacena adjuntos en **Supabase Storage** y expone un **panel admin** protegido por contraseña.
+Aplicación **Next.js 14** (App Router) con **arquitectura hexagonal** que captura solicitudes de **Microcrédito Small**, las persiste en **PostgreSQL** (Supabase), almacena adjuntos en **Supabase Storage** y expone un **panel admin** protegido por contraseña.
+
+Guía detallada de capas: [HEXAGONAL.md](./HEXAGONAL.md).
 
 ```mermaid
 flowchart TB
@@ -13,20 +15,41 @@ flowchart TB
     B --> E[POST /api/leads]
   end
 
-  subgraph NextJS["Next.js (API Routes)"]
+  subgraph AdaptadorHTTP["src/app/ — Adaptador HTTP"]
     D --> F[save-draft-lead]
     E --> G[create-lead]
-    F --> H[(PostgreSQL)]
-    G --> H
-    G --> I[Supabase Storage]
-    G --> J[SMTP / Resend]
   end
 
+  subgraph Application["src/application/ — Casos de uso"]
+    F
+    G
+  end
+
+  subgraph Domain["src/domain/ — Negocio"]
+    H[form-progress]
+    I[attachments]
+    J[amortización / cédula]
+  end
+
+  subgraph Infra["src/infrastructure/"]
+    K[(PostgreSQL)]
+    L[Supabase Storage]
+    M[SMTP / Resend]
+  end
+
+  F --> H
+  G --> I
+  G --> J
+  F --> K
+  G --> K
+  G --> L
+  G --> M
+
   subgraph Admin
-    K[/admin/leads] --> L[GET /api/admin/leads]
-    L --> H
-    K --> M[Adjuntos proxy]
-    M --> I
+    N[/admin/leads] --> O[GET /api/admin/leads]
+    O --> K
+    N --> P[Adjuntos proxy]
+    P --> L
   end
 ```
 
@@ -34,21 +57,25 @@ flowchart TB
 
 | Capa | Ubicación | Responsabilidad |
 |------|-----------|-----------------|
-| **Presentación** | `src/app/`, `src/components/` | Páginas, UI, formulario multi-paso |
-| **API** | `src/app/api/` | HTTP, auth admin, orquestación |
-| **Dominio** | `src/lib/leads/`, `src/lib/identity/` | Reglas de negocio, validaciones |
-| **Infraestructura** | `src/lib/prisma.ts`, `src/lib/storage/` | DB, Storage, email, geo |
-| **Configuración** | `src/config/`, `.env` | Productos, montos, amortización |
+| **Adaptador HTTP** | `src/app/` | Páginas y API Routes (Next.js) |
+| **Presentación** | `src/presentation/` | UI React, hooks, tracking |
+| **Application** | `src/application/` | Casos de uso (create-lead, save-draft…) |
+| **Domain** | `src/domain/` | Reglas de negocio puras |
+| **Infrastructure** | `src/infrastructure/` | DB, Storage, email, geo, auth |
+| **Shared** | `src/shared/` | Config, validación Zod, tipos |
+| **Schema** | `database/prisma/` | Modelo PostgreSQL |
 
 ## Modelo de datos
 
-Un solo modelo Prisma: **`Lead`**.
+Modelos Prisma en `database/prisma/schema.prisma`:
 
-- **Campos desnormalizados** (`capitalSolicitado`, `progresoFormulario`, `pasoActualFormulario`) — listados admin rápidos sin leer JSON completo.
+- **`Lead`** — solicitud de crédito.
+- **`CreditoParametros`** — tasas y plazos editables desde admin.
+
+Campos desnormalizados en `Lead` (`capitalSolicitado`, `progresoFormulario`, `pasoActualFormulario`) permiten listados admin rápidos sin leer JSON completo.
+
 - **`datosFormulario` (JSON)** — payload completo del formulario + metadata de adjuntos.
 - **`estado`** — workflow comercial (`incompleto` → `recibido` → …).
-
-Ver `prisma/schema.prisma`.
 
 ## Flujo: solicitud completa
 
@@ -80,7 +107,8 @@ Si PostgreSQL no responde, `create-lead` y `save-draft-lead` pueden escribir en 
 
 ## Decisiones técnicas
 
+- **Arquitectura hexagonal** — negocio desacoplado de Next.js y Supabase.
 - **Zod + React Hook Form** — validación compartida cliente/servidor.
 - **Transaction pooler (6543)** — conexiones eficientes en serverless (Vercel).
 - **Adjuntos fuera del JSON** — paths en Storage; JSON liviano en admin.
-- **Validación CC colombiana** — 6, 7 o 10 dígitos (`src/lib/identity/cedula.ts`).
+- **Validación CC colombiana** — 6, 7 o 10 dígitos (`domain/identity/cedula.ts`).

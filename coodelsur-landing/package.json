@@ -2,6 +2,9 @@
   "name": "coodelsur-landing",
   "version": "0.1.0",
   "private": true,
+  "prisma": {
+    "schema": "database/prisma/schema.prisma"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
@@ -12,7 +15,8 @@
     "db:studio": "prisma studio",
     "verify:backend": "node scripts/verify-backend.js",
     "docs:campos-witme": "node scripts/generate-campos-witme-docx.mjs",
-    "docs:manuales": "node scripts/generate-manuales-docx.mjs"
+    "docs:manuales": "node scripts/generate-manuales-docx.mjs",
+    "docs:capacitacion": "node scripts/generate-capacitacion-docx.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

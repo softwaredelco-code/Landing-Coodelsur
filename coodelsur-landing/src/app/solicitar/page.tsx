@@ -1,5 +1,5 @@
-import { ContactSection } from "@/components/landing/ContactSection";
-import { SolicitudUnificada } from "@/components/solicitud/SolicitudUnificada";
+import { ContactSection } from "@/presentation/components/landing/ContactSection";
+import { SolicitudUnificada } from "@/presentation/components/solicitud/SolicitudUnificada";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {

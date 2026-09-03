@@ -1,6 +1,6 @@
-import { isEmailConfigured, getEmailTransport } from "@/lib/email/send";
-import { isAnalyticsEnabled } from "@/lib/tracking/analytics";
-import { prisma } from "@/lib/prisma";
+import { isEmailConfigured, getEmailTransport } from "@/infrastructure/email/send";
+import { isAnalyticsEnabled } from "@/presentation/tracking/analytics";
+import { prisma } from "@/infrastructure/database/prisma";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";

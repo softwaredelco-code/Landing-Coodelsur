@@ -1,5 +1,5 @@
-import { adminUnauthorizedResponse, isAdminRequest } from "@/lib/admin/require-admin";
-import { listCreditoParametrosRecords } from "@/lib/credito/parametros-store";
+import { adminUnauthorizedResponse, isAdminRequest } from "@/infrastructure/auth/require-admin";
+import { listCreditoParametrosRecords } from "@/infrastructure/database/parametros-store";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";

@@ -1,11 +1,11 @@
-import { adminUnauthorizedResponse, isAdminRequest } from "@/lib/admin/require-admin";
+import { adminUnauthorizedResponse, isAdminRequest } from "@/infrastructure/auth/require-admin";
 import {
   PRODUCTOS_PARAMETRIZABLES,
   parametrosUpdateSchema,
   resetCreditoParametros,
   updateCreditoParametros,
   type ProductoParametrizable,
-} from "@/lib/credito/parametros-store";
+} from "@/infrastructure/database/parametros-store";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";

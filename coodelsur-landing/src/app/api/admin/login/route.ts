@@ -6,7 +6,7 @@ import {
   readCookie,
   ADMIN_COOKIE,
   signAdminToken,
-} from "@/lib/admin/auth";
+} from "@/infrastructure/auth/auth";
 
 export async function POST(request: Request) {
   const password = process.env.ADMIN_PASSWORD;

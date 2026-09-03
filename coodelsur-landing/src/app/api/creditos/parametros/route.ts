@@ -1,4 +1,4 @@
-import { getPublicParametrosMap } from "@/lib/credito/parametros-store";
+import { getPublicParametrosMap } from "@/infrastructure/database/parametros-store";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";

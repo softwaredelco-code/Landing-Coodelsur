@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/lib/admin/auth";
+import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/infrastructure/auth/auth";
 import {
   isLeadAttachmentField,
   loadAttachmentBytes,
   resolveAttachmentSource,
-} from "@/lib/leads/attachments";
-import { loadLeadAttachmentValue } from "@/lib/leads/load-lead-attachment";
-import { downloadStorageObject } from "@/lib/storage/upload";
+} from "@/domain/lead/attachments";
+import { loadLeadAttachmentValue } from "@/application/lead/load-lead-attachment";
+import { downloadStorageObject } from "@/infrastructure/storage/upload";
 
 export const runtime = "nodejs";
 
@@ -40,7 +40,7 @@ export async function GET(
   }
 
   if (source.kind === "storagePath") {
-    const { createSignedStorageUrl } = await import("@/lib/storage/upload");
+    const { createSignedStorageUrl } = await import("@/infrastructure/storage/upload");
     const signed = await createSignedStorageUrl(source.path);
     if (signed) {
       return NextResponse.redirect(signed, 302);

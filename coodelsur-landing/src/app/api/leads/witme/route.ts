@@ -1,7 +1,7 @@
-import { createLead } from "@/lib/leads/create-lead";
-import { getClientIp } from "@/lib/utils";
-import { inferOrigen } from "@/lib/tracking/utm";
-import type { TipoCredito, UtmParams } from "@/types/credito";
+import { createLead } from "@/application/lead/create-lead";
+import { getClientIp } from "@/shared/utils";
+import { inferOrigen } from "@/presentation/tracking/utm";
+import type { TipoCredito, UtmParams } from "@/shared/types/credito";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 

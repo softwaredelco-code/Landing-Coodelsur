@@ -1,6 +1,18 @@
 # Mapa del código fuente
 
-Referencia rápida de módulos, responsabilidades y puntos de entrada. Para arquitectura de alto nivel ver [ARCHITECTURE.md](./ARCHITECTURE.md).
+Referencia rápida de módulos, responsabilidades y puntos de entrada. Para arquitectura de alto nivel ver [ARCHITECTURE.md](./ARCHITECTURE.md) y [HEXAGONAL.md](./HEXAGONAL.md).
+
+## Capas hexagonales
+
+| Capa | Ubicación | Responsabilidad |
+|------|-----------|-----------------|
+| **Adaptador HTTP** | `src/app/` | Páginas Next.js y API Routes (delgadas) |
+| **Presentación** | `src/presentation/` | Componentes React, hooks, contextos |
+| **Application** | `src/application/` | Casos de uso (orquestación) |
+| **Domain** | `src/domain/` | Reglas de negocio puras |
+| **Infrastructure** | `src/infrastructure/` | Prisma, Storage, email, geo, auth |
+| **Shared** | `src/shared/` | Config, validación Zod, tipos, utilidades |
+| **Persistencia** | `database/prisma/` | Schema PostgreSQL |
 
 ## Páginas (`src/app/`)
 
@@ -13,23 +25,25 @@ Referencia rápida de módulos, responsabilidades y puntos de entrada. Para arqu
 | `/admin` | `admin/page.tsx` | Login del panel |
 | `/admin/leads` | `admin/leads/page.tsx` | Listado de solicitudes |
 | `/admin/leads/[id]` | `admin/leads/[id]/page.tsx` | Detalle + cambio de estado |
+| `/admin/parametros` | `admin/parametros/page.tsx` | Parámetros de amortización |
 
 ## API (`src/app/api/`)
 
-| Método | Ruta | Módulo de dominio |
-|--------|------|-------------------|
+| Método | Ruta | Caso de uso |
+|--------|------|-------------|
 | GET | `/api/health` | Diagnóstico DB + modo demo |
-| POST | `/api/leads` | `create-lead.ts` |
-| POST | `/api/leads/draft` | `save-draft-lead.ts` |
+| POST | `/api/leads` | `@/application/lead/create-lead` |
+| POST | `/api/leads/draft` | `@/application/lead/save-draft-lead` |
 | POST | `/api/leads/witme` | Webhook externo Witme |
-| POST | `/api/verify-cedula` | `cedula.ts` / Verifik |
-| POST | `/api/admin/login` | `admin/auth.ts` |
+| POST | `/api/verify-cedula` | `@/application/identity/verify-document` |
+| GET | `/api/creditos/parametros` | Parámetros públicos de producto |
+| POST | `/api/admin/login` | `@/infrastructure/auth/` |
 | GET | `/api/admin/leads` | Listado Prisma |
-| GET/PATCH/DELETE | `/api/admin/leads/[id]` | Detalle, estado, `delete-lead.ts` |
-| GET | `/api/admin/leads/export` | Excel con solicitudes (`export-leads-excel.ts`) |
+| GET/PATCH/DELETE | `/api/admin/leads/[id]` | Detalle, estado, borrado |
+| GET | `/api/admin/leads/export` | Excel (`export-leads-excel.ts`) |
 | GET | `/api/admin/leads/[id]/attachments/[field]` | Proxy adjuntos Storage |
 
-## Dominio — leads (`src/lib/leads/`)
+## Application — leads (`src/application/lead/`)
 
 | Archivo | Función |
 |---------|---------|
@@ -39,30 +53,43 @@ Referencia rápida de módulos, responsabilidades y puntos de entrada. Para arqu
 | `export-leads-excel.ts` | Generación Excel para admin |
 | `fetch-leads-for-export.ts` | Consulta completa para exportación |
 | `admin-lead-detail.ts` | Proyección liviana para admin |
+| `admin-lead-sections.ts` | Secciones del detalle admin |
+| `load-admin-lead-detail.ts` | Carga detalle con adjuntos |
 | `load-lead-attachment.ts` | Descarga bajo demanda de adjuntos |
-| `attachments.ts` | Metadatos y paths en JSON |
+
+## Domain — leads (`src/domain/lead/`)
+
+| Archivo | Función |
+|---------|---------|
+| `attachments.ts` | Metadatos, proxy URLs, labels de adjuntos |
 | `form-progress.ts` | % completado y paso actual |
 | `lead-summary-fields.ts` | Campos desnormalizados al guardar |
 | `lead-summary.ts` | Extracción desde JSON legacy |
 | `duplicate-cedula.ts` | Ventana anti-duplicados |
-| `file-store.ts` | Fallback JSON local (solo dev) |
 
-## Identidad (`src/lib/identity/`)
+## Domain — identidad y crédito
 
-| Archivo | Función |
-|---------|---------|
-| `cedula.ts` | Formato CC (6/7/10 dígitos), Verifik |
-| `cedula-local.ts` | Validación offline en formulario |
-| `verify-document.ts` | Orquestación verificación externa |
+| Módulo | Archivo | Función |
+|--------|---------|---------|
+| `domain/identity/` | `cedula.ts`, `cedula-local.ts` | Formato CC, validación offline |
+| `domain/credito/` | `amortizacion.ts` | Cálculo de cuotas y desglose |
+| `application/identity/` | `verify-document.ts` | Orquestación Verifik |
+| `application/credito/` | `parametros-runtime.ts` | Parámetros en runtime |
 
-## Storage y media (`src/lib/storage/`, `src/lib/media/`)
+## Infrastructure
 
-| Archivo | Función |
-|---------|---------|
-| `upload.ts` | Subida/eliminación Supabase Storage |
-| `file-capture.ts` | Normalización de capturas base64 |
+| Módulo | Ubicación | Función |
+|--------|-----------|---------|
+| Base de datos | `infrastructure/database/prisma.ts` | Cliente Prisma singleton |
+| Parámetros BD | `infrastructure/database/parametros-store.ts` | CRUD `CreditoParametros` |
+| Storage | `infrastructure/storage/upload.ts` | Supabase Storage |
+| Email | `infrastructure/email/` | SMTP / Resend |
+| Geo | `infrastructure/geo/` | Geolocalización por IP |
+| Auth admin | `infrastructure/auth/` | Cookie firmada |
+| Fallback JSON | `infrastructure/persistence/file-store.ts` | Solo dev (`LEAD_STORE=file`) |
+| Media | `infrastructure/media/file-capture.ts` | Normalización base64 |
 
-## Formulario (`src/components/forms/`)
+## Presentación — formulario (`src/presentation/components/forms/`)
 
 | Componente | Rol |
 |------------|-----|
@@ -74,46 +101,33 @@ Referencia rápida de módulos, responsabilidades y puntos de entrada. Para arqu
 | `CameraCapture.tsx` | Foto cédula desde cámara |
 | `TermsAcceptance.tsx` | Hábeas data + términos |
 
-## Hooks (`src/hooks/`)
+## Hooks (`src/presentation/hooks/`)
 
 | Hook | Almacenamiento |
 |------|----------------|
 | `useNanocreditoDraft` | `localStorage` — recuperación al recargar |
 | `useNanocreditoServerDraft` | `POST /api/leads/draft` — visible en admin |
 
-## Configuración de producto (`src/config/creditos/`)
+## Shared — configuración y validación
 
-| Archivo | Contenido |
-|---------|-----------|
-| `montos.ts` | Rangos $200K–$600K (Small) |
-| `amortizacion.ts` | Tasas, fianza, vida deudores |
-| `nanocredito.ts` | Constantes del producto |
-| `form-sections.ts` | IDs de pasos (legacy) |
-| `opciones.ts` | Selects: bancos, parentesco, documentos |
+| Ubicación | Contenido |
+|-----------|-----------|
+| `shared/config/creditos/` | Montos, amortización, opciones de selects |
+| `shared/validation/nanocredito.ts` | Schema Zod, `NANOCREDITO_STEPS`, reglas cruzadas |
+| `shared/validation/schemas.ts` | Schemas auxiliares |
+| `shared/types/credito.ts` | `LeadPayload`, `FileCapture`, `UtmParams`, `GeoCoords` |
+| `shared/data/` | Bancos, departamentos/municipios Colombia |
+| `shared/content/` | Textos legales (hábeas data) |
 
-## Validación (`src/lib/validation/`)
+## Prisma (`database/prisma/schema.prisma`)
 
-| Archivo | Contenido |
-|---------|-----------|
-| `nanocredito.ts` | Schema Zod, `NANOCREDITO_STEPS`, reglas cruzadas |
-| `schemas.ts` | Schemas compartidos auxiliares |
+Modelo `Lead` con enum `LeadEstado` y tabla `CreditoParametros`. Campos indexados para filtros admin.
 
-## Tracking y email
+Configuración en `package.json`:
 
-| Módulo | Uso |
-|--------|-----|
-| `lib/tracking/utm.ts` | Captura y serialización UTM |
-| `lib/tracking/analytics.ts` | Eventos GA4 |
-| `lib/email/send.ts` | SMTP / Resend |
-| `lib/email/lead-confirmation.ts` | Plantilla confirmación |
-
-## Tipos (`src/types/credito.ts`)
-
-Contratos compartidos: `LeadPayload`, `FileCapture`, `UtmParams`, `GeoCoords`.
-
-## Prisma (`prisma/schema.prisma`)
-
-Modelo único `Lead` con enum `LeadEstado`. Campos indexados para filtros admin.
+```json
+"prisma": { "schema": "database/prisma/schema.prisma" }
+```
 
 ## Scripts (`scripts/`)
 
@@ -123,8 +137,20 @@ Modelo único `Lead` con enum `LeadEstado`. Campos indexados para filtros admin.
 
 ## Convenciones
 
-1. **Lógica de negocio** en `src/lib/`, no en componentes ni routes.
-2. **Validación** duplicada: Zod en cliente (UX) y servidor (seguridad).
-3. **Adjuntos**: nunca binarios grandes en PostgreSQL; solo paths en JSON.
-4. **Admin**: fetch con `cache: 'no-store'` para datos frescos.
-5. **Producción**: `NEXT_PUBLIC_DEMO_MODE=false`, `LEAD_STORE` vacío, pooler `:6543`.
+1. **Reglas de negocio** en `domain/`; **orquestación** en `application/`.
+2. **Routes API** delgadas: validan HTTP y delegan al caso de uso.
+3. **Validación** duplicada: Zod en cliente (UX) y servidor (seguridad).
+4. **Adjuntos**: nunca binarios grandes en PostgreSQL; solo paths en JSON.
+5. **Admin**: fetch con `cache: 'no-store'` para datos frescos.
+6. **Producción**: `NEXT_PUBLIC_DEMO_MODE=false`, `LEAD_STORE` vacío, pooler `:6543`.
+
+## Alias TypeScript (`tsconfig.json`)
+
+```json
+"@/*"              → src/*
+"@/domain/*"       → src/domain/*
+"@/application/*"  → src/application/*
+"@/infrastructure/*" → src/infrastructure/*
+"@/presentation/*" → src/presentation/*
+"@/shared/*"       → src/shared/*
+```

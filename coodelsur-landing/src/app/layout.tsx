@@ -1,8 +1,8 @@
-import { Footer } from "@/components/layout/Footer";
-import { Header } from "@/components/layout/Header";
-import { WhatsAppCTA } from "@/components/layout/WhatsAppCTA";
-import { GoogleAnalytics } from "@/components/tracking/GoogleAnalytics";
-import { TrackingProvider } from "@/lib/tracking/TrackingProvider";
+import { Footer } from "@/presentation/components/layout/Footer";
+import { Header } from "@/presentation/components/layout/Header";
+import { WhatsAppCTA } from "@/presentation/components/layout/WhatsAppCTA";
+import { GoogleAnalytics } from "@/presentation/components/tracking/GoogleAnalytics";
+import { TrackingProvider } from "@/presentation/tracking/TrackingProvider";
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import { Suspense } from "react";

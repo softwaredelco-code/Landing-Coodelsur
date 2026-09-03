@@ -1,4 +1,4 @@
-import { verifyDocumentComplete } from "@/lib/identity/verify-document";
+import { verifyDocumentComplete } from "@/application/identity/verify-document";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 

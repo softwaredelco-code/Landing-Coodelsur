@@ -1,10 +1,10 @@
 "use client";
 
-import { AdminShell } from "@/components/admin/AdminShell";
-import { Button } from "@/components/ui/Button";
-import { calcularDesgloseCuota } from "@/lib/credito/amortizacion";
-import type { CreditoParametrosRecord, ProductoParametrizable } from "@/lib/credito/parametros-store";
-import { formatCOP } from "@/lib/utils";
+import { AdminShell } from "@/presentation/components/admin/AdminShell";
+import { Button } from "@/presentation/components/ui/Button";
+import { calcularDesgloseCuota } from "@/domain/credito/amortizacion";
+import type { CreditoParametrosRecord, ProductoParametrizable } from "@/infrastructure/database/parametros-store";
+import { formatCOP } from "@/shared/utils";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 

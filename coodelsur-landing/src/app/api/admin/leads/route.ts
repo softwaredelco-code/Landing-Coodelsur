@@ -1,13 +1,13 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/infrastructure/database/prisma";
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/lib/admin/auth";
+import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/infrastructure/auth/auth";
 import {
   getLeadFromFile,
   isDbConnectionError,
   listLeadsFromFile,
   updateLeadEstadoInFile,
-} from "@/lib/leads/file-store";
-import { mapLeadListRow } from "@/lib/leads/lead-summary";
+} from "@/infrastructure/persistence/file-store";
+import { mapLeadListRow } from "@/domain/lead/lead-summary";
 import type { LeadEstado } from "@prisma/client";
 
 function requireAdmin(request: Request): boolean {

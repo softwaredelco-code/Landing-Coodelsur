@@ -1,6 +1,6 @@
-import { saveDraftLead } from "@/lib/leads/save-draft-lead";
-import { getClientIp } from "@/lib/utils";
-import type { UtmParams } from "@/types/credito";
+import { saveDraftLead } from "@/application/lead/save-draft-lead";
+import { getClientIp } from "@/shared/utils";
+import type { UtmParams } from "@/shared/types/credito";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";

@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/presentation/components/ui/Button";
 import Link from "next/link";
 import type { Metadata } from "next";
 

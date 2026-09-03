@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Button } from "@/presentation/components/ui/Button";
+import { Input } from "@/presentation/components/ui/Input";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 

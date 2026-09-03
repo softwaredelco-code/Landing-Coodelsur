@@ -1,7 +1,7 @@
-import { loadLeadForAdminDetail } from "@/lib/leads/load-admin-lead-detail";
-import { deleteLead } from "@/lib/leads/delete-lead";
+import { loadLeadForAdminDetail } from "@/application/lead/load-admin-lead-detail";
+import { deleteLead } from "@/application/lead/delete-lead";
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/lib/admin/auth";
+import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/infrastructure/auth/auth";
 
 export async function GET(
   request: Request,
