@@ -8,7 +8,7 @@
  */
 import { buildAdminAttachments } from "@/domain/lead/attachments";
 import type { AdminAttachment } from "@/domain/lead/attachments";
-import { buildAdminLeadSections, type AdminLeadSection } from "@/application/lead/admin-lead-sections";
+import { buildAdminLeadSections, buildAdminWitmeExtraSection, type AdminLeadSection } from "@/application/lead/admin-lead-sections";
 import {
   extractCapitalSolicitado,
   extractPasoActualFormulario,
@@ -158,6 +158,10 @@ export function mapLeadToAdminDetail(
       ? cantidadCuotas
       : null;
 
+  const secciones = buildAdminLeadSections(datos);
+  const witmeExtra = buildAdminWitmeExtraSection(datos);
+  if (witmeExtra) secciones.push(witmeExtra);
+
   return {
     id: lead.id,
     tipoCredito: lead.tipoCredito,
@@ -183,7 +187,7 @@ export function mapLeadToAdminDetail(
     pasoActualFormulario: lead.pasoActualFormulario ?? extractPasoActualFormulario(datos),
     domicilio: extractDomicilio(datos),
     geoFormulario: extractGeoFormulario(datos),
-    secciones: buildAdminLeadSections(datos),
+    secciones,
     adjuntos: adjuntos ?? buildAdminAttachments(lead.id, datos),
   };
 }

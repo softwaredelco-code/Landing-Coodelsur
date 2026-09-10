@@ -7,6 +7,7 @@ import {
   listLeadsFromFile,
   updateLeadEstadoInFile,
 } from "@/infrastructure/persistence/file-store";
+import { pruneStaleIncompleteDrafts } from "@/application/lead/save-draft-lead";
 import { mapLeadListRow } from "@/domain/lead/lead-summary";
 import type { LeadEstado } from "@prisma/client";
 
@@ -30,6 +31,8 @@ export async function GET(request: Request) {
   const q = searchParams.get("q")?.trim()?.toLowerCase();
 
   try {
+    await pruneStaleIncompleteDrafts().catch(() => 0);
+
     const where = {
       ...(estado ? { estado } : {}),
       ...(tipo ? { tipoCredito: tipo } : {}),

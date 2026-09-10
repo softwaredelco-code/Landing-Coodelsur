@@ -1,0 +1,4 @@
+---
+deployment:
+  tasks:
+    - /bin/bash -lc 'cd coodelsur-landing && export NPM_CONFIG_PRODUCTION=false && npm install && npm run build'

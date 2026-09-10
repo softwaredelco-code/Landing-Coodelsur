@@ -36,7 +36,8 @@ export function VideoRecorder({
   maxBytes = DEFAULT_MAX_BYTES,
 }: VideoRecorderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const captureInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -68,21 +69,36 @@ export function VideoRecorder({
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  const openCameraFallback = () => {
+    captureInputRef.current?.click();
+  };
+
   const openPreview = async () => {
     setLocalError(null);
     setBusy(true);
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        fileInputRef.current?.click();
+        openCameraFallback();
         return;
       }
 
       stopCamera();
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true,
+        video: {
+          facingMode: { ideal: "user" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
       });
+
+      if (stream.getVideoTracks().length === 0) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error("Sin pista de video");
+      }
+
+      stream.getAudioTracks().forEach((track) => track.stop());
 
       streamRef.current = stream;
       setMode("preview");
@@ -95,7 +111,7 @@ export function VideoRecorder({
       });
     } catch {
       setLocalError("No pudimos abrir la cámara. Puedes subir un video corto desde tu galería.");
-      fileInputRef.current?.click();
+      openCameraFallback();
     } finally {
       setBusy(false);
     }
@@ -130,7 +146,7 @@ export function VideoRecorder({
 
   const startRecording = () => {
     const stream = streamRef.current;
-    if (!stream || typeof MediaRecorder === "undefined") {
+    if (!stream || stream.getVideoTracks().length === 0 || typeof MediaRecorder === "undefined") {
       setLocalError("Tu navegador no permite grabar video aquí. Sube un video desde tu galería.");
       return;
     }
@@ -177,6 +193,11 @@ export function VideoRecorder({
     setBusy(true);
 
     try {
+      if (!file.type.startsWith("video/")) {
+        setLocalError("Selecciona un archivo de video (no audio ni otro tipo).");
+        onChange(undefined);
+        return;
+      }
       if (file.size > maxBytes) {
         setLocalError(`El archivo no puede superar ${Math.round(maxBytes / (1024 * 1024))} MB`);
         onChange(undefined);
@@ -189,15 +210,20 @@ export function VideoRecorder({
       onChange(undefined);
     } finally {
       setBusy(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      clearInput(event.target);
     }
+  };
+
+  const clearInput = (input: HTMLInputElement | null) => {
+    if (input) input.value = "";
   };
 
   const clear = () => {
     onChange(undefined);
     setLocalError(null);
     stopCamera();
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    clearInput(uploadInputRef.current);
+    clearInput(captureInputRef.current);
   };
 
   const displayError = error || localError;
@@ -211,8 +237,16 @@ export function VideoRecorder({
       </p>
 
       <input
-        ref={fileInputRef}
-        id={`${id}-file`}
+        ref={uploadInputRef}
+        id={`${id}-upload`}
+        type="file"
+        accept="video/*"
+        className="sr-only"
+        onChange={handleFile}
+      />
+      <input
+        ref={captureInputRef}
+        id={`${id}-capture`}
         type="file"
         accept="video/*"
         capture="user"
@@ -232,7 +266,7 @@ export function VideoRecorder({
           </button>
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => uploadInputRef.current?.click()}
             disabled={busy}
             className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-coodel-dark hover:bg-gray-50 disabled:opacity-60"
           >

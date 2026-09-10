@@ -9,6 +9,7 @@
 | [HEXAGONAL.md](./HEXAGONAL.md) | Arquitectura hexagonal, capas, flujos y reglas |
 | [CODEBASE.md](./CODEBASE.md) | Mapa de archivos y responsabilidades |
 | [BACKEND_SETUP.md](./BACKEND_SETUP.md) | PostgreSQL, Supabase, variables de entorno |
+| [ENV-EQUIPO.md](./ENV-EQUIPO.md) | Crear `.env` en máquina nueva (equipo) |
 | [DESPLIEGUE.md](./DESPLIEGUE.md) | Checklist producción (Vercel + Supabase) |
 | [API.md](./API.md) | Endpoints REST |
 | [ADMIN.md](./ADMIN.md) | Panel de administración |

@@ -1,62 +1,23 @@
 import { createLead } from "@/application/lead/create-lead";
+import { mapWitmePayload } from "@/application/lead/map-witme-payload";
 import { getClientIp } from "@/shared/utils";
-import { inferOrigen } from "@/presentation/tracking/utm";
-import type { TipoCredito, UtmParams } from "@/shared/types/credito";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
 /**
- * Webhook Witme.
+ * Webhook Witme → Coodelsur.
+ * Witme envía cada lead completado; se guarda en PostgreSQL y aparece en /admin/leads.
+ *
  * Auth: Authorization: Bearer <WITME_API_KEY>
  */
-const witmeLeadSchema = z
-  .object({
-    tipo_credito: z.string().optional(),
-    tipoCredito: z.string().optional(),
-    nombre: z.string().min(2),
-    cedula: z.string().min(5),
-    telefono: z.string().min(7),
-    email: z.string().email().optional(),
-    datos: z.record(z.unknown()).optional(),
-    datos_formulario: z.record(z.unknown()).optional(),
-    acepta_terminos: z.boolean().optional(),
-    aceptaTerminos: z.boolean().optional(),
-    utm_source: z.string().optional(),
-    utm_campaign: z.string().optional(),
-    utm_medium: z.string().optional(),
-    utm_term: z.string().optional(),
-    utm_content: z.string().optional(),
-  })
-  .passthrough();
-
 function validateWitmeAuth(request: Request): boolean {
-  const apiKey = process.env.WITME_API_KEY;
+  const apiKey = process.env.WITME_API_KEY?.trim();
   if (!apiKey) return false;
 
   const authHeader = request.headers.get("authorization");
   if (!authHeader) return false;
 
-  const token = authHeader.replace(/^Bearer\s+/i, "");
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   return token === apiKey;
-}
-
-function normalizeTipoCredito(raw: string | undefined): TipoCredito {
-  const map: Record<string, TipoCredito> = {
-    nanocredito: "microcredito_small",
-    nanocrédito: "microcredito_small",
-    microcredito_small: "microcredito_small",
-    "microcredito small": "microcredito_small",
-    microcredito_rural: "microcredito_rural",
-    "microcredito rural": "microcredito_rural",
-    microcredito: "microcredito_rural",
-    microcrédito: "microcredito_rural",
-    microcredito_urbano: "microcredito_urbano",
-    "microcredito urbano": "microcredito_urbano",
-    consumo: "consumo",
-    comercial: "comercial",
-    libranza: "libranza",
-  };
-  return map[raw?.toLowerCase() ?? ""] ?? "microcredito_small";
 }
 
 export async function POST(request: Request) {
@@ -65,45 +26,43 @@ export async function POST(request: Request) {
   }
 
   try {
-    const rawBody = (await request.json()) as unknown;
-    const parsed = witmeLeadSchema.safeParse(rawBody);
+    const rawBody = (await request.json()) as Record<string, unknown>;
+    const mapped = mapWitmePayload(rawBody);
 
-    if (!parsed.success) {
+    if (!mapped) {
       return NextResponse.json(
-        { error: "Payload inválido", details: parsed.error.flatten() },
+        {
+          error: "Payload inválido",
+          details: "Se requieren al menos nombre, cedula/documento y telefono/celular",
+        },
         { status: 422 },
       );
     }
 
-    const data = parsed.data;
     const ip = getClientIp(request);
 
-    const utm: UtmParams = {
-      utmSource: data.utm_source ?? "witme",
-      utmCampaign: data.utm_campaign,
-      utmMedium: data.utm_medium,
-      utmTerm: data.utm_term,
-      utmContent: data.utm_content,
-    };
-
     const lead = await createLead({
-      tipoCredito: normalizeTipoCredito(data.tipo_credito ?? data.tipoCredito),
-      nombre: data.nombre,
-      cedula: data.cedula,
-      telefono: data.telefono,
-      email: data.email,
-      datosFormulario: {
-        ...(data.datos ?? data.datos_formulario ?? {}),
-        fuente: "witme_webhook",
-        payloadOriginal: rawBody,
-      },
-      origen: (inferOrigen(utm) as "witme") || "witme",
-      utm,
+      tipoCredito: mapped.tipoCredito,
+      nombre: mapped.nombre,
+      cedula: mapped.cedula,
+      telefono: mapped.telefono,
+      email: mapped.email,
+      datosFormulario: mapped.datosFormulario,
+      origen: "witme",
+      utm: mapped.utm,
       ip,
-      aceptaTerminos: data.aceptaTerminos ?? data.acepta_terminos ?? false,
+      aceptaTerminos: mapped.aceptaTerminos,
     });
 
-    return NextResponse.json({ success: true, id: lead.id }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        id: lead.id,
+        origen: "witme",
+        storage: lead.storage ?? "database",
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("[POST /api/leads/witme]", error);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
@@ -111,10 +70,28 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://tu-dominio.com";
+
   return NextResponse.json({
     service: "witme-webhook",
-    configured: Boolean(process.env.WITME_API_KEY),
+    configured: Boolean(process.env.WITME_API_KEY?.trim()),
     method: "POST",
+    url: `${siteUrl}/api/leads/witme`,
     auth: "Authorization: Bearer <WITME_API_KEY>",
+    requiredFields: ["nombre", "cedula|documento", "telefono|celular"],
+    optionalFields: [
+      "email|correo",
+      "tipo_credito|tipoCredito",
+      "datos|datos_formulario (objeto con todos los campos del formulario Witme)",
+      "witme_id (ID del lead en Witme, recomendado)",
+      "acepta_terminos",
+      "utm_source",
+      "utm_campaign",
+    ],
+    notes: [
+      "Los campos pueden ir en el root del JSON o dentro de datos / datos_formulario.",
+      "Acepta snake_case (capital_solicitado) y camelCase (capitalSeleccionado).",
+      "Cada lead aparece en el panel admin con origen witme.",
+    ],
   });
 }

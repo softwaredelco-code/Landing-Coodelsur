@@ -13,6 +13,8 @@
 
 # production
 /build
+/cpanel-deploy/
+cpanel-deploy.zip
 
 # misc
 .DS_Store

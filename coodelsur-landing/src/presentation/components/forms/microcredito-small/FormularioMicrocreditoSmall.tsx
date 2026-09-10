@@ -18,6 +18,8 @@ import { ParametrosAmortizacionProvider } from "@/presentation/contexts/Parametr
 import { useNanocreditoDraft } from "@/presentation/hooks/useNanocreditoDraft";
 import {
   clearNanocreditoServerDraftId,
+  disableNanocreditoServerDraftSync,
+  enableNanocreditoServerDraftSync,
   getNanocreditoServerDraftId,
   syncNanocreditoDraftToServer,
   useNanocreditoServerDraft,
@@ -120,7 +122,7 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
     watch,
     getValues,
     step,
-    enabled: !submitted,
+    enabled: !submitted && !submitting,
   });
   const current = NANOCREDITO_STEPS[step];
   const StepFields = STEP_COMPONENTS[step];
@@ -191,6 +193,8 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
   const onSubmit = async (data: NanocreditoFormValues) => {
     setSubmitError(null);
     setSubmitting(true);
+    const draftLeadId = getNanocreditoServerDraftId();
+    disableNanocreditoServerDraftSync();
 
     try {
       if (isDemoMode) {
@@ -211,7 +215,7 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
       const payload = {
         ...data,
         utm,
-        draftLeadId: getNanocreditoServerDraftId() ?? undefined,
+        draftLeadId: draftLeadId ?? undefined,
         geoCliente: data.geolocalizacion
           ? { lat: data.geolocalizacion.lat, lng: data.geolocalizacion.lng }
           : undefined,
@@ -247,6 +251,7 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("[FormularioMicrocreditoSmall] submit", error);
+      enableNanocreditoServerDraftSync();
       setSubmitError(
         error instanceof Error
           ? error.message
@@ -260,6 +265,7 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
   const nuevaSolicitud = () => {
     clearDraft();
     clearNanocreditoServerDraftId();
+    enableNanocreditoServerDraftSync();
     reset(defaultValues);
     dismissDraftMessage();
     setSubmitted(false);

@@ -56,6 +56,11 @@ export function loadNanocreditoDraft(): NanocreditoDraft | null {
 export function saveNanocreditoDraft(step: number, values: NanocreditoFormValues): boolean {
   if (!isBrowser()) return false;
 
+  if (!hasMeaningfulDraftValues(values)) {
+    clearNanocreditoDraft();
+    return false;
+  }
+
   for (let level = 0; level <= 3; level += 1) {
     const payload: NanocreditoDraft = {
       version: 1,
@@ -81,16 +86,25 @@ export function clearNanocreditoDraft() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-export function hasMeaningfulDraftValues(values: Partial<NanocreditoFormValues>): boolean {
-  const ignored = new Set([
-    "tipoCredito",
-    "fechaPagoOportunoModo",
-    "aceptaTerminos",
-    "fechaAceptacionTerminos",
-  ]);
+/** Campos autocompletados o calculados que no indican que el usuario avanzó en el formulario. */
+const DRAFT_IGNORED_FIELDS = new Set([
+  "tipoCredito",
+  "fechaPagoOportunoModo",
+  "aceptaTerminos",
+  "fechaAceptacionTerminos",
+  "capitalSeleccionado",
+  "cantidadCuotas",
+  "valorCuota",
+  "valorCreditoFinanciado",
+  "estudioCredito",
+  "cuotaCapitalInteres",
+  "cuotaFianzaMensual",
+  "cuotaVidaDeudoresMensual",
+]);
 
+export function hasMeaningfulDraftValues(values: Partial<NanocreditoFormValues>): boolean {
   return Object.entries(values).some(([key, value]) => {
-    if (ignored.has(key)) return false;
+    if (DRAFT_IGNORED_FIELDS.has(key)) return false;
     if (value === undefined || value === null || value === "") return false;
     if (typeof value === "boolean") return value;
     if (typeof value === "number") return value > 0;

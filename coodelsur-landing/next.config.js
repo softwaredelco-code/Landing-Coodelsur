@@ -1,5 +1,8 @@
+const path = require("path");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "standalone",
   images: {
     remotePatterns: [
       {
@@ -20,6 +23,13 @@ const nextConfig = {
         permanent: true,
       },
     ];
+  },
+  webpack: (config) => {
+    config.resolve.alias["@"] = path.join(__dirname, "src");
+    return config;
+  },
+  experimental: {
+    cpus: 1,
   },
 };
 

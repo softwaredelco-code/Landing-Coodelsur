@@ -79,6 +79,148 @@ function buildIncompleteMatchFilters(cedula: string, telefono: string): Prisma.L
   return filters;
 }
 
+async function hasCompletedLeadForContact(
+  client: DraftLookupClient,
+  cedula: string,
+  telefono: string,
+): Promise<boolean> {
+  const matchFilters = buildIncompleteMatchFilters(cedula, telefono);
+  if (matchFilters.length === 0) return false;
+
+  const completed = await client.lead.findFirst({
+    where: {
+      estado: { not: "incompleto" },
+      OR: matchFilters,
+    },
+    select: { id: true },
+  });
+
+  return Boolean(completed);
+}
+
+/** Busca el borrador incompleto de un contacto (para promoverlo al enviar). */
+export async function findIncompleteLeadIdForContact(
+  cedula: string,
+  telefono: string,
+  draftId?: string | null,
+): Promise<string | null> {
+  const forceFile = process.env.LEAD_STORE === "file";
+
+  if (!forceFile) {
+    try {
+      return await findDraftToUpdate(prisma, draftId ?? undefined, cedula, telefono);
+    } catch (error) {
+      if (!isDbConnectionError(error)) throw error;
+    }
+  }
+
+  return findDraftToUpdateInFile(draftId ?? undefined, cedula, telefono);
+}
+
+/** Elimina borradores incompletos cuando ya existe una solicitud enviada del mismo contacto. */
+export async function pruneStaleIncompleteDrafts(): Promise<number> {
+  const forceFile = process.env.LEAD_STORE === "file";
+
+  if (!forceFile) {
+    try {
+      const incompletos = await prisma.lead.findMany({
+        where: { estado: "incompleto" },
+        select: { id: true, cedula: true, telefono: true },
+      });
+
+      let deleted = 0;
+      for (const draft of incompletos) {
+        if (await hasCompletedLeadForContact(prisma, draft.cedula, draft.telefono)) {
+          await prisma.lead.delete({ where: { id: draft.id } });
+          deleted += 1;
+        }
+      }
+      return deleted;
+    } catch (error) {
+      if (!isDbConnectionError(error)) throw error;
+    }
+  }
+
+  const leads = listLeadsFromFile();
+  let deleted = 0;
+  for (const draft of leads) {
+    if (draft.estado !== "incompleto") continue;
+
+    const hasCompleted = leads.some((lead) => {
+      if (lead.id === draft.id || lead.estado === "incompleto") return false;
+      const phoneDigits = draft.telefono.replace(/\D/g, "");
+      const normalizedCedula = normalizeDocumentNumber(draft.cedula);
+      const sameCedula =
+        normalizedCedula &&
+        normalizedCedula !== "pendiente" &&
+        lead.cedula === normalizedCedula;
+      const samePhone =
+        phoneDigits.length >= 10 &&
+        lead.telefono.replace(/\D/g, "").endsWith(phoneDigits.slice(-10));
+      return sameCedula || samePhone;
+    });
+
+    if (hasCompleted) {
+      deleteLeadFromFile(draft.id);
+      deleted += 1;
+    }
+  }
+  return deleted;
+}
+
+async function deleteIncompleteDraftsForContact(
+  client: DraftLookupClient,
+  cedula: string,
+  telefono: string,
+): Promise<void> {
+  const matchFilters = buildIncompleteMatchFilters(cedula, telefono);
+  if (matchFilters.length === 0) return;
+
+  await client.lead.deleteMany({
+    where: {
+      estado: "incompleto",
+      OR: matchFilters,
+    },
+  });
+}
+
+/** Elimina borradores incompletos duplicados tras una solicitud enviada. */
+export async function cleanupIncompleteDraftsForContact(
+  cedula: string,
+  telefono: string,
+): Promise<void> {
+  const forceFile = process.env.LEAD_STORE === "file";
+
+  if (!forceFile) {
+    try {
+      await deleteIncompleteDraftsForContact(prisma, cedula, telefono);
+      return;
+    } catch (error) {
+      if (!isDbConnectionError(error)) throw error;
+    }
+  }
+
+  const phoneDigits = telefono.replace(/\D/g, "");
+  const normalizedCedula = normalizeDocumentNumber(cedula);
+  const leads = listLeadsFromFile();
+
+  for (const lead of leads) {
+    if (lead.estado !== "incompleto") continue;
+
+    const sameCedula =
+      normalizedCedula &&
+      normalizedCedula !== "pendiente" &&
+      lead.cedula === normalizedCedula;
+    const samePhone =
+      phoneDigits.length >= 10 &&
+      lead.telefono.replace(/\D/g, "").endsWith(phoneDigits.slice(-10));
+
+    if (sameCedula || samePhone) {
+      deleteLeadFromFile(lead.id);
+    }
+  }
+}
+
 async function findDraftToUpdate(
   client: DraftLookupClient,
   draftId: string | undefined,
@@ -183,6 +325,55 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
   }
 
   const { telefono, cedula, nombre, email, tipoCredito } = pickContactFields(input.values);
+
+  if (input.draftId) {
+    const forceFile = process.env.LEAD_STORE === "file";
+    if (!forceFile) {
+      try {
+        const existing = await prisma.lead.findUnique({
+          where: { id: input.draftId },
+          select: { estado: true },
+        });
+        if (existing && existing.estado !== "incompleto") {
+          return null;
+        }
+      } catch (error) {
+        if (!isDbConnectionError(error)) throw error;
+      }
+    } else {
+      const existing = getLeadFromFile(input.draftId);
+      if (existing && existing.estado !== "incompleto") {
+        return null;
+      }
+    }
+  }
+
+  const forceFileCheck = process.env.LEAD_STORE === "file";
+  if (!forceFileCheck) {
+    try {
+      if (await hasCompletedLeadForContact(prisma, cedula, telefono)) {
+        return null;
+      }
+    } catch (error) {
+      if (!isDbConnectionError(error)) throw error;
+    }
+  } else {
+    const hasCompleted = listLeadsFromFile().some((lead) => {
+      if (lead.estado === "incompleto") return false;
+      const phoneDigits = telefono.replace(/\D/g, "");
+      const normalizedCedula = normalizeDocumentNumber(cedula);
+      const sameCedula =
+        normalizedCedula &&
+        normalizedCedula !== "pendiente" &&
+        lead.cedula === normalizedCedula;
+      const samePhone =
+        phoneDigits.length >= 10 &&
+        lead.telefono.replace(/\D/g, "").endsWith(phoneDigits.slice(-10));
+      return sameCedula || samePhone;
+    });
+    if (hasCompleted) return null;
+  }
+
   const utm = input.utm ?? {};
   const datosFormulario = buildDraftDatosFormulario(input.values, input.step);
   const progreso = datosFormulario._progreso;

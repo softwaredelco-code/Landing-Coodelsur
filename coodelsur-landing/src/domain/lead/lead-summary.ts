@@ -2,7 +2,10 @@
 export function extractCapitalSolicitado(datosFormulario: unknown): number | null {
   if (!datosFormulario || typeof datosFormulario !== "object") return null;
 
-  const capital = (datosFormulario as Record<string, unknown>).capitalSeleccionado;
+  const capital =
+    (datosFormulario as Record<string, unknown>).capitalSeleccionado ??
+    (datosFormulario as Record<string, unknown>).capital_solicitado ??
+    (datosFormulario as Record<string, unknown>).monto;
   if (typeof capital !== "number" || !Number.isFinite(capital) || capital <= 0) return null;
 
   return capital;
