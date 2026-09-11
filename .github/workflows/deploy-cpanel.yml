@@ -59,6 +59,19 @@ jobs:
           bash scripts/package-cpanel.sh
           tar -czf ../deploy-cpanel.tar.gz -C cpanel-deploy .
 
+      - name: Test SSH connection
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.CPANEL_HOST }}
+          username: ${{ secrets.CPANEL_USER }}
+          key: ${{ secrets.CPANEL_SSH_KEY }}
+          port: ${{ secrets.CPANEL_SSH_PORT || 22 }}
+          timeout: 60s
+          script: |
+            echo "SSH conexion OK"
+            whoami
+            echo "Home: $HOME"
+
       - name: Upload bundle to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -67,7 +80,8 @@ jobs:
           key: ${{ secrets.CPANEL_SSH_KEY }}
           port: ${{ secrets.CPANEL_SSH_PORT || 22 }}
           source: deploy-cpanel.tar.gz
-          target: ${{ secrets.CPANEL_DEPLOY_PATH }}
+          target: ${{ secrets.CPANEL_DEPLOY_PATH }}/
+          timeout: 120s
 
       - name: Extract and post-deploy on server
         uses: appleboy/ssh-action@v1.2.0
