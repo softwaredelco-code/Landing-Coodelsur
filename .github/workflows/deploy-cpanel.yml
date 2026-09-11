@@ -18,7 +18,6 @@ jobs:
         working-directory: coodelsur-landing
 
     env:
-      NODE_ENV: production
       NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
       NEXT_PUBLIC_DEMO_MODE: ${{ secrets.NEXT_PUBLIC_DEMO_MODE || 'false' }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -52,6 +51,8 @@ jobs:
 
       - name: Build Next.js standalone
         run: npx next build
+        env:
+          NODE_ENV: production
 
       - name: Package for cPanel
         run: |
