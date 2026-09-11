@@ -20,7 +20,7 @@ jobs:
     env:
       NODE_ENV: production
       NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
-      NEXT_PUBLIC_DEMO_MODE: ${{ secrets.NEXT_PUBLIC_DEMO_MODE }}
+      NEXT_PUBLIC_DEMO_MODE: ${{ secrets.NEXT_PUBLIC_DEMO_MODE || 'false' }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
@@ -35,11 +35,23 @@ jobs:
           cache: npm
           cache-dependency-path: coodelsur-landing/package-lock.json
 
+      - name: Verify build secrets
+        run: |
+          missing=0
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Falta secret DATABASE_URL en GitHub"; missing=1; fi
+          if [ -z "$DIRECT_URL" ]; then echo "::error::Falta secret DIRECT_URL en GitHub"; missing=1; fi
+          if [ -z "$NEXT_PUBLIC_SITE_URL" ]; then echo "::error::Falta secret NEXT_PUBLIC_SITE_URL en GitHub"; missing=1; fi
+          if [ "$missing" -eq 1 ]; then exit 1; fi
+          echo "Secrets de build OK"
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (Prisma + Next.js standalone)
-        run: npm run build
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Build Next.js standalone
+        run: npx next build
 
       - name: Package for cPanel
         run: |
