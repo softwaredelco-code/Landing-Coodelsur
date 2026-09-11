@@ -55,62 +55,27 @@ jobs:
           NODE_ENV: production
 
       - name: Package for cPanel
+        run: bash scripts/package-cpanel.sh
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: coodelsur-landing/cpanel-deploy/
+          server-dir: coodelsur-landing/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+
+      - name: Post-deploy en cPanel (manual)
         run: |
-          bash scripts/package-cpanel.sh
-          tar -czf ../deploy-cpanel.tar.gz -C cpanel-deploy .
-
-      - name: Test SSH connection
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_USER }}
-          key: ${{ secrets.CPANEL_SSH_KEY }}
-          passphrase: ${{ secrets.CPANEL_SSH_PASSPHRASE }}
-          port: ${{ secrets.CPANEL_SSH_PORT || 22 }}
-          timeout: 60s
-          script: |
-            echo "SSH conexion OK"
-            whoami
-            echo "Home: $HOME"
-
-      - name: Upload bundle to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_USER }}
-          key: ${{ secrets.CPANEL_SSH_KEY }}
-          passphrase: ${{ secrets.CPANEL_SSH_PASSPHRASE }}
-          port: ${{ secrets.CPANEL_SSH_PORT || 22 }}
-          source: deploy-cpanel.tar.gz
-          target: ${{ secrets.CPANEL_DEPLOY_PATH }}/
-          timeout: 120s
-
-      - name: Extract and post-deploy on server
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_USER }}
-          key: ${{ secrets.CPANEL_SSH_KEY }}
-          passphrase: ${{ secrets.CPANEL_SSH_PASSPHRASE }}
-          port: ${{ secrets.CPANEL_SSH_PORT || 22 }}
-          script: |
-            set -euo pipefail
-            APP_DIR="${{ secrets.CPANEL_DEPLOY_PATH }}"
-            NODE_VER="${{ secrets.CPANEL_NODE_VERSION }}"
-            mkdir -p "$APP_DIR"
-            cd "$APP_DIR"
-            tar -xzf deploy-cpanel.tar.gz
-            rm -f deploy-cpanel.tar.gz
-            bash cpanel-post-deploy.sh "$APP_DIR" "${NODE_VER:-18}"
-
-      - name: Health check
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_USER }}
-          key: ${{ secrets.CPANEL_SSH_KEY }}
-          passphrase: ${{ secrets.CPANEL_SSH_PASSPHRASE }}
-          port: ${{ secrets.CPANEL_SSH_PORT || 22 }}
-          script: |
-            sleep 5
-            curl -fsS "${{ secrets.NEXT_PUBLIC_SITE_URL }}/api/health" || echo "Health check pendiente — revisa Setup Node.js App"
+          echo "Deploy FTP completado."
+          echo "En cPanel -> Terminal ejecuta:"
+          echo "  source ~/nodevenv/coodelsur-landing/18/bin/activate"
+          echo "  cd ~/coodelsur-landing && bash cpanel-post-deploy.sh ~/coodelsur-landing 18"
+          echo "Luego Setup Node.js App -> RESTART"
