@@ -57,6 +57,12 @@ jobs:
       - name: Package for cPanel
         run: bash scripts/package-cpanel.sh
 
+      - name: Verify deploy package
+        run: |
+          ls -la cpanel-deploy/
+          test -f cpanel-deploy/cpanel-post-deploy.sh
+          test -f cpanel-deploy/server.js
+
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -67,6 +73,7 @@ jobs:
           port: 21
           local-dir: coodelsur-landing/cpanel-deploy/
           server-dir: /
+          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.git*/**
@@ -76,6 +83,6 @@ jobs:
         run: |
           echo "Deploy FTP completado."
           echo "En cPanel -> Terminal ejecuta:"
-          echo "  source ~/nodevenv/coodelsur-landing/18/bin/activate"
+          echo "  source ~/nodeenv/coodelsur-landing/18/bin/activate"
           echo "  cd ~/coodelsur-landing && bash cpanel-post-deploy.sh ~/coodelsur-landing 18"
           echo "Luego Setup Node.js App -> RESTART"

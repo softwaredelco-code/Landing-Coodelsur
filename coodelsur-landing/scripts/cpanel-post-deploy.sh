@@ -4,7 +4,15 @@ set -euo pipefail
 
 APP_DIR="${1:-$HOME/coodelsur-landing}"
 NODE_MAJOR="${2:-18}"
-VENV="$HOME/nodevenv/coodelsur-landing/${NODE_MAJOR}/bin/activate"
+VENV=""
+for candidate in \
+  "$HOME/nodeenv/coodelsur-landing/${NODE_MAJOR}/bin/activate" \
+  "$HOME/nodevenv/coodelsur-landing/${NODE_MAJOR}/bin/activate"; do
+  if [[ -f "$candidate" ]]; then
+    VENV="$candidate"
+    break
+  fi
+done
 
 cd "$APP_DIR"
 echo ">> Post-deploy en: $APP_DIR"
@@ -17,8 +25,8 @@ elif [[ -d node_modules ]]; then
   rm -rf node_modules
 fi
 
-if [[ ! -f "$VENV" ]]; then
-  echo "ERROR: No se encontró entorno Node: $VENV"
+if [[ -z "$VENV" ]]; then
+  echo "ERROR: No se encontró entorno Node para coodelsur-landing (Node ${NODE_MAJOR})."
   echo "Crea la app en Setup Node.js App con root 'coodelsur-landing' y Node ${NODE_MAJOR}."
   exit 1
 fi
