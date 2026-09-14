@@ -63,7 +63,12 @@ jobs:
           test -f cpanel-deploy/cpanel-post-deploy.sh
           test -f cpanel-deploy/server.js
           test -d cpanel-deploy/node_modules
-          echo "node_modules incluido en el paquete ($(du -sh cpanel-deploy/node_modules | cut -f1))"
+
+      - name: Create deploy archive
+        run: |
+          mkdir -p cpanel-release
+          tar -czf cpanel-release/cpanel-deploy.tar.gz -C cpanel-deploy .
+          ls -lh cpanel-release/cpanel-deploy.tar.gz
 
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -73,16 +78,16 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
           port: 21
-          local-dir: coodelsur-landing/cpanel-deploy/
+          local-dir: coodelsur-landing/cpanel-release/
           server-dir: /
-          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.git*/**
 
       - name: Post-deploy en cPanel (manual)
         run: |
-          echo "Deploy FTP completado."
+          echo "Deploy FTP completado (archivo unico cpanel-deploy.tar.gz)."
           echo "En cPanel -> Terminal ejecuta:"
-          echo "  cd ~/coodelsur-landing && bash cpanel-post-deploy.sh ~/coodelsur-landing 18"
+          echo "  bash ~/coodelsur-landing/cpanel-post-deploy.sh ~/coodelsur-landing 18"
+          echo "  (si el tar esta en despliegue, el script lo encuentra solo)"
           echo "Luego Setup Node.js App -> RESTART"
