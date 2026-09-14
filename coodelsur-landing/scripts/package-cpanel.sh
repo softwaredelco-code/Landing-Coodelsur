@@ -22,7 +22,7 @@ cp -a "$STANDALONE/." "$OUT/"
 mkdir -p "$OUT/.next/static"
 cp -a "$STATIC/." "$OUT/.next/static/"
 cp -a "$ROOT/public" "$OUT/public"
-cp "$ROOT/server.js" "$OUT/server.js"
+# Usar server.js generado por Next standalone (no el custom de la raíz).
 cp -a "$ROOT/database" "$OUT/database"
 
 # package.json de producción (sin postinstall — Prisma ya se generó en CI)

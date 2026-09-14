@@ -63,6 +63,7 @@ jobs:
           test -f cpanel-deploy/cpanel-post-deploy.sh
           test -f cpanel-deploy/server.js
           test -d cpanel-deploy/node_modules
+          grep -q "startServer" cpanel-deploy/server.js
 
       - name: Create deploy archive
         run: |
