@@ -4,12 +4,12 @@ set -euo pipefail
 
 APP_DIR="${1:-$HOME/coodelsur-landing}"
 NODE_MAJOR="${2:-18}"
-VENV=""
+NODE_BIN=""
 for candidate in \
-  "$HOME/nodeenv/coodelsur-landing/${NODE_MAJOR}/bin/activate" \
-  "$HOME/nodevenv/coodelsur-landing/${NODE_MAJOR}/bin/activate"; do
-  if [[ -f "$candidate" ]]; then
-    VENV="$candidate"
+  "$HOME/nodevenv/coodelsur-landing/${NODE_MAJOR}/bin" \
+  "$HOME/nodeenv/coodelsur-landing/${NODE_MAJOR}/bin"; do
+  if [[ -x "$candidate/npm" ]]; then
+    NODE_BIN="$candidate"
     break
   fi
 done
@@ -25,14 +25,13 @@ elif [[ -d node_modules ]]; then
   rm -rf node_modules
 fi
 
-if [[ -z "$VENV" ]]; then
+if [[ -z "$NODE_BIN" ]]; then
   echo "ERROR: No se encontró entorno Node para coodelsur-landing (Node ${NODE_MAJOR})."
   echo "Crea la app en Setup Node.js App con root 'coodelsur-landing' y Node ${NODE_MAJOR}."
   exit 1
 fi
 
-# shellcheck disable=SC1090
-source "$VENV"
+export PATH="$NODE_BIN:$PATH"
 
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=512}"
 
