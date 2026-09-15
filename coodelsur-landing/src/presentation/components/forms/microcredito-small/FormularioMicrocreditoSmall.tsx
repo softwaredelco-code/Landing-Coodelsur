@@ -225,6 +225,7 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(90_000),
       });
 
       const result = (await response.json().catch(() => ({}))) as {
@@ -252,11 +253,13 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
     } catch (error) {
       console.error("[FormularioMicrocreditoSmall] submit", error);
       enableNanocreditoServerDraftSync();
-      setSubmitError(
-        error instanceof Error
-          ? error.message
-          : "Error de conexión. Revisa tu internet e intenta de nuevo.",
-      );
+      const message =
+        error instanceof DOMException && error.name === "TimeoutError"
+          ? "El servidor tardó demasiado en responder. Intenta de nuevo; si persiste, usa «Subir imagen» en lugar de la cámara."
+          : error instanceof Error
+            ? error.message
+            : "Error de conexión. Revisa tu internet e intenta de nuevo.";
+      setSubmitError(message);
     } finally {
       setSubmitting(false);
     }

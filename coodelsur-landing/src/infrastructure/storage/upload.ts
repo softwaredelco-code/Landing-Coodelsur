@@ -20,6 +20,13 @@ export const UPLOAD_LIMITS = {
   signature: 2 * 1024 * 1024,
 } as const;
 
+/** Tiempo máximo por subida a Storage (evita colgar el envío del formulario). */
+const STORAGE_UPLOAD_TIMEOUT_MS = 15_000;
+
+function shouldSkipRemoteUpload(): boolean {
+  return process.env.LEAD_ATTACHMENTS_INLINE === "true";
+}
+
 function getSupabaseConfig() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -89,23 +96,29 @@ export async function uploadBase64File(
 
   const uploadUrl = `${config.url}/storage/v1/object/${config.bucket}/${path}`;
 
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: supabaseStorageHeaders(config.key, {
-      "Content-Type": contentType,
-      "x-upsert": "true",
-    }),
-    body: buffer,
-  });
+  try {
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: supabaseStorageHeaders(config.key, {
+        "Content-Type": contentType,
+        "x-upsert": "true",
+      }),
+      body: buffer,
+      signal: AbortSignal.timeout(STORAGE_UPLOAD_TIMEOUT_MS),
+    });
 
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    console.error("[storage] upload failed", response.status, detail);
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.error("[storage] upload failed", response.status, detail);
+      return null;
+    }
+
+    const publicUrl = `${config.url}/storage/v1/object/public/${config.bucket}/${path}`;
+    return { url: publicUrl, path };
+  } catch (error) {
+    console.error("[storage] upload error", error instanceof Error ? error.message : error);
     return null;
   }
-
-  const publicUrl = `${config.url}/storage/v1/object/public/${config.bucket}/${path}`;
-  return { url: publicUrl, path };
 }
 
 /** URL firmada para buckets privados (válida 1 hora). */
@@ -214,6 +227,17 @@ async function persistAttachment(
       size,
       url: dataUrl.startsWith("http") ? dataUrl : undefined,
       uploaded: dataUrl.startsWith("http"),
+    };
+  }
+
+  if (shouldSkipRemoteUpload()) {
+    return {
+      fileName,
+      mimeType,
+      size,
+      uploaded: false,
+      preview: dataUrl,
+      note: "Adjunto guardado en la solicitud (modo inline)",
     };
   }
 

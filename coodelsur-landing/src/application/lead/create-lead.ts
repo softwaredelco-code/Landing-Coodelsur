@@ -15,6 +15,7 @@ import { buildLeadSummaryFields } from "@/domain/lead/lead-summary-fields";
 import { processFileFields } from "@/infrastructure/storage/upload";
 import { inferOrigen } from "@/presentation/tracking/utm";
 import { normalizeDocumentNumber } from "@/domain/identity/cedula";
+import { withTimeout } from "@/shared/utils";
 import {
   getLeadFromFile,
   isDbConnectionError,
@@ -86,7 +87,11 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
 
   const [geoFromIp, processedData] = await Promise.all([
     hasGeoFromClient ? Promise.resolve({} as GeoLocation) : geolocateByIp(input.ip ?? null),
-    processFileFields(input.datosFormulario),
+    withTimeout(
+      processFileFields(input.datosFormulario),
+      45_000,
+      "Tiempo agotado al procesar los archivos adjuntos",
+    ),
   ]);
 
   const geo = {
@@ -137,8 +142,47 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
       }
 
       if (promoteDraftId) {
-        const lead = await prisma.lead.update({
-          where: { id: promoteDraftId },
+        const lead = await withTimeout(
+          prisma.lead.update({
+            where: { id: promoteDraftId },
+            data: {
+              tipoCredito: input.tipoCredito,
+              nombre: input.nombre,
+              cedula: input.cedula,
+              telefono: input.telefono,
+              email: input.email || null,
+              ...summary,
+              datosFormulario: processedData as Prisma.InputJsonValue,
+              origen: input.origen || inferOrigen(utm),
+              estado: estadoFinal,
+              aceptaTerminos,
+              fechaAceptacionTerminos: fechaOk,
+              utmSource: utm.utmSource ?? null,
+              utmCampaign: utm.utmCampaign ?? null,
+              utmMedium: utm.utmMedium ?? null,
+              utmTerm: utm.utmTerm ?? null,
+              utmContent: utm.utmContent ?? null,
+              ip: input.ip ?? null,
+              ciudad: geo.ciudad ?? null,
+              pais: geo.pais ?? null,
+              latitud: geo.latitud ?? null,
+              longitud: geo.longitud ?? null,
+            },
+          }),
+          20_000,
+          "Tiempo agotado al guardar la solicitud en base de datos",
+        );
+        await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+        return {
+          id: lead.id,
+          tipoCredito: lead.tipoCredito,
+          nombre: lead.nombre,
+          storage: "database",
+        };
+      }
+
+      const lead = await withTimeout(
+        prisma.lead.create({
           data: {
             tipoCredito: input.tipoCredito,
             nombre: input.nombre,
@@ -162,41 +206,10 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
             latitud: geo.latitud ?? null,
             longitud: geo.longitud ?? null,
           },
-        });
-        await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
-        return {
-          id: lead.id,
-          tipoCredito: lead.tipoCredito,
-          nombre: lead.nombre,
-          storage: "database",
-        };
-      }
-
-      const lead = await prisma.lead.create({
-        data: {
-          tipoCredito: input.tipoCredito,
-          nombre: input.nombre,
-          cedula: input.cedula,
-          telefono: input.telefono,
-          email: input.email || null,
-          ...summary,
-          datosFormulario: processedData as Prisma.InputJsonValue,
-          origen: input.origen || inferOrigen(utm),
-          estado: estadoFinal,
-          aceptaTerminos,
-          fechaAceptacionTerminos: fechaOk,
-          utmSource: utm.utmSource ?? null,
-          utmCampaign: utm.utmCampaign ?? null,
-          utmMedium: utm.utmMedium ?? null,
-          utmTerm: utm.utmTerm ?? null,
-          utmContent: utm.utmContent ?? null,
-          ip: input.ip ?? null,
-          ciudad: geo.ciudad ?? null,
-          pais: geo.pais ?? null,
-          latitud: geo.latitud ?? null,
-          longitud: geo.longitud ?? null,
-        },
-      });
+        }),
+        20_000,
+        "Tiempo agotado al guardar la solicitud en base de datos",
+      );
 
       await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
       return { id: lead.id, tipoCredito: lead.tipoCredito, nombre: lead.nombre, storage: "database" };

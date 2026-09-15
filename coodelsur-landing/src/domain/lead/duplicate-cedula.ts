@@ -1,6 +1,7 @@
 import { listLeadsFromFile } from "@/infrastructure/persistence/file-store";
 import { normalizeDocumentNumber } from "@/domain/identity/cedula";
 import { prisma } from "@/infrastructure/database/prisma";
+import { withTimeout } from "@/shared/utils";
 
 const DEFAULT_DUPLICATE_DAYS = 30;
 const ACTIVE_STATES = new Set(["recibido", "revisado", "contactado"]);
@@ -64,18 +65,22 @@ export async function findRecentDuplicateCedula(
   cutoff.setDate(cutoff.getDate() - windowDays);
 
   try {
-    const existing = await prisma.lead.findFirst({
-      where: {
-        cedula: normalizedCedula,
-        estado: { in: ["recibido", "revisado", "contactado"] },
-        fechaCreacion: { gte: cutoff },
-      },
-      orderBy: { fechaCreacion: "desc" },
-      select: {
-        id: true,
-        fechaCreacion: true,
-      },
-    });
+    const existing = await withTimeout(
+      prisma.lead.findFirst({
+        where: {
+          cedula: normalizedCedula,
+          estado: { in: ["recibido", "revisado", "contactado"] },
+          fechaCreacion: { gte: cutoff },
+        },
+        orderBy: { fechaCreacion: "desc" },
+        select: {
+          id: true,
+          fechaCreacion: true,
+        },
+      }),
+      8000,
+      "duplicate-check-timeout",
+    );
 
     if (existing) {
       return {
