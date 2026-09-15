@@ -69,6 +69,46 @@ export function VideoRecorder({
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  useEffect(() => {
+    if (mode !== "preview" && mode !== "recording") return;
+
+    const stream = streamRef.current;
+    if (!stream) return;
+
+    let cancelled = false;
+    let frameId = 0;
+
+    const attachStream = () => {
+      const video = videoRef.current;
+      if (!video) return false;
+
+      video.srcObject = stream;
+      video.playsInline = true;
+      video.muted = true;
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+
+      void video.play().catch(() => {
+        if (cancelled) return;
+        setLocalError("No se pudo iniciar la vista de cámara. Puedes subir un video desde tu galería.");
+        stopCamera();
+      });
+
+      return true;
+    };
+
+    if (!attachStream()) {
+      frameId = requestAnimationFrame(() => {
+        if (!cancelled) attachStream();
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [mode, stopCamera]);
+
   const openCameraFallback = () => {
     captureInputRef.current?.click();
   };
@@ -102,13 +142,6 @@ export function VideoRecorder({
 
       streamRef.current = stream;
       setMode("preview");
-
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play();
-        }
-      });
     } catch {
       setLocalError("No pudimos abrir la cámara. Puedes subir un video corto desde tu galería.");
       openCameraFallback();
@@ -282,7 +315,7 @@ export function VideoRecorder({
             autoPlay
             playsInline
             muted
-            className="max-h-64 w-full -scale-x-100 object-cover"
+            className="min-h-[220px] max-h-64 w-full -scale-x-100 object-cover"
           />
           <div className="space-y-2 bg-white p-3">
             {mode === "recording" ? (

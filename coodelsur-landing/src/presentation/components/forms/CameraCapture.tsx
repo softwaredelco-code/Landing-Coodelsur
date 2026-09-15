@@ -47,6 +47,46 @@ export function CameraCapture({
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  useEffect(() => {
+    if (mode !== "camera") return;
+
+    const stream = streamRef.current;
+    if (!stream) return;
+
+    let cancelled = false;
+    let frameId = 0;
+
+    const attachStream = () => {
+      const video = videoRef.current;
+      if (!video) return false;
+
+      video.srcObject = stream;
+      video.playsInline = true;
+      video.muted = true;
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+
+      void video.play().catch(() => {
+        if (cancelled) return;
+        setLocalError("No se pudo iniciar la vista de cámara. Puedes subir una foto desde tu galería.");
+        stopCamera();
+      });
+
+      return true;
+    };
+
+    if (!attachStream()) {
+      frameId = requestAnimationFrame(() => {
+        if (!cancelled) attachStream();
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [mode, stopCamera]);
+
   const startCamera = async () => {
     setLocalError(null);
     setBusy(true);
@@ -69,13 +109,6 @@ export function CameraCapture({
 
       streamRef.current = stream;
       setMode("camera");
-
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play();
-        }
-      });
     } catch {
       setLocalError("No pudimos abrir la cámara. Puedes subir una foto desde tu galería.");
       fileInputRef.current?.click();
@@ -179,7 +212,13 @@ export function CameraCapture({
 
       {mode === "camera" && !value && (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-black">
-          <video ref={videoRef} autoPlay playsInline muted className="max-h-64 w-full object-cover" />
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="min-h-[220px] max-h-64 w-full object-cover"
+          />
           <div className="flex flex-wrap gap-2 bg-white p-3">
             <button
               type="button"
