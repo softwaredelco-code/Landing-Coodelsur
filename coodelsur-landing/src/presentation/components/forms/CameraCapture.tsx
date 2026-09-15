@@ -3,6 +3,7 @@
 import {
   captureVideoFrame,
   fileToCapture,
+  getCameraErrorMessage,
   getVideoStream,
   stopMediaStream,
 } from "@/infrastructure/media/file-capture";
@@ -107,9 +108,8 @@ export function CameraCapture({
       const stream = await getVideoStream({ facingMode });
       streamRef.current = stream;
       setMode("camera");
-    } catch {
-      setLocalError("No pudimos abrir la cámara. Puedes subir una foto desde tu galería.");
-      fileInputRef.current?.click();
+    } catch (error) {
+      setLocalError(getCameraErrorMessage(error));
     } finally {
       openingRef.current = false;
       setBusy(false);

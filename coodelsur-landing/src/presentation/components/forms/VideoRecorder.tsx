@@ -3,6 +3,7 @@
 import {
   blobToCapture,
   fileToCapture,
+  getCameraErrorMessage,
   getVideoStream,
   pickRecorderMimeType,
   stopMediaStream,
@@ -137,9 +138,8 @@ export function VideoRecorder({
 
       streamRef.current = stream;
       setMode("preview");
-    } catch {
-      setLocalError("No pudimos abrir la cámara. Puedes subir un video corto desde tu galería.");
-      openCameraFallback();
+    } catch (error) {
+      setLocalError(getCameraErrorMessage(error));
     } finally {
       openingRef.current = false;
       setBusy(false);
