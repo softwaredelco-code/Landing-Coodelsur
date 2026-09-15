@@ -68,3 +68,66 @@ export function pickRecorderMimeType(): string | undefined {
 export function stopMediaStream(stream: MediaStream | null | undefined) {
   stream?.getTracks().forEach((track) => track.stop());
 }
+
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/** Opens the camera with relaxed constraints and fallbacks (desktop webcams, iOS, Android). */
+export async function getVideoStream(options?: {
+  facingMode?: "user" | "environment";
+  preferHd?: boolean;
+}): Promise<MediaStream> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("getUserMedia no disponible");
+  }
+
+  const { facingMode, preferHd = true } = options ?? {};
+  const hd = preferHd ? { width: { ideal: 1280 }, height: { ideal: 720 } } : {};
+  const attempts: MediaStreamConstraints[] = [];
+
+  // "environment" solo tiene sentido en móvil; en PC provoca cuelgues en el diálogo de permisos.
+  const effectiveFacing = facingMode === "environment" && !isMobileDevice() ? "user" : facingMode;
+
+  if (effectiveFacing) {
+    attempts.push({
+      video: { facingMode: { ideal: effectiveFacing }, ...hd },
+      audio: false,
+    });
+  }
+
+  attempts.push({ video: { ...hd }, audio: false });
+  attempts.push({ video: true, audio: false });
+
+  let lastError: unknown;
+  for (const constraints of attempts) {
+    try {
+      return await withTimeout(
+        navigator.mediaDevices.getUserMedia(constraints),
+        15000,
+        "Tiempo de espera agotado al abrir la cámara",
+      );
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("No se pudo abrir la cámara");
+}

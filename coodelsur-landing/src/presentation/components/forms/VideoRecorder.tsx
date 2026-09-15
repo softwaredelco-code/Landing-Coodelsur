@@ -3,6 +3,7 @@
 import {
   blobToCapture,
   fileToCapture,
+  getVideoStream,
   pickRecorderMimeType,
   stopMediaStream,
 } from "@/infrastructure/media/file-capture";
@@ -39,6 +40,7 @@ export function VideoRecorder({
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const captureInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const openingRef = useRef(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const stopTimerRef = useRef<number | null>(null);
@@ -114,24 +116,17 @@ export function VideoRecorder({
   };
 
   const openPreview = async () => {
+    if (openingRef.current) return;
+
     setLocalError(null);
     setBusy(true);
+    openingRef.current = true;
 
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        openCameraFallback();
-        return;
-      }
-
       stopCamera();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "user" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
+
+      const stream = await getVideoStream({ facingMode: "user" });
 
       if (stream.getVideoTracks().length === 0) {
         stream.getTracks().forEach((track) => track.stop());
@@ -146,6 +141,7 @@ export function VideoRecorder({
       setLocalError("No pudimos abrir la cámara. Puedes subir un video corto desde tu galería.");
       openCameraFallback();
     } finally {
+      openingRef.current = false;
       setBusy(false);
     }
   };

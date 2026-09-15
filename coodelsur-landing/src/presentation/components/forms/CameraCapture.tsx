@@ -1,6 +1,11 @@
 "use client";
 
-import { captureVideoFrame, fileToCapture, stopMediaStream } from "@/infrastructure/media/file-capture";
+import {
+  captureVideoFrame,
+  fileToCapture,
+  getVideoStream,
+  stopMediaStream,
+} from "@/infrastructure/media/file-capture";
 import { cn } from "@/shared/utils";
 import type { FileCapture } from "@/shared/types/credito";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -33,6 +38,7 @@ export function CameraCapture({
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const openingRef = useRef(false);
 
   const [mode, setMode] = useState<"idle" | "camera">("idle");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -88,31 +94,24 @@ export function CameraCapture({
   }, [mode, stopCamera]);
 
   const startCamera = async () => {
+    if (openingRef.current) return;
+
     setLocalError(null);
     setBusy(true);
+    openingRef.current = true;
 
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        fileInputRef.current?.click();
-        return;
-      }
-
       stopCamera();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      });
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
 
+      const stream = await getVideoStream({ facingMode });
       streamRef.current = stream;
       setMode("camera");
     } catch {
       setLocalError("No pudimos abrir la cámara. Puedes subir una foto desde tu galería.");
       fileInputRef.current?.click();
     } finally {
+      openingRef.current = false;
       setBusy(false);
     }
   };
