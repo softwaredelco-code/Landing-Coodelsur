@@ -3,6 +3,7 @@
 import { AdminShell } from "@/presentation/components/admin/AdminShell";
 import { StatusBadge } from "@/presentation/components/admin/StatusBadge";
 import { Button } from "@/presentation/components/ui/Button";
+import { formatLeadOrigen, LEAD_ORIGEN_FILTER_OPTIONS } from "@/domain/lead/lead-origin";
 import { formatCOP } from "@/shared/utils";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -78,6 +79,9 @@ export default function AdminLeadsPage() {
   const [q, setQ] = useState("");
   const [appliedQ, setAppliedQ] = useState("");
   const [estado, setEstado] = useState("");
+  const [origen, setOrigen] = useState("");
+  const [appliedOrigen, setAppliedOrigen] = useState("");
+  const [origenCounts, setOrigenCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -90,6 +94,7 @@ export default function AdminLeadsPage() {
     const params = new URLSearchParams();
     if (appliedQ) params.set("q", appliedQ);
     if (estado) params.set("estado", estado);
+    if (appliedOrigen) params.set("origen", appliedOrigen);
     const res = await fetch(`/api/admin/leads?${params.toString()}`, { cache: "no-store" });
     if (res.status === 401) {
       setLoading(false);
@@ -101,12 +106,17 @@ export default function AdminLeadsPage() {
       setLoading(false);
       return;
     }
-    const data = (await res.json()) as { leads: LeadRow[]; total: number };
+    const data = (await res.json()) as {
+      leads: LeadRow[];
+      total: number;
+      origenCounts?: Record<string, number>;
+    };
     setLeads(data.leads);
     setTotal(data.total);
+    setOrigenCounts(data.origenCounts ?? {});
     setSelectedIds(new Set());
     setLoading(false);
-  }, [appliedQ, estado, router]);
+  }, [appliedQ, appliedOrigen, estado, router]);
 
   useEffect(() => {
     void load();
@@ -114,6 +124,7 @@ export default function AdminLeadsPage() {
 
   const applyFilters = () => {
     setAppliedQ(q.trim());
+    setAppliedOrigen(origen);
   };
 
   const stats = useMemo(() => {
@@ -161,6 +172,7 @@ export default function AdminLeadsPage() {
     } else {
       if (q) params.set("q", appliedQ);
       if (estado) params.set("estado", estado);
+      if (appliedOrigen) params.set("origen", appliedOrigen);
     }
     return `/api/admin/leads/export?${params.toString()}`;
   };
@@ -189,11 +201,12 @@ export default function AdminLeadsPage() {
       title="Solicitudes de crédito"
       subtitle="Gestiona, revisa y exporta las solicitudes recibidas."
     >
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard label="Total (vista)" value={String(leads.length)} />
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+        <StatCard label="Total (filtro)" value={String(total)} />
+        <StatCard label="Witme" value={String(origenCounts.witme ?? 0)} tone="violet" />
+        <StatCard label="Web directo" value={String(origenCounts.directo ?? 0)} tone="blue" />
         <StatCard label="Recibidas" value={String(stats.recibido)} tone="blue" />
         <StatCard label="Incompletas" value={String(stats.incompleto)} tone="amber" />
-        <StatCard label="Revisadas" value={String(stats.revisado)} tone="violet" />
         <StatCard label="Contactadas" value={String(stats.contactado)} tone="green" />
       </div>
 
@@ -230,6 +243,23 @@ export default function AdminLeadsPage() {
               <option value="revisado">Revisadas</option>
               <option value="contactado">Contactadas</option>
               <option value="descartado">Descartadas</option>
+            </select>
+          </div>
+          <div className="w-full lg:w-52">
+            <label htmlFor="admin-origen" className="mb-1 block text-xs font-medium text-gray-500">
+              Origen
+            </label>
+            <select
+              id="admin-origen"
+              value={origen}
+              onChange={(e) => setOrigen(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm"
+            >
+              {LEAD_ORIGEN_FILTER_OPTIONS.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
           <Button type="button" onClick={applyFilters}>
@@ -296,6 +326,7 @@ export default function AdminLeadsPage() {
                   <th className="px-4 py-3">Solicitante</th>
                   <th className="px-4 py-3">Producto</th>
                   <th className="px-4 py-3">Monto</th>
+                  <th className="px-4 py-3">Origen</th>
                   <th className="px-4 py-3">Progreso</th>
                   <th className="px-4 py-3">Estado</th>
                   <th className="px-4 py-3" />
@@ -337,6 +368,17 @@ export default function AdminLeadsPage() {
                       {lead.capitalSolicitado ? formatCOP(lead.capitalSolicitado) : "—"}
                     </td>
                     <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          lead.origen === "witme"
+                            ? "bg-violet-100 text-violet-800"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {formatLeadOrigen(lead.origen)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
                       {lead.estado === "incompleto" ? (
                         <ProgressCell
                           value={lead.progresoFormulario}
@@ -361,7 +403,7 @@ export default function AdminLeadsPage() {
                 ))}
                 {leads.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
                       No hay solicitudes con estos filtros.
                     </td>
                   </tr>

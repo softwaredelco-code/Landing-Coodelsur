@@ -16,7 +16,10 @@
 | [FORMULARIO.md](./FORMULARIO.md) | Microcrédito Small: pasos y validaciones |
 | [FLUJO_MONTO.md](./FLUJO_MONTO.md) | Selector de monto y rangos por producto |
 | [GUIA-NUEVO-FORMULARIO.md](./GUIA-NUEVO-FORMULARIO.md) | Implementar formularios urbano/rural |
-| [WITME.md](./WITME.md) | Webhook Witme |
+| [WITME.md](./WITME.md) | Webhook Witme (guía interna) |
+| [WITME-INTEGRACION-COMPLETA.md](./WITME-INTEGRACION-COMPLETA.md) | **Integración Witme: API + redirect + tracking** |
+| [WITME-API-PARA-INTEGRADOR.md](./WITME-API-PARA-INTEGRADOR.md) | Especificación formal API (entregar a Witme) |
+| [HANDOFF-CONTEXTO-IA-COMPLETO.md](./HANDOFF-CONTEXTO-IA-COMPLETO.md) | Contexto completo del proyecto (handoff IA) |
 
 ## Estado del producto
 

@@ -88,6 +88,17 @@ export async function GET() {
       "utm_source",
       "utm_campaign",
     ],
+    redirectExamples: {
+      landing: `${siteUrl}/?utm_source=witme&utm_medium=redirect&utm_campaign={CAMPAIGN_ID}`,
+      formWithAmount: `${siteUrl}/solicitar?monto=400000&utm_source=witme&utm_medium=redirect&utm_campaign={CAMPAIGN_ID}`,
+      shortRef: `${siteUrl}/solicitar?monto=400000&ref=witme&utm_campaign={CAMPAIGN_ID}`,
+      productDirect: `${siteUrl}/credito/microcredito_small?utm_source=witme&utm_medium=redirect`,
+    },
+    trackingNotes: [
+      "Opción A (webhook): origen del lead = witme automáticamente.",
+      "Opción B (redirect): incluir utm_source=witme o ref=witme para marcar el lead como Witme en admin.",
+      "Sin esos parámetros, el lead se registra como web directo.",
+    ],
     notes: [
       "Los campos pueden ir en el root del JSON o dentro de datos / datos_formulario.",
       "Acepta snake_case (capital_solicitado) y camelCase (capitalSeleccionado).",

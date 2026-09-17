@@ -437,7 +437,9 @@ Incluir dentro de `datos_formulario`:
 
 ## 8. Alternativa: redirección por URL
 
-Además del webhook, Witme puede dirigir usuarios al formulario web de Coodelsur:
+Además del webhook, Witme puede **redirigir usuarios** al formulario web de Coodelsur. El lead llega al mismo panel admin, pero el usuario completa el formulario en nuestra web.
+
+### URLs base
 
 | URL | Uso |
 |-----|-----|
@@ -445,7 +447,29 @@ Además del webhook, Witme puede dirigir usuarios al formulario web de Coodelsur
 | `https://solicitar-credito.coodelsursas.com.co/solicitar?monto=400000` | Formulario con monto precargado |
 | `https://solicitar-credito.coodelsursas.com.co/credito/microcredito_small` | Formulario Microcrédito Small |
 
-En este flujo el lead llega al mismo panel admin con origen `organico`/`directo`, **sin usar el webhook**.
+### Tracking obligatorio para marcar origen Witme
+
+**Sin parámetros de campaña**, el lead se registra como **web directo**. Para que aparezca como **Witme** en `/admin/leads`, incluir en la URL:
+
+```
+?utm_source=witme&utm_medium=redirect&utm_campaign={CAMPAIGN_ID}
+```
+
+**Alternativa corta:**
+
+```
+?ref=witme&utm_campaign={CAMPAIGN_ID}
+```
+
+**Ejemplo completo:**
+
+```
+https://solicitar-credito.coodelsursas.com.co/solicitar?monto=400000&utm_source=witme&utm_medium=redirect&utm_campaign=campana-marzo-2026
+```
+
+La atribución se guarda en cookie (30 días) y se persiste en el lead al enviar el formulario.
+
+> Guía ampliada con tracking y admin: [WITME-INTEGRACION-COMPLETA.md](./WITME-INTEGRACION-COMPLETA.md)
 
 ---
 
