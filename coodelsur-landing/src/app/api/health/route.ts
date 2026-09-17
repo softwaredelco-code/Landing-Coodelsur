@@ -1,5 +1,5 @@
 import { isEmailConfigured, getEmailTransport } from "@/infrastructure/email/send";
-import { isAnalyticsEnabled } from "@/presentation/tracking/analytics";
+import { isAnalyticsConfigured } from "@/presentation/tracking/analytics";
 import { prisma } from "@/infrastructure/database/prisma";
 import { NextResponse } from "next/server";
 
@@ -18,7 +18,7 @@ export async function GET() {
     emailConfigured: isEmailConfigured(),
     emailTransport: getEmailTransport(),
     cedulaVerifyConfigured: Boolean(process.env.VERIFIK_API_KEY),
-    analyticsConfigured: isAnalyticsEnabled(),
+    analyticsConfigured: isAnalyticsConfigured(),
   };
   try {
     await prisma.$queryRaw`SELECT 1`;
