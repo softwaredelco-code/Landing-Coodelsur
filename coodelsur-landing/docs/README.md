@@ -16,8 +16,8 @@
 | [FORMULARIO.md](./FORMULARIO.md) | Microcrédito Small: pasos y validaciones |
 | [FLUJO_MONTO.md](./FLUJO_MONTO.md) | Selector de monto y rangos por producto |
 | [GUIA-NUEVO-FORMULARIO.md](./GUIA-NUEVO-FORMULARIO.md) | Implementar formularios urbano/rural |
-| [witme/COODELSUR-INTEGRACION-WITME.pdf](./witme/COODELSUR-INTEGRACION-WITME.pdf) | **Entregar a Witme** — API + redirect (documento único) |
-| [witme/README.md](./witme/README.md) | Índice carpeta Witme |
+| [witme/COODELSUR-INTEGRACION-WITME.pdf](./witme/COODELSUR-INTEGRACION-WITME.pdf) | **Entregar a Witme** — guía API + redirect |
+| [witme/COODELSUR-CREDENCIALES-WITME.pdf](./witme/COODELSUR-CREDENCIALES-WITME.pdf) | **Entregar a Witme** — API Key (no commitear; ver `.gitignore`) |
 | [HANDOFF-CONTEXTO-IA-COMPLETO.md](./HANDOFF-CONTEXTO-IA-COMPLETO.md) | Contexto completo del proyecto (handoff IA) |
 
 ## Estado del producto

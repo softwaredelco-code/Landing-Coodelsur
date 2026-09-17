@@ -7,85 +7,63 @@
 |---|---|
 | **Documento** | Integración Witme v1.0 |
 | **Fecha** | Septiembre 2026 |
-| **Ambiente** | Producción |
+| **Ambiente** | Producción — activo |
 | **Sitio web** | https://solicitar-credito.coodelsursas.com.co |
-| **Contacto** | cartera@coodelsursas.com.co |
+| **Contacto técnico** | softwaredelco@gmail.com |
+
+**Documento complementario:** *COODELSUR-CREDENCIALES-WITME.pdf* (API Key y datos de autenticación)
 
 ---
 
 ## 1. Introducción
 
-Coodelsur pone a disposición del equipo Witme **dos formas** de integración. Ambas registran solicitudes de crédito en el **mismo panel interno** de Coodelsur.
+Coodelsur habilita **dos formas** de integración con Witme. Ambas registran solicitudes en el **mismo panel de administración** de Coodelsur.
 
-Pueden implementarse **una o las dos**, según el flujo de cada campaña.
+| Método | Descripción |
+|--------|-------------|
+| **A. API Webhook** | Witme envía los datos del lead en JSON al completar su formulario. |
+| **B. Redirección URL** | Witme redirige al usuario al formulario web de Coodelsur. |
 
-| Método | Descripción breve |
-|--------|-------------------|
-| **A. API Webhook** | Witme envía los datos del lead en JSON cuando el usuario termina el formulario en Witme. |
-| **B. Redirección URL** | Witme redirige al usuario al formulario web de Coodelsur para que complete la solicitud allí. |
+Pueden usarse **una o las dos** según cada campaña.
 
-En ambos casos, los leads quedan identificados como origen **Witme** en el panel de Coodelsur (si se siguen las indicaciones de este documento).
+El webhook API está **activo en producción** y listo para recibir solicitudes `POST` autenticadas.
 
 ---
 
 ## 2. Método A — API Webhook
 
-### 2.1 Datos de conexión
+### 2.1 Conexión
 
 | Parámetro | Valor |
 |-----------|--------|
 | **URL** | `https://solicitar-credito.coodelsursas.com.co/api/leads/witme` |
 | **Método** | `POST` |
 | **Content-Type** | `application/json` |
-| **Autenticación** | Header `Authorization: Bearer {API_KEY}` |
+| **Autenticación** | `Authorization: Bearer {API_KEY}` |
 
-> La **API Key** la entrega Coodelsur por **correo separado**. No debe incluirse en este documento ni en código público.
+La **API Key** está en el documento *COODELSUR-CREDENCIALES-WITME.pdf*.
 
 ### 2.2 Campos obligatorios
 
-Enviar en el cuerpo JSON:
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `nombre` | texto | Nombre completo del solicitante |
-| `cedula` | texto | Número de documento (también acepta `documento`) |
-| `telefono` | texto | Celular (también acepta `celular`) |
+| Campo | Descripción |
+|-------|-------------|
+| `nombre` | Nombre completo |
+| `cedula` | Documento (alias: `documento`) |
+| `telefono` | Celular (alias: `celular`) |
 
 ### 2.3 Campos recomendados
 
 | Campo | Descripción |
 |-------|-------------|
-| `witme_id` | Identificador del lead en Witme (recomendado para trazabilidad) |
+| `witme_id` | ID del lead en Witme |
 | `email` | Correo electrónico |
-| `tipo_credito` | Producto: `microcredito_small` (default), `microcredito_urbano`, `microcredito_rural`, `consumo`, `comercial`, `libranza` |
-| `acepta_terminos` | `true` si el usuario aceptó términos |
-| `datos_formulario` | Objeto JSON con **todos los demás campos** del formulario Witme |
+| `tipo_credito` | `microcredito_small` (default), `microcredito_urbano`, `microcredito_rural`, `consumo`, `comercial`, `libranza` |
+| `acepta_terminos` | `true` si aceptó términos |
+| `datos_formulario` | Objeto JSON con **todos** los campos del formulario Witme |
 
-Los campos adicionales pueden enviarse también en el nivel raíz del JSON o dentro de `datos_formulario`. Coodelsur acepta nombres en **snake_case** (`capital_solicitado`) o **camelCase** (`capitalSeleccionado`).
+Campos extra en snake_case o camelCase. Adjuntos por URL (`https://...`) o base64 (`data:image/...`): `cedula_frontal`, `cedula_reverso`, `video_verificacion`, `firma`.
 
-**Ejemplos de campos que pueden incluirse en `datos_formulario`:**
-
-- Datos del crédito: `capital_solicitado`, `cantidad_cuotas`, `destino_credito`
-- Ubicación: `departamento`, `municipio`, `direccion`, `barrio`
-- Laborales: `ocupacion`, `empresa`, `ingresos_mensuales`
-- Bancarios: `tipo_cuenta`, `entidad_bancaria`, `numero_cuenta`
-- Adjuntos (URL pública o base64): `cedula_frontal`, `cedula_reverso`, `video_verificacion`, `firma`
-
-Campos no listados se almacenan igualmente y quedan disponibles en el panel de Coodelsur.
-
-### 2.4 Ejemplo de envío
-
-**Mínimo:**
-
-```json
-{
-  "nombre": "María López García",
-  "cedula": "1056523965",
-  "telefono": "3001234567"
-}
-```
-
-**Recomendado en producción:**
+### 2.4 Ejemplo JSON (producción)
 
 ```json
 {
@@ -101,158 +79,99 @@ Campos no listados se almacenan igualmente y quedan disponibles en el panel de C
     "cantidad_cuotas": 2,
     "departamento": "Huila",
     "municipio": "Neiva",
-    "ingresos_mensuales": 1500000
+    "ingresos_mensuales": 1500000,
+    "cedula_frontal": "https://...",
+    "cedula_reverso": "https://...",
+    "video_verificacion": "https://...",
+    "firma": "data:image/png;base64,..."
   }
 }
 ```
 
-### 2.5 Respuestas del servidor
+### 2.5 Respuestas HTTP
 
-| Código | Significado | Acción de Witme |
-|--------|-------------|-----------------|
-| **201** | Lead creado correctamente | Continuar. Guardar el `id` retornado. |
-| **401** | API Key inválida o ausente | Revisar credenciales con Coodelsur. No reintentar. |
-| **422** | Faltan campos obligatorios | Corregir el JSON. No reintentar. |
-| **500** | Error temporal del servidor | Reintentar: 5 s, 15 s, 45 s (máx. 3 veces). |
+| Código | Significado |
+|--------|-------------|
+| **201** | Lead creado — body: `{ "success": true, "id": "uuid", "origen": "witme" }` |
+| **401** | API Key inválida |
+| **422** | Faltan nombre, cédula o teléfono |
+| **500** | Error temporal — reintentar a 5 s, 15 s y 45 s |
 
-**Respuesta exitosa (201):**
+### 2.6 Prueba
 
-```json
-{
-  "success": true,
-  "id": "679a1ddc-8da7-4611-8ce9-808e1036881b",
-  "origen": "witme",
-  "storage": "database"
-}
-```
-
-### 2.6 Prueba de integración
-
-Coodelsur enviará la API Key por canal privado. Con ella, ejecutar:
-
-```bash
-curl -X POST "https://solicitar-credito.coodelsursas.com.co/api/leads/witme" \
-  -H "Authorization: Bearer {API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "witme_id": "WITME-TEST-001",
-    "nombre": "Prueba Integración",
-    "cedula": "1234567890",
-    "telefono": "3001112233",
-    "email": "test@ejemplo.com",
-    "datos_formulario": { "capital_solicitado": 400000 }
-  }'
-```
-
-Resultado esperado: **HTTP 201**. Coodelsur confirmará que el lead aparece en su panel.
+Ver comando cURL en *COODELSUR-CREDENCIALES-WITME.pdf*. Resultado esperado: **HTTP 201**.
 
 ---
 
 ## 3. Método B — Redirección URL
 
-### 3.1 Descripción
+Witme redirige al usuario a Coodelsur. **No requiere API Key.**
 
-Witme redirige el navegador del usuario a una URL de Coodelsur. El usuario completa el formulario de solicitud en nuestro sitio (incluye captura de cédula, video y firma).
+### 3.1 URL recomendada
 
-**No requiere API Key.**
-
-### 3.2 URLs disponibles
-
-| Destino | URL base |
-|---------|----------|
-| Landing (selector de monto) | `https://solicitar-credito.coodelsursas.com.co/` |
-| Formulario con monto | `https://solicitar-credito.coodelsursas.com.co/solicitar?monto={MONTO}` |
-| Formulario Microcrédito Small | `https://solicitar-credito.coodelsursas.com.co/credito/microcredito_small` |
-
-`{MONTO}` = valor en pesos colombianos sin puntos ni comas (ej. `400000`, `600000`).
-
-### 3.3 Parámetros de tracking (obligatorio)
-
-Para que el lead quede registrado como **origen Witme**, la URL **debe incluir** uno de estos parámetros:
-
-- `utm_source=witme` **(recomendado)**, o
-- `ref=witme`, o
-- `origen=witme`, o
-- `source=witme`
-
-**Sin estos parámetros**, el lead se registrará como tráfico directo y no podrá identificarse como Witme.
-
-### 3.4 URL recomendada (copiar y configurar)
-
-Reemplazar `{ID_CAMPANA}` por el identificador de la campaña en Witme:
+Reemplazar `{ID_CAMPANA}` por el ID de campaña Witme:
 
 ```
 https://solicitar-credito.coodelsursas.com.co/solicitar?monto=400000&utm_source=witme&utm_medium=redirect&utm_campaign={ID_CAMPANA}
 ```
 
-**Otros montos:**
+**Monto $600.000:**
 
 ```
 https://solicitar-credito.coodelsursas.com.co/solicitar?monto=600000&utm_source=witme&utm_medium=redirect&utm_campaign={ID_CAMPANA}
 ```
 
-**Formato alternativo corto:**
+**Formato corto:**
 
 ```
 https://solicitar-credito.coodelsursas.com.co/solicitar?monto=400000&ref=witme&utm_campaign={ID_CAMPANA}
 ```
 
-### 3.5 Parámetros opcionales
+### 3.2 Obligatorio para tracking Witme
 
-| Parámetro | Descripción |
-|-----------|-------------|
-| `utm_campaign` | Identificador de campaña Witme (recomendado) |
-| `utm_medium` | Medio; sugerido: `redirect` |
-| `monto` | Precarga el monto en el formulario |
+Incluir **`utm_source=witme`** o **`ref=witme`**. Sin esto, el lead queda como tráfico directo.
 
-### 3.6 Prueba de integración
+| Parámetro | Uso |
+|-----------|-----|
+| `utm_source=witme` | Marca origen Witme |
+| `utm_campaign` | ID de campaña |
+| `monto` | Precarga monto (400000, 600000, etc.) |
 
-1. Configurar la URL de redirección con `utm_source=witme`.
-2. Abrir la URL en un navegador (preferible móvil).
-3. Completar el formulario de prueba.
-4. Coodelsur verificará en su panel que el lead tiene origen **Witme**.
+### 3.3 Otras URLs
+
+| Destino | URL |
+|---------|-----|
+| Landing | `https://solicitar-credito.coodelsursas.com.co/?utm_source=witme&utm_campaign={ID_CAMPANA}` |
+| Formulario directo | `https://solicitar-credito.coodelsursas.com.co/credito/microcredito_small?utm_source=witme` |
 
 ---
 
-## 4. Resumen comparativo
+## 4. Comparación
 
-| | API Webhook | Redirección URL |
-|---|-------------|-----------------|
-| El usuario llena formulario en Witme | Sí | No — lo hace en Coodelsur |
-| Witme envía datos por JSON | Sí | No |
+| | API | Redirect |
+|---|-----|----------|
+| Envío JSON desde Witme | Sí | No |
+| Usuario llena formulario Coodelsur | No | Sí |
 | Requiere API Key | Sí | No |
-| Origen Witme en panel Coodelsur | Automático | Solo con UTM/`ref=witme` en la URL |
-| Adjuntos (cédula, video, firma) | Enviar URL o base64 en JSON | El usuario los captura en Coodelsur |
+| Origen Witme en panel | Automático | Con UTM/`ref=witme` |
 
 ---
 
-## 5. Go-live — Checklist
+## 5. Checklist Witme
 
-**Witme — API:**
-- [ ] Recibir API Key de Coodelsur (correo privado)
-- [ ] Configurar webhook con URL y header Bearer
-- [ ] Enviar `witme_id` en cada lead
-- [ ] Incluir `datos_formulario` con todos los campos disponibles
-- [ ] Ejecutar prueba POST → confirmar HTTP 201 con Coodelsur
+**API:** configurar webhook → enviar `witme_id` + `datos_formulario` → prueba POST → HTTP 201.
 
-**Witme — Redirect:**
-- [ ] Configurar URL con `utm_source=witme` (o `ref=witme`)
-- [ ] Incluir `utm_campaign` por campaña
-- [ ] Probar flujo completo en móvil
-- [ ] Confirmar con Coodelsur que el lead aparece con origen Witme
+**Redirect:** URL con `utm_source=witme` → prueba móvil → confirmar origen Witme con Coodelsur.
 
 ---
 
 ## 6. Soporte
 
-| | |
-|---|---|
-| **Correo** | cartera@coodelsursas.com.co |
-| **Empresa** | Coodelsur SAS |
-| **Sitio** | https://coodelsursas.com.co |
+**Correo:** softwaredelco@gmail.com  
+**Empresa:** Coodelsur SAS
 
-Para incidencias de integración, incluir: fecha/hora, método (API o redirect), `witme_id` o URL usada, y respuesta HTTP recibida.
+Incluir en consultas: fecha, método (API/redirect), `witme_id` o URL usada, código HTTP recibido.
 
 ---
 
-*Documento confidencial — Uso exclusivo del integrador autorizado por Coodelsur SAS.*
+*Documento confidencial — Integrador autorizado Witme / Coodelsur SAS*
