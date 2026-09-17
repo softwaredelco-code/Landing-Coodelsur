@@ -1,41 +1,59 @@
-# Plantillas de entrega — Integración Witme
+# Plantillas de entrega — Integración Witme (API + Redirect)
 
 > Uso interno Coodelsur. Copiar, completar y enviar.
 
 ---
 
-## A. Correo principal (con documento adjunto)
+## A. Correo principal — Documentación (2 PDF adjuntos)
 
-**Asunto:** Coodelsur — Documentación técnica API Webhook (Integración Witme)
+**Asunto:** Coodelsur — Documentación integración Witme (API + Redirección URL)
+
+**Adjuntos:**
+- `WITME-INTEGRACION-COMPLETA.pdf` (guía principal — ambas vías)
+- `WITME-API-PARA-INTEGRADOR.pdf` (especificación formal webhook)
 
 **Cuerpo:**
 
 Estimado equipo de Witme,
 
-Por medio del presente les compartimos la documentación técnica oficial para la integración del webhook de recepción de solicitudes de crédito entre Witme y Coodelsur SAS.
+Por medio del presente les compartimos la documentación técnica oficial para integrar solicitudes de crédito con Coodelsur SAS en **producción**.
 
-**Documento adjunto:** WITME-API-PARA-INTEGRADOR.docx (Especificación WITME-API-001 v2.0)
+**URL de producción:** https://solicitar-credito.coodelsursas.com.co
 
-**Resumen de la integración:**
+Coodelsur soporta **dos vías de integración** (pueden usarse en paralelo):
+
+---
+
+**Opción A — Webhook API** (Witme envía leads a nuestro panel)
 
 - **Endpoint:** `POST https://solicitar-credito.coodelsursas.com.co/api/leads/witme`
-- **Autenticación:** Bearer Token (API Key)
+- **Autenticación:** `Authorization: Bearer {API_KEY}`
 - **Formato:** JSON (`application/json`)
-- **Resultado:** Cada solicitud exitosa crea un lead en el panel interno de Coodelsur con origen `witme`.
+- **Resultado:** HTTP 201 — lead en panel admin con origen `witme`
 
-**Credenciales:**
+---
 
-La API Key de autenticación se enviará en un **correo separado** por seguridad. No está incluida en el documento adjunto.
+**Opción B — Redirección URL** (usuario completa formulario en Coodelsur)
 
-**Próximos pasos sugeridos:**
+- **URL ejemplo:**
+  ```
+  https://solicitar-credito.coodelsursas.com.co/solicitar?monto=400000&utm_source=witme&utm_medium=redirect&utm_campaign={ID_CAMPANA}
+  ```
+- **Importante:** incluir `utm_source=witme` o `ref=witme` para identificar el lead como Witme
 
-1. Revisar la documentación adjunta.
-2. Configurar el webhook en su plataforma con la URL indicada.
-3. Solicitar o confirmar recepción de la API Key.
-4. Ejecutar una prueba de integración (`POST` de prueba).
-5. Confirmar recepción de respuesta `HTTP 201` y visibilidad del lead en nuestro sistema.
+---
 
-Quedamos atentos para coordinar la prueba de integración y el go-live.
+**Credenciales API:** la API Key se envía en un **correo separado** por seguridad.
+
+**Próximos pasos:**
+
+1. Revisar documentación adjunta.
+2. Confirmar qué vías implementarán (API, redirect, o ambas).
+3. Recibir API Key (correo aparte) si usan webhook.
+4. Ejecutar prueba de integración (POST de prueba y/o redirect de prueba).
+5. Confirmar leads visibles en nuestro panel con origen Witme.
+
+Quedamos atentos para coordinar pruebas y go-live.
 
 Cordialmente,
 
@@ -46,7 +64,7 @@ https://coodelsursas.com.co
 
 ---
 
-## B. Correo de credenciales (enviar por separado)
+## B. Correo de credenciales API (enviar por separado)
 
 **Asunto:** Coodelsur — Credenciales API Webhook Witme (CONFIDENCIAL)
 
@@ -54,27 +72,18 @@ https://coodelsursas.com.co
 
 Estimado equipo de Witme,
 
-Como complemento a la documentación técnica enviada previamente, les compartimos las credenciales de autenticación para el webhook de producción.
+Complemento a la documentación enviada, credenciales del webhook de producción (Opción A).
 
-**⚠️ INFORMACIÓN CONFIDENCIAL — No reenviar ni almacenar en canales no seguros.**
+**⚠️ CONFIDENCIAL — No reenviar por canales no seguros.**
 
 | Parámetro | Valor |
 |-----------|--------|
-| **URL del webhook** | `https://solicitar-credito.coodelsursas.com.co/api/leads/witme` |
+| **URL** | `https://solicitar-credito.coodelsursas.com.co/api/leads/witme` |
 | **Método** | `POST` |
-| **Header de autenticación** | `Authorization: Bearer {API_KEY}` |
+| **Header** | `Authorization: Bearer {API_KEY}` |
 | **API Key** | `[PEGAR_AQUÍ_LA_WITME_API_KEY]` |
 
-**Instrucciones de uso:**
-
-1. Agregar el header en cada request:
-   ```
-   Authorization: Bearer [API_KEY]
-   ```
-2. Enviar el body en JSON según la documentación WITME-API-001.
-3. Respuesta exitosa esperada: **HTTP 201** con campo `"success": true`.
-
-**Verificación rápida:**
+**Prueba rápida:**
 
 ```bash
 curl -X POST "https://solicitar-credito.coodelsursas.com.co/api/leads/witme" \
@@ -83,74 +92,44 @@ curl -X POST "https://solicitar-credito.coodelsursas.com.co/api/leads/witme" \
   -d '{"witme_id":"TEST-001","nombre":"Prueba","cedula":"1234567890","telefono":"3001112233"}'
 ```
 
-**Seguridad:**
+Respuesta esperada: **HTTP 201** con `"success": true`.
 
-- No incluir la API Key en URLs, logs ni repositorios de código.
-- Notificar a Coodelsur de inmediato si la clave se ve comprometida para proceder con su rotación.
-
-Quedamos atentos para confirmar la prueba exitosa.
-
-Cordialmente,
-
-[Nombre del responsable]  
-Coodelsur SAS  
-cartera@coodelsursas.com.co
+Cordialmente,  
+Coodelsur SAS
 
 ---
 
-## C. Mensaje WhatsApp — Documento
+## C. WhatsApp — Documentación
 
 ```
 Buenos días, equipo Witme.
 
-Les enviamos por correo la documentación técnica oficial (Word) para conectar su plataforma con Coodelsur vía webhook API.
+Les enviamos por correo la documentación para integrar con Coodelsur (producción):
 
-Resumen:
-• URL: https://solicitar-credito.coodelsursas.com.co/api/leads/witme
-• Método: POST con JSON
-• Auth: Bearer Token (API Key — se envía por separado)
+• Opción A — API webhook: POST /api/leads/witme (JSON + API Key)
+• Opción B — Redirect URL al formulario con utm_source=witme
 
-Cuando la revisen, les compartimos la API Key por canal privado para hacer la prueba de integración.
+Adjuntos: guía completa + especificación API.
 
-Quedamos atentos.
+La API Key va en correo aparte.
+
+Quedamos atentos para la prueba de integración.
 Coodelsur SAS
 ```
 
 ---
 
-## D. Mensaje WhatsApp — API Key (enviar aparte)
+## D. WhatsApp — API Key (aparte)
 
 ```
-Equipo Witme — Credencial CONFIDENCIAL 🔐
+Equipo Witme — Credencial CONFIDENCIAL
 
-API Key para webhook Coodelsur:
-
+API Key webhook Coodelsur:
 [PEGAR_API_KEY]
 
-Uso:
 Header: Authorization: Bearer [API_KEY]
 URL: https://solicitar-credito.coodelsursas.com.co/api/leads/witme
 
-Por favor no compartir esta clave. Avísenos cuando hagan la prueba para confirmar que el lead llegue a nuestro panel.
-
-Gracias.
+Avísenos cuando hagan la prueba POST para confirmar el lead en nuestro panel.
 Coodelsur SAS
 ```
-
----
-
-## E. Generar API Key segura (PowerShell)
-
-Ejecutar en la máquina del responsable técnico:
-
-```powershell
-[Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
-```
-
-Configurar en el servidor (cPanel → Node.js → Environment variables):
-
-```
-WITME_API_KEY=[valor_generado]
-```
-
-Reiniciar la aplicación Node.js después de agregar la variable.

@@ -1,34 +1,64 @@
-# Witme ↔ Coodelsur — Guía de integración completa
+# Witme ↔ Coodelsur — Documentación de integración
 
-> **Para:** Equipo Witme (integrador) y equipo Coodelsur  
-> **Producción:** https://solicitar-credito.coodelsursas.com.co  
-> **Documento técnico formal:** [WITME-API-PARA-INTEGRADOR.md](./WITME-API-PARA-INTEGRADOR.md) (WITME-API-001 v2.0)  
-> **Plantillas de entrega:** [WITME-MENSAJE-ENTREGA.md](./WITME-MENSAJE-ENTREGA.md)
+| Campo | Valor |
+|-------|--------|
+| **Documento** | WITME-INT-001 |
+| **Versión** | 3.0 |
+| **Fecha** | 17 de septiembre de 2026 |
+| **Estado** | Producción activa |
+| **Emisor** | Coodelsur SAS |
+| **Contacto** | cartera@coodelsursas.com.co |
+| **URL producción** | https://solicitar-credito.coodelsursas.com.co |
 
----
-
-## Resumen: dos formas de integrar
-
-Coodelsur ofrece **dos opciones**. Ambas llevan leads al **mismo panel admin** (`/admin/leads`), pero se distinguen por el campo **Origen**.
-
-| Opción | Cómo funciona | Origen en admin | Cuándo usarla |
-|--------|---------------|-----------------|---------------|
-| **A — Webhook API** | Witme envía `POST` JSON al terminar su formulario | `witme` | Lead completo en Witme; Coodelsur recibe datos sin que el usuario repita formulario |
-| **B — Redirección URL** | Witme redirige al usuario al formulario web de Coodelsur | `witme` si lleva UTM/`ref=witme`; si no, `directo` | Usuario completa solicitud en la web de Coodelsur |
+**Documento técnico formal (API):** [WITME-API-PARA-INTEGRADOR.md](./WITME-API-PARA-INTEGRADOR.md) (WITME-API-001 v2.0)
 
 ---
 
-## Opción A — Webhook API (recomendada si Witme tiene el formulario)
+## 1. Alcance
 
-### Endpoint
+Coodelsur y Witme integrarán solicitudes de crédito por **dos vías en paralelo**. Ambas registran leads en el **mismo panel de administración** (`/admin/leads`).
 
-```
+| Vía | Descripción | Origen en admin |
+|-----|-------------|-----------------|
+| **A — Webhook API** | Witme envía un `POST` JSON cuando el usuario termina su formulario en Witme | `witme` (automático) |
+| **B — Redirección URL** | Witme redirige al usuario al formulario web de Coodelsur | `witme` si la URL incluye UTM/`ref=witme`; si no, `directo` |
+
+Witme puede usar **una o ambas** vías según el flujo de cada campaña.
+
+---
+
+## 2. Opción A — Webhook API
+
+### 2.1 Endpoint
+
+```http
 POST https://solicitar-credito.coodelsursas.com.co/api/leads/witme
 Authorization: Bearer {WITME_API_KEY}
 Content-Type: application/json
 ```
 
-### Campos mínimos
+La **API Key** la entrega Coodelsur por **canal privado** (correo aparte). No va en este documento.
+
+### 2.2 Campos obligatorios
+
+| Campo | Alias | Descripción |
+|-------|-------|-------------|
+| `nombre` | — | Nombre completo |
+| `cedula` | `documento` | Número de identificación |
+| `telefono` | `celular` | Celular de contacto |
+
+### 2.3 Campos recomendados
+
+| Campo | Descripción |
+|-------|-------------|
+| `witme_id` | ID del lead en Witme (`witmeId`, `id_externo`, `external_id`) |
+| `tipo_credito` | Producto (default: `microcredito_small`) |
+| `email` / `correo` | Correo electrónico |
+| `acepta_terminos` | `true` si aceptó términos |
+| `datos_formulario` o `datos` | Objeto con **todos** los campos del formulario Witme |
+| `utm_source`, `utm_campaign`, … | Metadatos de campaña (default source: `witme`) |
+
+### 2.4 Ejemplo mínimo
 
 ```json
 {
@@ -38,9 +68,7 @@ Content-Type: application/json
 }
 ```
 
-### Campos recomendados (producción)
-
-Incluir **`witme_id`** y todo el formulario dentro de **`datos_formulario`**:
+### 2.5 Ejemplo recomendado (producción)
 
 ```json
 {
@@ -54,177 +82,224 @@ Incluir **`witme_id`** y todo el formulario dentro de **`datos_formulario`**:
   "datos_formulario": {
     "capital_solicitado": 400000,
     "cantidad_cuotas": 2,
+    "valor_cuota": 215000,
+    "tipo_identificacion": "CC",
     "departamento": "Huila",
     "municipio": "Neiva",
+    "direccion": "Calle 10 #5-20",
     "ingresos_mensuales": 1500000,
-    "cedula_frontal": "https://...",
-    "cedula_reverso": "https://...",
-    "video_verificacion": "https://...",
+    "ocupacion": "Comerciante",
+    "tipo_cuenta": "Ahorros",
+    "entidad_bancaria": "Bancolombia",
+    "numero_cuenta": "1234567890",
+    "cedula_frontal": "https://storage.ejemplo.com/front.jpg",
+    "cedula_reverso": "https://storage.ejemplo.com/back.jpg",
+    "video_verificacion": "https://storage.ejemplo.com/video.mp4",
     "firma": "data:image/png;base64,..."
   },
   "utm_source": "witme",
-  "utm_campaign": "campana-marzo-2026"
+  "utm_campaign": "campana-sept-2026"
 }
 ```
 
-### Respuesta exitosa
+### 2.6 Respuestas HTTP
 
-**HTTP 201**
+| HTTP | Body | Significado |
+|------|------|-------------|
+| **201** | `{ "success": true, "id": "uuid", "origen": "witme", "storage": "database" }` | Lead creado |
+| **401** | `{ "error": "No autorizado" }` | API Key inválida o ausente |
+| **422** | `{ "error": "Payload inválido", "details": "..." }` | Faltan nombre/cédula/teléfono |
+| **500** | `{ "error": "Error interno" }` | Error del servidor — reintentar |
 
-```json
-{
-  "success": true,
-  "id": "679a1ddc-8da7-4611-8ce9-808e1036881b",
-  "origen": "witme",
-  "storage": "database"
+### 2.7 Reglas de mapeo
+
+1. Campos en **raíz** o dentro de **`datos`** / **`datos_formulario`**.
+2. Acepta **snake_case** (`capital_solicitado`) y **camelCase** (`capitalSeleccionado`).
+3. Campos desconocidos se guardan y aparecen en admin como **"Datos adicionales (Witme)"**.
+4. El JSON original se conserva en `payloadOriginal` para auditoría.
+5. Adjuntos: URL pública (`https://...`) o base64 (`data:image/...`).
+
+**Alias de campos frecuentes:**
+
+| Witme (snake_case) | Alias | Campo interno |
+|--------------------|-------|---------------|
+| `capital_solicitado` | `monto`, `monto_solicitado` | Monto del crédito |
+| `cantidad_cuotas` | `cuotas` | Plazo |
+| `cedula_frontal` / `cedula_reverso` | — | Fotos cédula |
+| `video_verificacion` | — | Video verificación |
+| `firma` | — | Firma digital |
+
+> Tabla completa en [WITME-API-PARA-INTEGRADOR.md](./WITME-API-PARA-INTEGRADOR.md) §5.5.
+
+### 2.8 Productos (`tipo_credito`)
+
+| Valor Witme | Producto Coodelsur |
+|-------------|-------------------|
+| `microcredito_small`, `small`, `nanocredito` | Microcrédito Small |
+| `microcredito_urbano`, `urbano` | Microcrédito urbano |
+| `microcredito_rural`, `rural` | Microcrédito rural |
+| `consumo`, `comercial`, `libranza` | Homónimos |
+| *(omitido)* | Default: `microcredito_small` |
+
+### 2.9 Reintentos (Witme)
+
+Ante **HTTP 500**, reintentar con backoff: **5 s → 15 s → 45 s** (máx. 3 intentos). No reintentar **401** ni **422**.
+
+### 2.10 Prueba cURL
+
+```bash
+curl -X POST "https://solicitar-credito.coodelsursas.com.co/api/leads/witme" \
+  -H "Authorization: Bearer {WITME_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "witme_id": "WITME-TEST-001",
+    "nombre": "Prueba Integración",
+    "cedula": "1234567890",
+    "telefono": "3001112233",
+    "email": "test@ejemplo.com",
+    "datos_formulario": { "capital_solicitado": 400000 }
+  }'
 ```
 
-El lead aparece en **Admin → Solicitudes** con origen **Witme** y todos los campos mapeados. Campos extra de Witme se muestran en la sección **"Datos adicionales (Witme)"**.
-
-### Verificación rápida (sin auth)
+### 2.11 Autodiagnóstico (sin auth)
 
 ```bash
 curl -s https://solicitar-credito.coodelsursas.com.co/api/leads/witme
 curl -s https://solicitar-credito.coodelsursas.com.co/api/health
 ```
 
-Esperado: `"configured": true` y `"witmeConfigured": true`.
-
-### Credenciales
-
-- La **`WITME_API_KEY`** la genera Coodelsur y se entrega por **canal privado** (no va en este documento).
-- Se configura en cPanel → Setup Node.js App → Environment variables.
+Esperado: `"configured": true`, `"witmeConfigured": true`.
 
 ---
 
-## Opción B — Redirección al formulario Coodelsur
+## 3. Opción B — Redirección URL
 
-Witme redirige al navegador del usuario a una URL de Coodelsur. El usuario completa el formulario multi-paso en nuestra web.
+Witme redirige el navegador del usuario a Coodelsur. El usuario completa el formulario multi-paso en nuestra web (cédula, video, firma, etc.).
 
-### URLs disponibles
+### 3.1 URLs base
 
-| URL | Descripción |
-|-----|-------------|
+| URL | Uso |
+|-----|-----|
 | `https://solicitar-credito.coodelsursas.com.co/` | Landing + selector de monto |
 | `https://solicitar-credito.coodelsursas.com.co/solicitar?monto=400000` | Formulario con monto precargado |
 | `https://solicitar-credito.coodelsursas.com.co/credito/microcredito_small` | Formulario directo Microcrédito Small |
 
-### ⚠️ Importante: marcar tráfico como Witme
+### 3.2 URLs con tracking Witme (obligatorio para identificar origen)
 
-Para que el lead quede con **origen Witme** en el panel admin, Witme **debe** incluir parámetros de campaña en la URL:
-
-**Formato recomendado (UTM estándar):**
+**Formato recomendado:**
 
 ```
 https://solicitar-credito.coodelsursas.com.co/solicitar?monto=400000&utm_source=witme&utm_medium=redirect&utm_campaign={ID_CAMPANA}
 ```
 
-**Formato corto (alternativa):**
+**Formato corto:**
 
 ```
 https://solicitar-credito.coodelsursas.com.co/solicitar?monto=400000&ref=witme&utm_campaign={ID_CAMPANA}
 ```
 
-También acepta: `origen=witme` o `source=witme` en lugar de `ref=witme`.
+También válido: `origen=witme` o `source=witme` en lugar de `ref=witme`.
+
+### 3.3 Parámetros
 
 | Parámetro | Obligatorio | Descripción |
 |-----------|-------------|-------------|
-| `utm_source=witme` o `ref=witme` | **Sí** (para tracking Witme) | Marca el lead como origen Witme |
+| `utm_source=witme` o `ref=witme` | **Sí** | Marca el lead como Witme |
 | `utm_medium=redirect` | Recomendado | Distingue redirect vs webhook |
 | `utm_campaign` | Recomendado | ID de campaña Witme |
-| `monto` | Opcional | Precarga el monto (ej. `400000`) |
+| `monto` | Opcional | Precarga monto en COP (ej. `400000`, `600000`) |
 
-**Sin `utm_source=witme` ni `ref=witme`**, el lead se guarda como **Web directo** y no se puede distinguir de tráfico orgánico.
+**Sin `utm_source=witme` ni `ref=witme`**, el lead queda como **Web directo**.
 
-### Qué ocurre técnicamente
+### 3.4 Ejemplos listos para copiar
 
-1. El usuario llega con parámetros UTM/`ref`.
-2. La web guarda la atribución en cookie (`coodelsur_utm`, 30 días).
-3. Al enviar el formulario, el lead se guarda con `origen: witme` y campos UTM en PostgreSQL.
-4. Google Analytics (si está configurado) recibe eventos `campaign_attribution`, `begin_form`, `generate_lead` con `origen` y UTM.
-
----
-
-## Tracking y reportes en Coodelsur
-
-### Panel de administración
-
-- **URL:** `/admin/leads`
-- **Filtro Origen:** Witme | Web directo | Orgánico | Referido
-- **Columna Origen** en la tabla de solicitudes
-- **Contadores** Witme vs Web directo (según filtros activos)
-
-### En detalle de cada solicitud
-
-- Campo **Origen** visible en "Contacto y origen"
-- Leads webhook: sección **Datos adicionales (Witme)** con campos no mapeados
-- Leads webhook: `datosFormulario.witmeLeadId` y `payloadOriginal` para auditoría
-
-### Google Analytics (opcional)
-
-Configurar en cPanel:
-
-```env
-NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+**Monto $400.000:**
+```
+https://solicitar-credito.coodelsursas.com.co/solicitar?monto=400000&utm_source=witme&utm_medium=redirect&utm_campaign=CAMPAÑA_WITME
 ```
 
-Eventos enviados:
+**Monto $600.000:**
+```
+https://solicitar-credito.coodelsursas.com.co/solicitar?monto=600000&utm_source=witme&utm_medium=redirect&utm_campaign=CAMPAÑA_WITME
+```
 
-| Evento | Cuándo |
-|--------|--------|
-| `campaign_attribution` | Usuario llega con UTM/ref Witme |
-| `begin_form` | Abre formulario Microcrédito Small |
-| `generate_lead` | Envía solicitud completa |
+**Landing sin monto fijo:**
+```
+https://solicitar-credito.coodelsursas.com.co/?utm_source=witme&utm_medium=redirect&utm_campaign=CAMPAÑA_WITME
+```
 
-Parámetros: `origen`, `utm_source`, `utm_campaign`, `tipo_credito`, `monto`.
+### 3.5 Flujo técnico
+
+1. Usuario llega con UTM/`ref` en la URL.
+2. Coodelsur guarda atribución en cookie `coodelsur_utm` (30 días).
+3. Al enviar el formulario, el lead se guarda con `origen: witme` y campos UTM.
+4. Google Analytics recibe eventos `campaign_attribution`, `begin_form`, `generate_lead`.
 
 ---
 
-## Comparación rápida
+## 4. Panel de administración Coodelsur
 
-| | Webhook API | Redirección URL |
-|---|-------------|-----------------|
+Todos los leads (API y redirect) aparecen en:
+
+**https://solicitar-credito.coodelsursas.com.co/admin/leads**
+
+| Función | Descripción |
+|---------|-------------|
+| Columna **Origen** | Witme, Web directo, Orgánico, Referido |
+| **Filtro Origen** | Filtrar solo leads Witme |
+| **Exportar Excel/CSV** | Export con filtro por origen |
+| Detalle del lead | Origen, UTM, datos completos del formulario |
+| Leads vía API | Sección **"Datos adicionales (Witme)"** + `witmeLeadId` |
+
+---
+
+## 5. Comparación de vías
+
+| | Webhook API (A) | Redirección URL (B) |
+|---|-----------------|---------------------|
 | Usuario repite formulario | No | Sí (en Coodelsur) |
-| Datos completos de Witme | Sí (vía JSON) | Solo lo que el usuario ingrese aquí |
-| Adjuntos (cédula, video) | Sí (URL o base64 en JSON) | Captura en nuestra web |
+| Datos completos de Witme | Sí (JSON) | Lo que el usuario ingrese aquí |
+| Adjuntos (cédula, video, firma) | URL o base64 en JSON | Captura en nuestra web |
 | Origen en admin | `witme` automático | `witme` solo con UTM/ref |
 | Requiere API Key | Sí | No |
-| Ideal para | Witme ya tiene formulario completo | Usuario debe firmar/verificar en Coodelsur |
+| Ideal cuando | Witme ya tiene formulario completo | Usuario debe verificar/firmar en Coodelsur |
 
 ---
 
-## Checklist go-live
+## 6. Checklist go-live
 
-### Coodelsur (antes de entregar a Witme)
+### Coodelsur
 
-- [ ] `WITME_API_KEY` configurada en cPanel
-- [ ] `GET /api/health` → `witmeConfigured: true`
-- [ ] `GET /api/leads/witme` → `configured: true`
-- [ ] Prueba `POST` con curl → HTTP 201
-- [ ] Lead visible en `/admin/leads` con origen Witme
-- [ ] (Opcional) `NEXT_PUBLIC_GA_MEASUREMENT_ID` para analytics
+- [x] Producción activa: https://solicitar-credito.coodelsursas.com.co
+- [x] Webhook configurado (`witmeConfigured: true`)
+- [x] Google Analytics activo
+- [ ] Entregar API Key a Witme (correo aparte)
+- [ ] Coordinar prueba API (`POST` → HTTP 201)
+- [ ] Coordinar prueba redirect (URL con `utm_source=witme`)
 
-### Witme — Opción A (webhook)
+### Witme — Opción A (API)
 
-- [ ] Configurar URL y Bearer token
+- [ ] Configurar webhook con URL y Bearer token
 - [ ] Enviar `witme_id` en cada lead
 - [ ] Enviar `datos_formulario` con todos los campos
-- [ ] Manejar reintentos en HTTP 500 (backoff 5s, 15s, 45s)
+- [ ] Manejar reintentos en HTTP 500
 
 ### Witme — Opción B (redirect)
 
-- [ ] Usar URLs con `utm_source=witme` o `ref=witme`
-- [ ] Incluir `utm_campaign` con ID de campaña
+- [ ] Configurar URLs con `utm_source=witme` o `ref=witme`
+- [ ] Incluir `utm_campaign` por campaña
 - [ ] Probar flujo completo en móvil
 
 ---
 
-## Soporte
+## 7. Soporte
 
-- **Coodelsur:** cartera@coodelsursas.com.co
-- **Documento formal API:** [WITME-API-PARA-INTEGRADOR.md](./WITME-API-PARA-INTEGRADOR.md)
-- **Implementación código:** `src/app/api/leads/witme/route.ts`, `src/application/lead/map-witme-payload.ts`
+| Canal | Contacto |
+|-------|----------|
+| Correo técnico | cartera@coodelsursas.com.co |
+| Especificación API formal | WITME-API-PARA-INTEGRADOR.pdf |
+| Código fuente | `src/app/api/leads/witme/route.ts`, `src/application/lead/map-witme-payload.ts` |
 
 ---
 
-*Coodelsur SAS — Confidencial*
+*Coodelsur SAS — Documento confidencial para integrador autorizado*
