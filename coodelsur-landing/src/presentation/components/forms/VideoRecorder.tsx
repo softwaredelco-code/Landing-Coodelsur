@@ -32,7 +32,7 @@ export function VideoRecorder({
   required,
   error,
   helperText,
-  durationSeconds = 3,
+  durationSeconds = 8,
   value,
   onChange,
   maxBytes = DEFAULT_MAX_BYTES,
