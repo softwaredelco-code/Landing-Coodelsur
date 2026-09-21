@@ -9,13 +9,16 @@
 | [HEXAGONAL.md](./HEXAGONAL.md) | Arquitectura hexagonal, capas, flujos y reglas |
 | [CODEBASE.md](./CODEBASE.md) | Mapa de archivos y responsabilidades |
 | [BACKEND_SETUP.md](./BACKEND_SETUP.md) | PostgreSQL, Supabase, variables de entorno |
+| [ENV-EQUIPO.md](./ENV-EQUIPO.md) | Crear `.env` en máquina nueva (equipo) |
 | [DESPLIEGUE.md](./DESPLIEGUE.md) | Checklist producción (Vercel + Supabase) |
 | [API.md](./API.md) | Endpoints REST |
 | [ADMIN.md](./ADMIN.md) | Panel de administración |
 | [FORMULARIO.md](./FORMULARIO.md) | Microcrédito Small: pasos y validaciones |
 | [FLUJO_MONTO.md](./FLUJO_MONTO.md) | Selector de monto y rangos por producto |
 | [GUIA-NUEVO-FORMULARIO.md](./GUIA-NUEVO-FORMULARIO.md) | Implementar formularios urbano/rural |
-| [WITME.md](./WITME.md) | Webhook Witme |
+| [witme/COODELSUR-INTEGRACION-WITME.pdf](./witme/COODELSUR-INTEGRACION-WITME.pdf) | **Entregar a Witme** — guía API + redirect |
+| [witme/COODELSUR-CREDENCIALES-WITME.pdf](./witme/COODELSUR-CREDENCIALES-WITME.pdf) | **Entregar a Witme** — API Key (no commitear; ver `.gitignore`) |
+| [HANDOFF-CONTEXTO-IA-COMPLETO.md](./HANDOFF-CONTEXTO-IA-COMPLETO.md) | Contexto completo del proyecto (handoff IA) |
 
 ## Estado del producto
 

@@ -70,10 +70,10 @@ export function SeccionVerificacion() {
           render={({ field, fieldState }) => (
             <VideoRecorder
               id="videoVerificacion"
-              label="Video de 3 segundos"
-              durationSeconds={3}
+              label="Video de verificación (8 segundos)"
+              durationSeconds={8}
               required
-              helperText="Graba un video corto de tu rostro con la cámara frontal. También puedes subir un video si tu navegador no permite grabar."
+              helperText="Graba un video de tu rostro mirando a la cámara (8 segundos). También puedes subir un video si tu navegador no permite grabar."
               value={field.value}
               onChange={field.onChange}
               error={fieldState.error?.message}

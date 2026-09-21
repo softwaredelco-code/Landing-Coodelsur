@@ -7,6 +7,7 @@ import {
   listLeadsFromFile,
   updateLeadEstadoInFile,
 } from "@/infrastructure/persistence/file-store";
+import { pruneStaleIncompleteDrafts } from "@/application/lead/save-draft-lead";
 import { mapLeadListRow } from "@/domain/lead/lead-summary";
 import type { LeadEstado } from "@prisma/client";
 
@@ -27,12 +28,16 @@ export async function GET(request: Request) {
   const skip = Math.max(Number(searchParams.get("skip") ?? 0), 0);
   const estado = searchParams.get("estado") as LeadEstado | null;
   const tipo = searchParams.get("tipoCredito");
+  const origen = searchParams.get("origen")?.trim();
   const q = searchParams.get("q")?.trim()?.toLowerCase();
 
   try {
+    await pruneStaleIncompleteDrafts().catch(() => 0);
+
     const where = {
       ...(estado ? { estado } : {}),
       ...(tipo ? { tipoCredito: tipo } : {}),
+      ...(origen ? { origen } : {}),
       ...(q
         ? {
             OR: [
@@ -45,7 +50,7 @@ export async function GET(request: Request) {
         : {}),
     };
 
-    const [leads, total] = await Promise.all([
+    const [leads, total, origenGroups] = await Promise.all([
       prisma.lead.findMany({
         where,
         orderBy: { fechaCreacion: "desc" },
@@ -69,7 +74,16 @@ export async function GET(request: Request) {
         },
       }),
       prisma.lead.count({ where }),
+      prisma.lead.groupBy({
+        by: ["origen"],
+        where,
+        _count: { id: true },
+      }),
     ]);
+
+    const origenCounts = Object.fromEntries(
+      origenGroups.map((row) => [row.origen, row._count.id]),
+    );
 
     return NextResponse.json(
       {
@@ -77,6 +91,7 @@ export async function GET(request: Request) {
         total,
         take,
         skip,
+        origenCounts,
         source: "database",
       },
       {
@@ -91,6 +106,7 @@ export async function GET(request: Request) {
     let leads = listLeadsFromFile();
     if (estado) leads = leads.filter((l) => l.estado === estado);
     if (tipo) leads = leads.filter((l) => l.tipoCredito === tipo);
+    if (origen) leads = leads.filter((l) => l.origen === origen);
     if (q) {
       leads = leads.filter(
         (l) =>
@@ -101,11 +117,16 @@ export async function GET(request: Request) {
       );
     }
     const total = leads.length;
+    const origenCounts = leads.reduce<Record<string, number>>((acc, lead) => {
+      acc[lead.origen] = (acc[lead.origen] ?? 0) + 1;
+      return acc;
+    }, {});
     return NextResponse.json({
       leads: leads.slice(skip, skip + take).map(mapLeadListRow),
       total,
       take,
       skip,
+      origenCounts,
       source: "file",
     });
   }

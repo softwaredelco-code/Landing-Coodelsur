@@ -9,6 +9,7 @@
 
 import {
   clearNanocreditoDraft,
+  hasMeaningfulDraftValues,
   loadNanocreditoDraft,
   saveNanocreditoDraft,
 } from "@/presentation/forms/nanocredito-draft";
@@ -77,7 +78,7 @@ export function useNanocreditoDraft({
     restoredRef.current = true;
 
     const draft = loadNanocreditoDraft();
-    if (draft) {
+    if (draft && hasMeaningfulDraftValues(draft.values)) {
       let merged = {
         ...baseValuesRef.current,
         ...draft.values,
@@ -95,6 +96,8 @@ export function useNanocreditoDraft({
           ? "Recuperamos tu solicitud en progreso. Si tenías fotos o video, vuelve a cargarlos en Verificación."
           : "Continúas donde lo dejaste. Recuperamos tu solicitud en progreso.",
       );
+    } else if (draft) {
+      clearNanocreditoDraft();
     }
 
     hydratedRef.current = true;

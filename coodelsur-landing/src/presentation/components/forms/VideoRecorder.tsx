@@ -3,6 +3,8 @@
 import {
   blobToCapture,
   fileToCapture,
+  getCameraErrorMessage,
+  getVideoStream,
   pickRecorderMimeType,
   stopMediaStream,
 } from "@/infrastructure/media/file-capture";
@@ -30,14 +32,16 @@ export function VideoRecorder({
   required,
   error,
   helperText,
-  durationSeconds = 3,
+  durationSeconds = 8,
   value,
   onChange,
   maxBytes = DEFAULT_MAX_BYTES,
 }: VideoRecorderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const captureInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const openingRef = useRef(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const stopTimerRef = useRef<number | null>(null);
@@ -68,35 +72,76 @@ export function VideoRecorder({
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  useEffect(() => {
+    if (mode !== "preview" && mode !== "recording") return;
+
+    const stream = streamRef.current;
+    if (!stream) return;
+
+    let cancelled = false;
+    let frameId = 0;
+
+    const attachStream = () => {
+      const video = videoRef.current;
+      if (!video) return false;
+
+      video.srcObject = stream;
+      video.playsInline = true;
+      video.muted = true;
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+
+      void video.play().catch(() => {
+        if (cancelled) return;
+        setLocalError("No se pudo iniciar la vista de cámara. Puedes subir un video desde tu galería.");
+        stopCamera();
+      });
+
+      return true;
+    };
+
+    if (!attachStream()) {
+      frameId = requestAnimationFrame(() => {
+        if (!cancelled) attachStream();
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [mode, stopCamera]);
+
+  const openCameraFallback = () => {
+    captureInputRef.current?.click();
+  };
+
   const openPreview = async () => {
+    if (openingRef.current) return;
+
     setLocalError(null);
     setBusy(true);
+    openingRef.current = true;
 
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        fileInputRef.current?.click();
-        return;
+      stopCamera();
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
+
+      const stream = await getVideoStream({ facingMode: "user" });
+
+      if (stream.getVideoTracks().length === 0) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error("Sin pista de video");
       }
 
-      stopCamera();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true,
-      });
+      stream.getAudioTracks().forEach((track) => track.stop());
 
       streamRef.current = stream;
       setMode("preview");
-
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play();
-        }
-      });
-    } catch {
-      setLocalError("No pudimos abrir la cámara. Puedes subir un video corto desde tu galería.");
-      fileInputRef.current?.click();
+    } catch (error) {
+      setLocalError(getCameraErrorMessage(error));
     } finally {
+      openingRef.current = false;
       setBusy(false);
     }
   };
@@ -130,7 +175,7 @@ export function VideoRecorder({
 
   const startRecording = () => {
     const stream = streamRef.current;
-    if (!stream || typeof MediaRecorder === "undefined") {
+    if (!stream || stream.getVideoTracks().length === 0 || typeof MediaRecorder === "undefined") {
       setLocalError("Tu navegador no permite grabar video aquí. Sube un video desde tu galería.");
       return;
     }
@@ -177,6 +222,11 @@ export function VideoRecorder({
     setBusy(true);
 
     try {
+      if (!file.type.startsWith("video/")) {
+        setLocalError("Selecciona un archivo de video (no audio ni otro tipo).");
+        onChange(undefined);
+        return;
+      }
       if (file.size > maxBytes) {
         setLocalError(`El archivo no puede superar ${Math.round(maxBytes / (1024 * 1024))} MB`);
         onChange(undefined);
@@ -189,15 +239,20 @@ export function VideoRecorder({
       onChange(undefined);
     } finally {
       setBusy(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      clearInput(event.target);
     }
+  };
+
+  const clearInput = (input: HTMLInputElement | null) => {
+    if (input) input.value = "";
   };
 
   const clear = () => {
     onChange(undefined);
     setLocalError(null);
     stopCamera();
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    clearInput(uploadInputRef.current);
+    clearInput(captureInputRef.current);
   };
 
   const displayError = error || localError;
@@ -211,8 +266,16 @@ export function VideoRecorder({
       </p>
 
       <input
-        ref={fileInputRef}
-        id={`${id}-file`}
+        ref={uploadInputRef}
+        id={`${id}-upload`}
+        type="file"
+        accept="video/*"
+        className="sr-only"
+        onChange={handleFile}
+      />
+      <input
+        ref={captureInputRef}
+        id={`${id}-capture`}
         type="file"
         accept="video/*"
         capture="user"
@@ -232,7 +295,7 @@ export function VideoRecorder({
           </button>
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => uploadInputRef.current?.click()}
             disabled={busy}
             className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-coodel-dark hover:bg-gray-50 disabled:opacity-60"
           >
@@ -248,7 +311,7 @@ export function VideoRecorder({
             autoPlay
             playsInline
             muted
-            className="max-h-64 w-full -scale-x-100 object-cover"
+            className="min-h-[220px] max-h-64 w-full -scale-x-100 object-cover"
           />
           <div className="space-y-2 bg-white p-3">
             {mode === "recording" ? (

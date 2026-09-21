@@ -77,6 +77,15 @@ type ParametrosDbRow = {
 
 let serverCache: Map<TipoCredito, ParametrosAmortizacion> | null = null;
 let cachedDbRows: ParametrosDbRow[] | null = null;
+let seedAttempted = false;
+
+function buildCacheFromDefaults(): Map<TipoCredito, ParametrosAmortizacion> {
+  const map = new Map<TipoCredito, ParametrosAmortizacion>();
+  for (const producto of PRODUCTOS_PARAMETRIZABLES) {
+    map.set(producto.tipo, getDefaultParametrosAmortizacion(producto.tipo));
+  }
+  return map;
+}
 
 function toEstudioConfig(
   modo: "fijo" | "porcentaje",
@@ -160,29 +169,39 @@ export function invalidateParametrosCache() {
 
 /** Inserta defaults solo si la tabla está vacía (una vez por instancia). */
 async function seedParametrosIfEmpty(): Promise<void> {
-  const count = await prisma.creditoParametros.count();
-  if (count > 0) return;
+  if (seedAttempted) return;
+  seedAttempted = true;
 
-  for (const producto of PRODUCTOS_PARAMETRIZABLES) {
-    const defaults = getDefaultParametrosAmortizacion(producto.tipo);
-    const estudio = defaults.estudioCredito;
-    const estudioModo = estudio.modo;
-    const estudioValor =
-      estudio.modo === "fijo" ? estudio.valor : estudio.porcentaje * 100;
-
-    await prisma.creditoParametros.create({
-      data: {
-        tipoCredito: producto.tipo,
-        nombreVisible: producto.nombre,
-        tasaMensual: defaults.tasaMensual,
-        estudioCreditoModo: estudioModo,
-        estudioCreditoValor: estudioValor,
-        fianzaMensualPorcentaje: defaults.fianzaMensualPorcentaje,
-        vidaDeudoresPorcentaje: defaults.vidaDeudoresPorcentaje,
-        plazosPermitidos: [...defaults.plazosPermitidos],
-        activo: true,
-      },
+  try {
+    const existing = await prisma.creditoParametros.findFirst({
+      select: { tipoCredito: true },
     });
+    if (existing) return;
+
+    for (const producto of PRODUCTOS_PARAMETRIZABLES) {
+      const defaults = getDefaultParametrosAmortizacion(producto.tipo);
+      const estudio = defaults.estudioCredito;
+      const estudioModo = estudio.modo;
+      const estudioValor =
+        estudio.modo === "fijo" ? estudio.valor : estudio.porcentaje * 100;
+
+      await prisma.creditoParametros.create({
+        data: {
+          tipoCredito: producto.tipo,
+          nombreVisible: producto.nombre,
+          tasaMensual: defaults.tasaMensual,
+          estudioCreditoModo: estudioModo,
+          estudioCreditoValor: estudioValor,
+          fianzaMensualPorcentaje: defaults.fianzaMensualPorcentaje,
+          vidaDeudoresPorcentaje: defaults.vidaDeudoresPorcentaje,
+          plazosPermitidos: [...defaults.plazosPermitidos],
+          activo: true,
+        },
+      });
+    }
+  } catch (error) {
+    seedAttempted = false;
+    throw error;
   }
 }
 
@@ -208,15 +227,25 @@ export async function ensureParametrosSeeded(): Promise<void> {
 export async function warmParametrosCache(): Promise<Map<TipoCredito, ParametrosAmortizacion>> {
   if (serverCache) return serverCache;
 
-  await seedParametrosIfEmpty();
-  const rows = await prisma.creditoParametros.findMany({
-    orderBy: { tipoCredito: "asc" },
-  });
+  try {
+    await seedParametrosIfEmpty();
+    const rows = await prisma.creditoParametros.findMany({
+      orderBy: { tipoCredito: "asc" },
+    });
 
-  cachedDbRows = rows;
-  const map = buildCacheFromRows(rows);
-  applyCache(map);
-  return map;
+    cachedDbRows = rows;
+    const map = buildCacheFromRows(rows);
+    applyCache(map);
+    return map;
+  } catch (error) {
+    console.warn(
+      "[parametros-store] No se pudo leer parámetros desde BD; usando defaults del código.",
+      error instanceof Error ? error.message : error,
+    );
+    const map = buildCacheFromDefaults();
+    applyCache(map);
+    return map;
+  }
 }
 
 export async function listCreditoParametrosRecords(): Promise<CreditoParametrosRecord[]> {

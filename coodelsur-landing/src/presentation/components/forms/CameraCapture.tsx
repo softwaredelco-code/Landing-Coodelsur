@@ -1,6 +1,12 @@
 "use client";
 
-import { captureVideoFrame, fileToCapture, stopMediaStream } from "@/infrastructure/media/file-capture";
+import {
+  captureVideoFrame,
+  fileToCapture,
+  getCameraErrorMessage,
+  getVideoStream,
+  stopMediaStream,
+} from "@/infrastructure/media/file-capture";
 import { cn } from "@/shared/utils";
 import type { FileCapture } from "@/shared/types/credito";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -33,6 +39,7 @@ export function CameraCapture({
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const openingRef = useRef(false);
 
   const [mode, setMode] = useState<"idle" | "camera">("idle");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -47,39 +54,64 @@ export function CameraCapture({
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  useEffect(() => {
+    if (mode !== "camera") return;
+
+    const stream = streamRef.current;
+    if (!stream) return;
+
+    let cancelled = false;
+    let frameId = 0;
+
+    const attachStream = () => {
+      const video = videoRef.current;
+      if (!video) return false;
+
+      video.srcObject = stream;
+      video.playsInline = true;
+      video.muted = true;
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+
+      void video.play().catch(() => {
+        if (cancelled) return;
+        setLocalError("No se pudo iniciar la vista de cámara. Puedes subir una foto desde tu galería.");
+        stopCamera();
+      });
+
+      return true;
+    };
+
+    if (!attachStream()) {
+      frameId = requestAnimationFrame(() => {
+        if (!cancelled) attachStream();
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [mode, stopCamera]);
+
   const startCamera = async () => {
+    if (openingRef.current) return;
+
     setLocalError(null);
     setBusy(true);
+    openingRef.current = true;
 
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        fileInputRef.current?.click();
-        return;
-      }
-
       stopCamera();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      });
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
 
+      const stream = await getVideoStream({ facingMode });
       streamRef.current = stream;
       setMode("camera");
-
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play();
-        }
-      });
-    } catch {
-      setLocalError("No pudimos abrir la cámara. Puedes subir una foto desde tu galería.");
-      fileInputRef.current?.click();
+    } catch (error) {
+      setLocalError(getCameraErrorMessage(error));
     } finally {
+      openingRef.current = false;
       setBusy(false);
     }
   };
@@ -179,7 +211,13 @@ export function CameraCapture({
 
       {mode === "camera" && !value && (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-black">
-          <video ref={videoRef} autoPlay playsInline muted className="max-h-64 w-full object-cover" />
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="min-h-[220px] max-h-64 w-full object-cover"
+          />
           <div className="flex flex-wrap gap-2 bg-white p-3">
             <button
               type="button"

@@ -1,6 +1,19 @@
 import { formSectionsNanocredito } from "@/shared/config/creditos/form-sections";
 import { formatCOP } from "@/shared/utils";
 
+const KNOWN_FORM_FIELD_NAMES = new Set(
+  formSectionsNanocredito.flatMap((section) => section.fields.map((field) => field.name)),
+);
+
+const WITME_METADATA_KEYS = new Set([
+  "fuente",
+  "witmeLeadId",
+  "payloadOriginal",
+  "_progreso",
+  "resultadoNodos",
+  "cedulaVerificacion",
+]);
+
 export interface AdminLeadField {
   label: string;
   value: string;
@@ -74,4 +87,31 @@ export function buildAdminLeadSections(datosFormulario: unknown): AdminLeadSecti
         })),
     }))
     .filter((section) => section.fields.some((field) => field.value !== "—"));
+}
+
+/** Campos de Witme que no coinciden con el catálogo del formulario Small. */
+export function buildAdminWitmeExtraSection(datosFormulario: unknown): AdminLeadSection | null {
+  const datos =
+    datosFormulario && typeof datosFormulario === "object"
+      ? (datosFormulario as Record<string, unknown>)
+      : {};
+
+  if (datos.fuente !== "witme_webhook") return null;
+
+  const fields = Object.entries(datos)
+    .filter(([key]) => !KNOWN_FORM_FIELD_NAMES.has(key) && !WITME_METADATA_KEYS.has(key))
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => ({
+      label: key,
+      value: formatFieldValue(key, value),
+    }))
+    .filter((field) => field.value !== "—");
+
+  if (fields.length === 0) return null;
+
+  return {
+    id: "witme-extra",
+    title: "Datos adicionales (Witme)",
+    fields,
+  };
 }

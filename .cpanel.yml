@@ -1,0 +1,5 @@
+---
+# Respaldo manual (Git pull en cPanel). El despliegue principal usa GitHub Actions.
+deployment:
+  tasks:
+    - /bin/bash -lc 'cd coodelsur-landing && test -f cpanel-post-deploy.sh && bash cpanel-post-deploy.sh || echo "Usa GitHub Actions para build completo"'

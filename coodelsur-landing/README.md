@@ -16,9 +16,9 @@ Landing y formulario de **Microcrédito Small** para Coodelsur: captura de leads
 ## Inicio rápido
 
 ```bash
-cp .env.local.example .env.local
 cp .env.example .env
-# Editar variables (Supabase o Docker)
+cp .env.example .env.local
+# Editar variables (reemplazar PEGAR_* con credenciales del equipo)
 npm install
 npm run db:push
 npm run dev

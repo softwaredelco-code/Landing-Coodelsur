@@ -15,6 +15,7 @@ import { buildLeadSummaryFields } from "@/domain/lead/lead-summary-fields";
 import { processFileFields } from "@/infrastructure/storage/upload";
 import { inferOrigen } from "@/presentation/tracking/utm";
 import { normalizeDocumentNumber } from "@/domain/identity/cedula";
+import { withTimeout } from "@/shared/utils";
 import {
   getLeadFromFile,
   isDbConnectionError,
@@ -22,6 +23,10 @@ import {
   updateLeadInFile,
   type StoredLead,
 } from "@/infrastructure/persistence/file-store";
+import {
+  cleanupIncompleteDraftsForContact,
+  findIncompleteLeadIdForContact,
+} from "@/application/lead/save-draft-lead";
 import type { LeadPayload, UtmParams, GeoLocation } from "@/shared/types/credito";
 
 interface CreateLeadInput extends Omit<LeadPayload, "ip"> {
@@ -82,7 +87,11 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
 
   const [geoFromIp, processedData] = await Promise.all([
     hasGeoFromClient ? Promise.resolve({} as GeoLocation) : geolocateByIp(input.ip ?? null),
-    processFileFields(input.datosFormulario),
+    withTimeout(
+      processFileFields(input.datosFormulario),
+      45_000,
+      "Tiempo agotado al procesar los archivos adjuntos",
+    ),
   ]);
 
   const geo = {
@@ -113,14 +122,29 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
 
   if (!forceFile) {
     try {
-      if (input.draftLeadId) {
+      let promoteDraftId = input.draftLeadId ?? null;
+      if (promoteDraftId) {
         const existing = await prisma.lead.findUnique({
-          where: { id: input.draftLeadId },
+          where: { id: promoteDraftId },
           select: { id: true, estado: true },
         });
-        if (existing?.estado === "incompleto") {
-          const lead = await prisma.lead.update({
-            where: { id: input.draftLeadId },
+        if (existing?.estado !== "incompleto") {
+          promoteDraftId = null;
+        }
+      }
+
+      if (!promoteDraftId) {
+        promoteDraftId = await findIncompleteLeadIdForContact(
+          input.cedula,
+          input.telefono,
+          null,
+        );
+      }
+
+      if (promoteDraftId) {
+        const lead = await withTimeout(
+          prisma.lead.update({
+            where: { id: promoteDraftId },
             data: {
               tipoCredito: input.tipoCredito,
               nombre: input.nombre,
@@ -144,42 +168,50 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
               latitud: geo.latitud ?? null,
               longitud: geo.longitud ?? null,
             },
-          });
-          return {
-            id: lead.id,
-            tipoCredito: lead.tipoCredito,
-            nombre: lead.nombre,
-            storage: "database",
-          };
-        }
+          }),
+          20_000,
+          "Tiempo agotado al guardar la solicitud en base de datos",
+        );
+        await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+        return {
+          id: lead.id,
+          tipoCredito: lead.tipoCredito,
+          nombre: lead.nombre,
+          storage: "database",
+        };
       }
 
-      const lead = await prisma.lead.create({
-        data: {
-          tipoCredito: input.tipoCredito,
-          nombre: input.nombre,
-          cedula: input.cedula,
-          telefono: input.telefono,
-          email: input.email || null,
-          ...summary,
-          datosFormulario: processedData as Prisma.InputJsonValue,
-          origen: input.origen || inferOrigen(utm),
-          estado: estadoFinal,
-          aceptaTerminos,
-          fechaAceptacionTerminos: fechaOk,
-          utmSource: utm.utmSource ?? null,
-          utmCampaign: utm.utmCampaign ?? null,
-          utmMedium: utm.utmMedium ?? null,
-          utmTerm: utm.utmTerm ?? null,
-          utmContent: utm.utmContent ?? null,
-          ip: input.ip ?? null,
-          ciudad: geo.ciudad ?? null,
-          pais: geo.pais ?? null,
-          latitud: geo.latitud ?? null,
-          longitud: geo.longitud ?? null,
-        },
-      });
+      const lead = await withTimeout(
+        prisma.lead.create({
+          data: {
+            tipoCredito: input.tipoCredito,
+            nombre: input.nombre,
+            cedula: input.cedula,
+            telefono: input.telefono,
+            email: input.email || null,
+            ...summary,
+            datosFormulario: processedData as Prisma.InputJsonValue,
+            origen: input.origen || inferOrigen(utm),
+            estado: estadoFinal,
+            aceptaTerminos,
+            fechaAceptacionTerminos: fechaOk,
+            utmSource: utm.utmSource ?? null,
+            utmCampaign: utm.utmCampaign ?? null,
+            utmMedium: utm.utmMedium ?? null,
+            utmTerm: utm.utmTerm ?? null,
+            utmContent: utm.utmContent ?? null,
+            ip: input.ip ?? null,
+            ciudad: geo.ciudad ?? null,
+            pais: geo.pais ?? null,
+            latitud: geo.latitud ?? null,
+            longitud: geo.longitud ?? null,
+          },
+        }),
+        20_000,
+        "Tiempo agotado al guardar la solicitud en base de datos",
+      );
 
+      await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
       return { id: lead.id, tipoCredito: lead.tipoCredito, nombre: lead.nombre, storage: "database" };
     } catch (error) {
       if (!isDbConnectionError(error)) {
@@ -218,6 +250,7 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
         longitud: geo.longitud ?? null,
       });
       if (updated) {
+        await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
         return {
           id: updated.id,
           tipoCredito: updated.tipoCredito,
@@ -229,6 +262,7 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
   }
 
   const fileLead = toFileLead(input, processedData, geo, utm, aceptaTerminos, fechaOk);
+  await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
   return {
     id: fileLead.id,
     tipoCredito: fileLead.tipoCredito,

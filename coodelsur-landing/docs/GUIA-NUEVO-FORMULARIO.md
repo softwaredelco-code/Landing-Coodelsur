@@ -23,9 +23,9 @@ Cuando el formulario esté listo, hay que poner `formularioDisponible: true` en 
 ## 2. Arranque del entorno (primer día)
 
 ```bash
-cp .env.local.example .env.local
 cp .env.example .env
-# Completar DATABASE_URL, SUPABASE_*, ADMIN_PASSWORD
+cp .env.example .env.local
+# Completar DATABASE_URL, DIRECT_URL, SUPABASE_*, ADMIN_PASSWORD
 npm install
 npm run db:push
 npm run dev

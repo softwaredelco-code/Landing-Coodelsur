@@ -20,6 +20,7 @@ import type { UseFormGetValues, UseFormWatch } from "react-hook-form";
 const SERVER_DRAFT_KEY = "coodelsur_server_draft_id";
 const SAVE_DEBOUNCE_MS = 3000;
 
+let draftSyncDisabled = false;
 let draftSyncQueue: Promise<void> = Promise.resolve();
 
 function enqueueDraftSync(task: () => Promise<void>): Promise<void> {
@@ -49,12 +50,23 @@ export function clearNanocreditoServerDraftId() {
   sessionStorage.removeItem(SERVER_DRAFT_KEY);
 }
 
+export function disableNanocreditoServerDraftSync() {
+  draftSyncDisabled = true;
+}
+
+export function enableNanocreditoServerDraftSync() {
+  draftSyncDisabled = false;
+}
+
 /** Guarda el borrador en el servidor (usado al avanzar paso y al cerrar la pestaña). */
 export async function syncNanocreditoDraftToServer(
   step: number,
   getValues: UseFormGetValues<NanocreditoFormValues>,
 ) {
+  if (draftSyncDisabled) return;
+
   return enqueueDraftSync(async () => {
+    if (draftSyncDisabled) return;
     const utm = deserializeUtm(getUtmFromCookie() ?? undefined) ?? undefined;
     const values = stripHeavyFieldsForDraft(
       getValues() as unknown as Record<string, unknown>,

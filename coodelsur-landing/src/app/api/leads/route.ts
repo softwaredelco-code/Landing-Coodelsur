@@ -6,7 +6,6 @@ import {
 } from "@/application/identity/verify-document";
 import { getClientIp } from "@/shared/utils";
 import { montoCoincideConTipo, resolverTipoPorMonto } from "@/shared/config/creditos/montos";
-import { warmParametrosCache } from "@/infrastructure/database/parametros-store";
 import { nanocreditoSchema } from "@/shared/validation/nanocredito";
 import { buildFormSchema, leadApiSchema } from "@/shared/validation/schemas";
 import { NextResponse } from "next/server";
@@ -25,10 +24,7 @@ export const maxDuration = 60;
  */
 export async function POST(request: Request) {
   try {
-    const [, body] = await Promise.all([
-      warmParametrosCache(),
-      request.json() as Promise<Record<string, unknown>>,
-    ]);
+    const body = (await request.json()) as Record<string, unknown>;
     const ip = getClientIp(request);
 
     const tipoRaw = String(body.tipoCredito ?? "");

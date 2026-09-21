@@ -159,13 +159,17 @@ export function deleteLeadFromFile(id: string): boolean {
 export function isDbConnectionError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = "code" in error ? String((error as { code?: string }).code) : "";
+  const name = "name" in error ? String((error as { name?: string }).name) : "";
   const message = "message" in error ? String((error as { message?: string }).message) : "";
   return (
     code === "P1001" ||
     code === "P1000" ||
     code === "P1017" ||
+    name === "PrismaClientRustPanicError" ||
     message.includes("Can't reach database server") ||
     message.includes("ECONNREFUSED") ||
-    message.includes("does not exist")
+    message.includes("does not exist") ||
+    message.includes("timer has gone away") ||
+    message.includes("PANIC")
   );
 }

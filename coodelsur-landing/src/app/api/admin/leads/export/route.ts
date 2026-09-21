@@ -29,12 +29,14 @@ export async function GET(request: Request) {
     : undefined;
   const estado = searchParams.get("estado") as LeadEstado | null;
   const tipoCredito = searchParams.get("tipoCredito");
+  const origen = searchParams.get("origen");
   const q = searchParams.get("q");
 
   const leads = await fetchLeadsForExport({
     ids,
     estado: estado || null,
     tipoCredito: tipoCredito || null,
+    origen: origen || null,
     q,
   });
 

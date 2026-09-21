@@ -1,7 +1,7 @@
 /**
  * Validación y verificación de documentos de identidad colombianos.
  *
- * Formato CC: 6, 7 o 10 dígitos. Integración opcional con Verifik/Registraduría.
+ * Formato CC: 6, 7, 8 o 10 dígitos. Integración opcional con Verifik/Registraduría.
  *
  * @see cedula-local.ts — validación offline usada en el formulario
  * @see POST /api/verify-cedula — endpoint de verificación externa
@@ -13,13 +13,13 @@ export function normalizeDocumentNumber(value: string): string {
 }
 
 /** Longitudes válidas de cédula de ciudadanía colombiana (Registraduría). */
-export const COLOMBIAN_CC_LENGTHS = [6, 7, 10] as const;
+export const COLOMBIAN_CC_LENGTHS = [6, 7, 8, 10] as const;
 
 export function isValidColombianCcLength(digitCount: number): boolean {
   return (COLOMBIAN_CC_LENGTHS as readonly number[]).includes(digitCount);
 }
 
-/** Cédula de ciudadanía colombiana: exactamente 6, 7 o 10 dígitos numéricos. */
+/** Cédula de ciudadanía colombiana: 6, 7, 8 o 10 dígitos numéricos. */
 export function isValidCcFormat(documentNumber: string): boolean {
   const digits = normalizeDocumentNumber(documentNumber);
   if (!/^\d+$/.test(digits)) return false;
@@ -27,7 +27,7 @@ export function isValidCcFormat(documentNumber: string): boolean {
 }
 
 export function getColombianCcFormatMessage(): string {
-  return "La cédula de ciudadanía debe tener 6, 7 o 10 dígitos (solo números, formato colombiano).";
+  return "La cédula de ciudadanía debe tener 6, 7, 8 o 10 dígitos (solo números, formato colombiano).";
 }
 
 /** Convierte YYYY-MM-DD (input date) a DD/MM/YYYY (Verifik). */

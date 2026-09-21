@@ -18,6 +18,8 @@ import { ParametrosAmortizacionProvider } from "@/presentation/contexts/Parametr
 import { useNanocreditoDraft } from "@/presentation/hooks/useNanocreditoDraft";
 import {
   clearNanocreditoServerDraftId,
+  disableNanocreditoServerDraftSync,
+  enableNanocreditoServerDraftSync,
   getNanocreditoServerDraftId,
   syncNanocreditoDraftToServer,
   useNanocreditoServerDraft,
@@ -32,11 +34,11 @@ import {
   sanitizeNanocreditoForLog,
   type NanocreditoFormValues,
 } from "@/shared/validation/nanocredito";
-import { deserializeUtm } from "@/presentation/tracking/utm";
+import { deserializeUtm, resolveOrigenFromAttribution } from "@/presentation/tracking/utm";
 import { getUtmFromCookie } from "@/presentation/tracking/TrackingProvider";
 import { trackEvent } from "@/presentation/tracking/analytics";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FormProvider, useForm, type FieldErrors, type Path } from "react-hook-form";
 
 const STEP_COMPONENTS = [
@@ -120,8 +122,19 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
     watch,
     getValues,
     step,
-    enabled: !submitted,
+    enabled: !submitted && !submitting,
   });
+
+  useEffect(() => {
+    const utm = deserializeUtm(getUtmFromCookie() ?? undefined);
+    trackEvent("begin_form", {
+      tipo_credito: defaultValues.tipoCredito,
+      origen: resolveOrigenFromAttribution(utm),
+      utm_source: utm?.utmSource,
+      utm_campaign: utm?.utmCampaign,
+    });
+  }, [defaultValues.tipoCredito]);
+
   const current = NANOCREDITO_STEPS[step];
   const StepFields = STEP_COMPONENTS[step];
   const progress = ((step + 1) / totalSteps) * 100;
@@ -191,6 +204,8 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
   const onSubmit = async (data: NanocreditoFormValues) => {
     setSubmitError(null);
     setSubmitting(true);
+    const draftLeadId = getNanocreditoServerDraftId();
+    disableNanocreditoServerDraftSync();
 
     try {
       if (isDemoMode) {
@@ -211,7 +226,7 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
       const payload = {
         ...data,
         utm,
-        draftLeadId: getNanocreditoServerDraftId() ?? undefined,
+        draftLeadId: draftLeadId ?? undefined,
         geoCliente: data.geolocalizacion
           ? { lat: data.geolocalizacion.lat, lng: data.geolocalizacion.lng }
           : undefined,
@@ -221,6 +236,7 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(90_000),
       });
 
       const result = (await response.json().catch(() => ({}))) as {
@@ -241,17 +257,23 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
         tipo_credito: data.tipoCredito,
         monto: data.capitalSeleccionado,
         lead_id: result.id,
+        origen: resolveOrigenFromAttribution(utm),
+        utm_source: utm?.utmSource,
+        utm_campaign: utm?.utmCampaign,
       });
       clearDraft();
       clearNanocreditoServerDraftId();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("[FormularioMicrocreditoSmall] submit", error);
-      setSubmitError(
-        error instanceof Error
-          ? error.message
-          : "Error de conexión. Revisa tu internet e intenta de nuevo.",
-      );
+      enableNanocreditoServerDraftSync();
+      const message =
+        error instanceof DOMException && error.name === "TimeoutError"
+          ? "El servidor tardó demasiado en responder. Intenta de nuevo; si persiste, usa «Subir imagen» en lugar de la cámara."
+          : error instanceof Error
+            ? error.message
+            : "Error de conexión. Revisa tu internet e intenta de nuevo.";
+      setSubmitError(message);
     } finally {
       setSubmitting(false);
     }
@@ -260,6 +282,7 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
   const nuevaSolicitud = () => {
     clearDraft();
     clearNanocreditoServerDraftId();
+    enableNanocreditoServerDraftSync();
     reset(defaultValues);
     dismissDraftMessage();
     setSubmitted(false);
