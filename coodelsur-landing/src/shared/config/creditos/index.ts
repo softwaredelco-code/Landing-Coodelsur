@@ -75,7 +75,7 @@ const creditosCatalogo: Omit<CreditoConfig, "sections">[] = [
     nombre: libranzaConfig.nombre,
     descripcionCorta: libranzaConfig.descripcionCorta,
     descripcion: libranzaConfig.descripcion,
-    disponible: false,
+    disponible: true,
   },
 ];
 

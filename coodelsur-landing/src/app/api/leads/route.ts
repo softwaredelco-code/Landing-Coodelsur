@@ -7,6 +7,7 @@ import {
 import { getClientIp } from "@/shared/utils";
 import { montoCoincideConTipo, resolverTipoPorMonto } from "@/shared/config/creditos/montos";
 import { nanocreditoSchema } from "@/shared/validation/nanocredito";
+import { libranzaSchema } from "@/shared/validation/libranza/schema";
 import { buildFormSchema, leadApiSchema } from "@/shared/validation/schemas";
 import { NextResponse } from "next/server";
 import type { TipoCredito, UtmParams } from "@/shared/types/credito";
@@ -39,7 +40,9 @@ export async function POST(request: Request) {
     const formSchema =
       tipoCanonico === "microcredito_small"
         ? nanocreditoSchema
-        : buildFormSchema(tipoCanonico);
+        : tipoCanonico === "libranza"
+          ? libranzaSchema
+          : buildFormSchema(tipoCanonico);
     const formResult = formSchema.safeParse({
       ...body,
       tipoCredito: tipoCanonico,

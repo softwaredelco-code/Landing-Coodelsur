@@ -134,6 +134,51 @@ export const ANOS_PAGO = Array.from({ length: 10 }, (_, i) => {
   return { label: String(year), value: String(year) };
 });
 
+/* ─── Opciones específicas Libranza ────────────────────────── */
+
+export const TIPOS_IDENTIFICACION_LIBRANZA = [
+  { label: "Cédula de ciudadanía (CC)", value: "CC" },
+  { label: "Cédula de extranjería (CE)", value: "CE" },
+];
+
+export const NIVELES_EDUCACION = [
+  { label: "Primaria", value: "primaria" },
+  { label: "Secundaria", value: "secundaria" },
+  { label: "Técnico", value: "tecnico" },
+  { label: "Tecnólogo", value: "tecnologo" },
+  { label: "Profesional", value: "profesional" },
+  { label: "Especialización", value: "especializacion" },
+  { label: "Maestría", value: "maestria" },
+  { label: "Doctorado", value: "doctorado" },
+  { label: "Ninguno", value: "ninguno" },
+];
+
+export const TIPOS_CONTRATO = [
+  { label: "Término indefinido", value: "indefinido" },
+  { label: "Término fijo", value: "fijo" },
+  { label: "Prestación de servicios", value: "prestacion_servicios" },
+  { label: "Obra o labor", value: "obra_labor" },
+  { label: "Contrato de aprendizaje", value: "aprendizaje" },
+  { label: "Otro", value: "otro" },
+];
+
+export const DIAS_PAGO_LIBRANZA = [
+  { label: "5", value: "5" },
+  { label: "15", value: "15" },
+  { label: "30", value: "30" },
+];
+
+export const SI_NO_NOSE = [
+  { label: "Sí", value: "si" },
+  { label: "No", value: "no" },
+  { label: "No sé", value: "no_se" },
+];
+
+export const CUOTAS_LIBRANZA = Array.from({ length: 31 }, (_, i) => ({
+  label: `${i + 6} cuotas`,
+  value: String(i + 6),
+}));
+
 /**
  * @deprecated Preferir rangos por producto en `config/creditos/montos.ts`.
  * Se mantienen aliases para no romper imports legacy del nanocrédito.

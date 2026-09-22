@@ -173,7 +173,7 @@ No partes de cero. El proyecto ya tiene stubs y defaults:
 
 ### Fase A — Definición (con negocio / Coodelsur)
 
-- [ ] Obtener lista oficial de campos, pasos y reglas condicionales (¿iguales al Small? ¿más pasos? ¿campos extra de actividad rural/urbana?).
+- [ ] Obtener lista oficial de campos, pasos y reglas cñondicionales (¿iguales al Small? ¿más pasos? ¿campos extra de actividad rural/urbana?).
 - [ ] Confirmar plazos permitidos y fórmula de amortización (defaults en `amortizacion.ts` son **provisionales**).
 - [ ] Confirmar destinos del crédito, documentos adjuntos requeridos y límites de tamaño.
 - [ ] Decidir si reutiliza pasos del Small tal cual o hay variaciones por producto.

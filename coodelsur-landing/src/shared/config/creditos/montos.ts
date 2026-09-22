@@ -54,6 +54,14 @@ export const RANGOS_MONTO_CREDITO: readonly RangoMonto[] = [
     step: 100_000,
     formularioDisponible: false,
   },
+  {
+    tipo: "libranza",
+    nombre: "Crédito Libranza",
+    min: 700_000,
+    max: 20_000_000,
+    step: 100_000,
+    formularioDisponible: true,
+  },
 ] as const;
 
 export const MONTO_SELECTOR_MIN = 200_000;

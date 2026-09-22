@@ -57,7 +57,7 @@ export const FORMULARIOS_PRODUCTO: Record<TipoCredito, FormularioProductoMeta> =
     ruta: "/credito/libranza",
     carpeta: "libranza",
     validation: "shared/validation/libranza/schema.ts",
-    implementado: false,
+    implementado: true,
   },
 };
 
