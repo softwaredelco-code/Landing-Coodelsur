@@ -3,11 +3,33 @@
 import { Button } from "@/presentation/components/ui/Button";
 import { SECTORES_DOMICILIO } from "@/shared/config/creditos/opciones";
 import { formatCOP } from "@/shared/utils";
-import type { NanocreditoFormValues } from "@/shared/validation/nanocredito";
+import type { GeoCoords } from "@/shared/types/credito";
 import Link from "next/link";
 
+/** Campos mínimos para la pantalla de confirmación (Small, Libranza, etc.). */
+export interface ConfirmacionSolicitudData {
+  nombre: string;
+  email: string;
+  telefono: string;
+  tipoIdentificacion: string;
+  cedula: string;
+  capitalSeleccionado: number;
+  cantidadCuotas: number;
+  valorCuota?: number | null;
+  municipio: string;
+  departamento: string;
+  sectorDomicilio?: string;
+  cedulaFrontal?: { fileName?: string } | null;
+  cedulaReverso?: { fileName?: string } | null;
+  videoVerificacion?: { fileName?: string } | null;
+  firma?: string | null;
+  aceptaTerminos: boolean;
+  fechaAceptacionTerminos?: string | null;
+  geolocalizacion?: GeoCoords | null;
+}
+
 interface ConfirmacionSolicitudProps {
-  data: NanocreditoFormValues;
+  data: ConfirmacionSolicitudData;
   leadId?: string | null;
   onNuevaSolicitud: () => void;
 }
@@ -28,9 +50,14 @@ export function ConfirmacionSolicitud({
   leadId,
   onNuevaSolicitud,
 }: ConfirmacionSolicitudProps) {
-  const sectorLabel =
-    SECTORES_DOMICILIO.find((sector) => sector.value === data.sectorDomicilio)?.label ??
-    data.sectorDomicilio;
+  const sectorLabel = data.sectorDomicilio
+    ? SECTORES_DOMICILIO.find((sector) => sector.value === data.sectorDomicilio)?.label ??
+      data.sectorDomicilio
+    : null;
+
+  const domicilio = sectorLabel
+    ? `${data.municipio}, ${data.departamento} (${sectorLabel})`
+    : `${data.municipio}, ${data.departamento}`;
 
   return (
     <div className="border border-gray-200 bg-white p-6 shadow-sm md:p-10">
@@ -56,7 +83,6 @@ export function ConfirmacionSolicitud({
         </p>
       )}
 
-
       <dl className="mt-8 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4">
         <Row label="Nombre" value={data.nombre} />
         <Row label="E-mail" value={data.email} />
@@ -64,8 +90,15 @@ export function ConfirmacionSolicitud({
         <Row label="Identificación" value={`${data.tipoIdentificacion} ${data.cedula}`} />
         <Row label="Capital" value={formatCOP(Number(data.capitalSeleccionado))} />
         <Row label="Cuotas" value={String(data.cantidadCuotas)} />
-        <Row label="Valor cuota" value={formatCOP(Number(data.valorCuota))} />
-        <Row label="Domicilio" value={`${data.municipio}, ${data.departamento} (${sectorLabel})`} />
+        <Row
+          label="Valor cuota"
+          value={
+            data.valorCuota != null && Number(data.valorCuota) > 0
+              ? formatCOP(Number(data.valorCuota))
+              : "Por calcular"
+          }
+        />
+        <Row label="Domicilio" value={domicilio} />
         <Row label="Cédula frontal" value={data.cedulaFrontal?.fileName ? "Archivo cargado" : "—"} />
         <Row label="Cédula reverso" value={data.cedulaReverso?.fileName ? "Archivo cargado" : "—"} />
         <Row label="Video" value={data.videoVerificacion?.fileName ? "Video cargado" : "—"} />
