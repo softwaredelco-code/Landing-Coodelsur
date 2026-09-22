@@ -13,6 +13,7 @@ export interface FetchLeadsForExportOptions {
   ids?: string[];
   estado?: LeadEstado | null;
   tipoCredito?: string | null;
+  origen?: string | null;
   q?: string | null;
 }
 
@@ -52,6 +53,7 @@ function buildWhere(options: FetchLeadsForExportOptions) {
     ...(options.ids?.length ? { id: { in: options.ids } } : {}),
     ...(options.estado ? { estado: options.estado } : {}),
     ...(options.tipoCredito ? { tipoCredito: options.tipoCredito } : {}),
+    ...(options.origen ? { origen: options.origen } : {}),
     ...(q
       ? {
           OR: [
@@ -81,6 +83,9 @@ function filterFileLeads(
   }
   if (options.tipoCredito) {
     filtered = filtered.filter((lead) => lead.tipoCredito === options.tipoCredito);
+  }
+  if (options.origen) {
+    filtered = filtered.filter((lead) => lead.origen === options.origen);
   }
   if (q) {
     filtered = filtered.filter(

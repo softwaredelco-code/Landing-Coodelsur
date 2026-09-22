@@ -214,7 +214,7 @@ export function formatDocumentInput(documentType: string, value: string): string
 export function getDocumentFormatHint(documentType: string): string | undefined {
   switch (documentType.trim().toUpperCase()) {
     case "CC":
-      return "Solo números. Cédula colombiana: 6, 7 o 10 dígitos.";
+      return "Solo números. Cédula colombiana: 6, 7, 8 o 10 dígitos.";
     case "CE":
       return "Solo números. Cédula de extranjería: entre 6 y 10 dígitos.";
     case "TI":

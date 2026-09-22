@@ -20,6 +20,7 @@ jobs:
     env:
       NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
       NEXT_PUBLIC_DEMO_MODE: ${{ secrets.NEXT_PUBLIC_DEMO_MODE || 'false' }}
+      NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DIRECT_URL: ${{ secrets.DIRECT_URL }}
 

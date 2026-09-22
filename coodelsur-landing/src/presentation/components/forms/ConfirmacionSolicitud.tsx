@@ -14,10 +14,12 @@ interface ConfirmacionSolicitudProps {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5 border-b border-gray-100 py-2 sm:flex-row sm:justify-between sm:gap-4">
-      <dt className="text-sm text-gray-500">{label}</dt>
-      <dd className="text-sm font-medium text-coodel-dark sm:text-right">{value}</dd>
-    </div>
+    <>
+      <dt className="border-b border-gray-100 py-2 text-sm text-gray-500">{label}</dt>
+      <dd className="border-b border-gray-100 py-2 text-sm font-medium text-coodel-dark sm:text-right">
+        {value}
+      </dd>
+    </>
   );
 }
 
@@ -54,7 +56,8 @@ export function ConfirmacionSolicitud({
         </p>
       )}
 
-      <dl className="mt-8">
+
+      <dl className="mt-8 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4">
         <Row label="Nombre" value={data.nombre} />
         <Row label="E-mail" value={data.email} />
         <Row label="Celular" value={data.telefono} />

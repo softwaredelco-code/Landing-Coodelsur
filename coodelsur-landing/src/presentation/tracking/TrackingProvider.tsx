@@ -2,13 +2,14 @@
 
 import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { isAnalyticsEnabled, trackPageView } from "./analytics";
 import {
-  parseUtmFromSearchParams,
+  parseAttributionFromSearchParams,
+  resolveOrigenFromAttribution,
   serializeUtm,
   UTM_COOKIE_MAX_AGE,
   UTM_COOKIE_NAME,
 } from "./utm";
+import { isAnalyticsEnabled, trackEvent, trackPageView } from "./analytics";
 
 function setCookie(name: string, value: string, maxAge: number) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
@@ -28,9 +29,18 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const utm = parseUtmFromSearchParams(searchParams);
-    if (utm) {
-      setCookie(UTM_COOKIE_NAME, serializeUtm(utm), UTM_COOKIE_MAX_AGE);
+    const attribution = parseAttributionFromSearchParams(searchParams);
+    if (attribution) {
+      setCookie(UTM_COOKIE_NAME, serializeUtm(attribution), UTM_COOKIE_MAX_AGE);
+
+      if (isAnalyticsEnabled()) {
+        trackEvent("campaign_attribution", {
+          origen: resolveOrigenFromAttribution(attribution),
+          utm_source: attribution.utmSource,
+          utm_medium: attribution.utmMedium,
+          utm_campaign: attribution.utmCampaign,
+        });
+      }
     }
   }, [searchParams]);
 

@@ -29,6 +29,10 @@ yarn-error.log*
 .env
 .env*.local
 
+# Witme credentials (contiene API Key — solo entrega local, no subir a git)
+docs/witme/COODELSUR-CREDENCIALES-WITME.md
+docs/witme/COODELSUR-CREDENCIALES-WITME.pdf
+
 # local lead fallback store (cuando no hay PostgreSQL)
 /data
 
