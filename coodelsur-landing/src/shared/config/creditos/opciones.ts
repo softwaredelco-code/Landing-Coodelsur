@@ -22,6 +22,25 @@ export const ESTADOS_CIVILES = [
   { label: "Viudo/a", value: "viudo" },
 ];
 
+/** Estados civiles con pareja/cónyuge (requieren nombre del cónyuge). */
+export const ESTADOS_CIVILES_CON_CONYUGE = ["casado", "union_libre"] as const;
+
+export function requiereNombreConyuge(estadoCivil: string | undefined | null): boolean {
+  return ESTADOS_CIVILES_CON_CONYUGE.includes(
+    (estadoCivil ?? "") as (typeof ESTADOS_CIVILES_CON_CONYUGE)[number],
+  );
+}
+
+export const NIVELES_EDUCACION = [
+  { label: "Ninguno", value: "ninguno" },
+  { label: "Primaria", value: "primaria" },
+  { label: "Bachillerato", value: "bachillerato" },
+  { label: "Técnico", value: "tecnico" },
+  { label: "Tecnólogo", value: "tecnologo" },
+  { label: "Universitario", value: "universitario" },
+  { label: "Posgrado", value: "posgrado" },
+];
+
 export const SI_NO = [
   { label: "Sí", value: "si" },
   { label: "No", value: "no" },
@@ -93,6 +112,13 @@ export const DESTINOS_CREDITO = [
   { label: "Otro", value: "otro" },
 ];
 
+/** Destinos del crédito para Microcrédito urbano. */
+export const DESTINOS_CREDITO_URBANO = [
+  { label: "Capital de trabajo", value: "capital_trabajo" },
+  { label: "Maquinaria y Equipo", value: "maquinaria_equipo" },
+  { label: "Activos fijos", value: "activos_fijos" },
+];
+
 export const ORIGENES_OTROS_INGRESOS = [
   { label: "Arriendos", value: "arriendos" },
   { label: "Negocio propio o ventas informales", value: "negocio_propio" },
@@ -113,6 +139,13 @@ export const DIAS_PAGO = Array.from({ length: 28 }, (_, i) => ({
   label: String(i + 1),
   value: String(i + 1),
 }));
+
+/** Días de pago de cuota disponibles para Microcrédito urbano. */
+export const DIAS_PAGO_CUOTA_URBANO = [
+  { label: "Día 5", value: "5" },
+  { label: "Día 15", value: "15" },
+  { label: "Día 30", value: "30" },
+];
 
 export const MESES = [
   { label: "Enero", value: "1" },

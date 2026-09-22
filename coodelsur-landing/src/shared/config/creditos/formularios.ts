@@ -29,7 +29,7 @@ export const FORMULARIOS_PRODUCTO: Record<TipoCredito, FormularioProductoMeta> =
     ruta: "/credito/microcredito_urbano",
     carpeta: "microcredito-urbano",
     validation: "shared/validation/microcredito-urbano/schema.ts",
-    implementado: false,
+    implementado: true,
   },
   microcredito_rural: {
     tipo: "microcredito_rural",

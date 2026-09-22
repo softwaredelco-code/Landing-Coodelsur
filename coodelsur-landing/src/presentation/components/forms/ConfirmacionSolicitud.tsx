@@ -4,10 +4,11 @@ import { Button } from "@/presentation/components/ui/Button";
 import { SECTORES_DOMICILIO } from "@/shared/config/creditos/opciones";
 import { formatCOP } from "@/shared/utils";
 import type { NanocreditoFormValues } from "@/shared/validation/nanocredito";
+import type { MicrocreditoUrbanoFormValues } from "@/shared/validation/microcredito-urbano/schema";
 import Link from "next/link";
 
 interface ConfirmacionSolicitudProps {
-  data: NanocreditoFormValues;
+  data: NanocreditoFormValues | MicrocreditoUrbanoFormValues;
   leadId?: string | null;
   onNuevaSolicitud: () => void;
 }
@@ -29,8 +30,18 @@ export function ConfirmacionSolicitud({
   onNuevaSolicitud,
 }: ConfirmacionSolicitudProps) {
   const sectorLabel =
-    SECTORES_DOMICILIO.find((sector) => sector.value === data.sectorDomicilio)?.label ??
-    data.sectorDomicilio;
+    "sectorDomicilio" in data && data.sectorDomicilio
+      ? (SECTORES_DOMICILIO.find((sector) => sector.value === data.sectorDomicilio)?.label ??
+        data.sectorDomicilio)
+      : null;
+  const ciudadLabel = "ciudad" in data && data.ciudad ? data.ciudad : null;
+  const domicilioResumen = [
+    `${data.municipio}, ${data.departamento}`,
+    ciudadLabel,
+    sectorLabel ? `(${sectorLabel})` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="border border-gray-200 bg-white p-6 shadow-sm md:p-10">
@@ -65,7 +76,7 @@ export function ConfirmacionSolicitud({
         <Row label="Capital" value={formatCOP(Number(data.capitalSeleccionado))} />
         <Row label="Cuotas" value={String(data.cantidadCuotas)} />
         <Row label="Valor cuota" value={formatCOP(Number(data.valorCuota))} />
-        <Row label="Domicilio" value={`${data.municipio}, ${data.departamento} (${sectorLabel})`} />
+        <Row label="Domicilio" value={domicilioResumen} />
         <Row label="Cédula frontal" value={data.cedulaFrontal?.fileName ? "Archivo cargado" : "—"} />
         <Row label="Cédula reverso" value={data.cedulaReverso?.fileName ? "Archivo cargado" : "—"} />
         <Row label="Video" value={data.videoVerificacion?.fileName ? "Video cargado" : "—"} />

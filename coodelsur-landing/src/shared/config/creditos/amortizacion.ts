@@ -44,7 +44,7 @@ export const DEFAULT_AMORTIZACION_POR_TIPO: Partial<Record<TipoCredito, Parametr
     estudioCredito: { modo: "porcentaje", porcentaje: 0.15 },
     fianzaMensualPorcentaje: 0.1,
     vidaDeudoresPorcentaje: 437 / 200_000,
-    plazosPermitidos: [6, 12, 18, 24, 36, 48],
+    plazosPermitidos: [6, 12, 18, 24, 36],
   },
   microcredito_rural: {
     tasaMensual: 0.018,

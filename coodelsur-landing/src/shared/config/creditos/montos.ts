@@ -3,13 +3,13 @@
  *
  * Productos:
  * - Microcrédito Small:  $200.000 – $600.000
- * - Microcrédito urbano: $600.001 – $20.000.000
+ * - Microcrédito urbano: $700.000 – $7.000.000
  * - Microcrédito rural:  $1.000.000 – $5.000.000
  *
  * Nota: rural y urbano se solapan entre $1M y $5M.
  * En ese intervalo el usuario debe confirmar cuál aplica.
  *
- * Por ahora solo Small tiene formulario publicado.
+ * Small y urbano tienen formulario publicado.
  */
 
 import type { TipoCredito } from "@/shared/types/credito";
@@ -25,10 +25,7 @@ export interface RangoMonto {
   formularioDisponible: boolean;
 }
 
-/**
- * Catálogo oficial.
- * Urbano inicia en 600.001 para que $600.000 quede en Small (“hasta 600.000”).
- */
+/** Catálogo oficial de montos por producto. */
 export const RANGOS_MONTO_CREDITO: readonly RangoMonto[] = [
   {
     tipo: "microcredito_small",
@@ -41,10 +38,10 @@ export const RANGOS_MONTO_CREDITO: readonly RangoMonto[] = [
   {
     tipo: "microcredito_urbano",
     nombre: "Microcrédito urbano",
-    min: 600_001,
-    max: 20_000_000,
+    min: 700_000,
+    max: 7_000_000,
     step: 100_000,
-    formularioDisponible: false,
+    formularioDisponible: true,
   },
   {
     tipo: "microcredito_rural",
@@ -57,7 +54,7 @@ export const RANGOS_MONTO_CREDITO: readonly RangoMonto[] = [
 ] as const;
 
 export const MONTO_SELECTOR_MIN = 200_000;
-export const MONTO_SELECTOR_MAX = 20_000_000;
+export const MONTO_SELECTOR_MAX = 7_000_000;
 export const MONTO_SELECTOR_STEP = 50_000;
 /** Valor inicial dentro de Small (único formulario activo). */
 export const MONTO_SELECTOR_DEFAULT = 400_000;
@@ -105,7 +102,7 @@ export function resolverTipoPorMonto(monto: number): ResolucionMonto {
       ok: false,
       monto,
       motivo:
-        "El monto no coincide con un producto. Small: $200.000–$600.000 · Urbano: desde $600.001 · Rural: $1.000.000–$5.000.000.",
+        "El monto no coincide con un producto. Small: $200.000–$600.000 · Urbano: $700.000–$7.000.000 · Rural: $1.000.000–$5.000.000.",
     };
   }
 
@@ -148,7 +145,6 @@ export function descripcionRangosParaUi(): string {
 
 /**
  * Acerca montos fuera de cualquier rango al borde válido más cercano.
- * (Con la cobertura actual 200k–20M casi no hay huecos.)
  */
 export function ajustarMontoAlRangoMasCercano(monto: number): number {
   const resolved = resolverTipoPorMonto(monto);

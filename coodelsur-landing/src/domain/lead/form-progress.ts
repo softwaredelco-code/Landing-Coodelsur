@@ -1,6 +1,7 @@
 import { isValidDocumentFormat } from "@/domain/identity/cedula-local";
 import { normalizeDocumentNumber } from "@/domain/identity/cedula";
 import { NANOCREDITO_STEPS } from "@/shared/validation/nanocredito";
+import { MICROCREDITO_URBANO_STEPS } from "@/shared/validation/microcredito-urbano/schema";
 
 export interface FormProgressMeta {
   porcentaje: number;
@@ -40,17 +41,21 @@ export function calcularProgresoFormulario(
   values: Record<string, unknown>,
   step: number,
 ): FormProgressMeta {
-  const allFields = NANOCREDITO_STEPS.flatMap((section) => section.fields);
+  const steps =
+    values.tipoCredito === "microcredito_urbano"
+      ? MICROCREDITO_URBANO_STEPS
+      : NANOCREDITO_STEPS;
+  const allFields = steps.flatMap((section) => section.fields);
   const filled = allFields.filter((field) => isFieldFilled(field, values[field])).length;
   const porcentaje = allFields.length > 0 ? Math.round((filled / allFields.length) * 100) : 0;
-  const safeStep = Math.min(Math.max(0, step), NANOCREDITO_STEPS.length - 1);
-  const section = NANOCREDITO_STEPS[safeStep];
+  const safeStep = Math.min(Math.max(0, step), steps.length - 1);
+  const section = steps[safeStep];
 
   return {
     porcentaje: Math.min(100, Math.max(0, porcentaje)),
     pasoIndice: safeStep,
     pasoActual: section?.title ?? "Inicio",
-    totalPasos: NANOCREDITO_STEPS.length,
+    totalPasos: steps.length,
     ultimaActualizacion: new Date().toISOString(),
   };
 }

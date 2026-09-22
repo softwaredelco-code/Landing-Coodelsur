@@ -226,13 +226,15 @@ async function findDraftToUpdate(
   draftId: string | undefined,
   cedula: string,
   telefono: string,
-): Promise<string | null> {
+): Promise<{ id: string } | { finalized: true } | null> {
   if (draftId) {
     const byId = await client.lead.findUnique({
       where: { id: draftId },
       select: { id: true, estado: true },
     });
-    if (byId?.estado === "incompleto") return byId.id;
+    if (byId?.estado === "incompleto") return { id: byId.id };
+    // El borrador ya se convirtió en solicitud final: no crear otro incompleto.
+    if (byId) return { finalized: true };
   }
 
   const matchFilters = buildIncompleteMatchFilters(cedula, telefono);
@@ -247,7 +249,30 @@ async function findDraftToUpdate(
     select: { id: true },
   });
 
-  return existing?.id ?? null;
+  return existing?.id ? { id: existing.id } : null;
+}
+
+async function hasRecentFinalizedLead(
+  client: DraftLookupClient,
+  cedula: string,
+  telefono: string,
+  tipoCredito: string,
+): Promise<boolean> {
+  const matchFilters = buildIncompleteMatchFilters(cedula, telefono);
+  if (matchFilters.length === 0) return false;
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const existing = await client.lead.findFirst({
+    where: {
+      estado: { not: "incompleto" },
+      tipoCredito,
+      fechaCreacion: { gte: since },
+      OR: matchFilters,
+    },
+    select: { id: true },
+  });
+
+  return Boolean(existing);
 }
 
 async function dedupeIncompleteDrafts(
@@ -272,10 +297,11 @@ function findDraftToUpdateInFile(
   draftId: string | undefined,
   cedula: string,
   telefono: string,
-): string | null {
+): { id: string } | { finalized: true } | null {
   if (draftId) {
     const fileLead = getLeadFromFile(draftId);
-    if (fileLead?.estado === "incompleto") return fileLead.id;
+    if (fileLead?.estado === "incompleto") return { id: fileLead.id };
+    if (fileLead) return { finalized: true };
   }
 
   const phoneDigits = telefono.replace(/\D/g, "");
@@ -289,7 +315,34 @@ function findDraftToUpdateInFile(
     return phoneDigits.length >= 10 && lead.telefono.replace(/\D/g, "").endsWith(phoneDigits.slice(-10));
   });
 
-  return match?.id ?? null;
+  return match?.id ? { id: match.id } : null;
+}
+
+function hasRecentFinalizedLeadInFile(
+  cedula: string,
+  telefono: string,
+  tipoCredito: string,
+): boolean {
+  const phoneDigits = telefono.replace(/\D/g, "");
+  const normalizedCedula = normalizeDocumentNumber(cedula);
+  const since = Date.now() - 24 * 60 * 60 * 1000;
+
+  return listLeadsFromFile().some((lead) => {
+    if (lead.estado === "incompleto") return false;
+    if (lead.tipoCredito !== tipoCredito) return false;
+    const createdAt = new Date(lead.fechaCreacion).getTime();
+    if (!Number.isFinite(createdAt) || createdAt < since) return false;
+
+    const sameCedula =
+      normalizedCedula &&
+      normalizedCedula !== "pendiente" &&
+      lead.cedula === normalizedCedula;
+    const samePhone =
+      phoneDigits.length >= 10 &&
+      lead.telefono.replace(/\D/g, "").endsWith(phoneDigits.slice(-10));
+
+    return Boolean(sameCedula || samePhone);
+  });
 }
 
 function dedupeIncompleteDraftsInFile(keepId: string, cedula: string, telefono: string): void {
@@ -407,7 +460,19 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
 
       const lead = await prisma.$transaction(
         async (tx) => {
-          const existingId = await findDraftToUpdate(tx, input.draftId, cedula, telefono);
+          const existing = await findDraftToUpdate(tx, input.draftId, cedula, telefono);
+          if (existing && "finalized" in existing) {
+            return null;
+          }
+
+          const existingId = existing?.id ?? null;
+          if (
+            !existingId &&
+            (await hasRecentFinalizedLead(tx, cedula, telefono, tipoCredito))
+          ) {
+            return null;
+          }
+
           const geoFromIp = existingId ? {} : geoCandidate;
 
           const payload = {
@@ -433,6 +498,10 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
         { timeout: 15_000 },
       );
 
+      if (!lead) {
+        return null;
+      }
+
       return {
         id: lead.id,
         porcentajeCompletado: progreso.porcentaje,
@@ -444,7 +513,16 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
     }
   }
 
-  const existingId = findDraftToUpdateInFile(input.draftId, cedula, telefono);
+  const existing = findDraftToUpdateInFile(input.draftId, cedula, telefono);
+  if (existing && "finalized" in existing) {
+    return null;
+  }
+
+  const existingId = existing?.id ?? null;
+  if (!existingId && hasRecentFinalizedLeadInFile(cedula, telefono, tipoCredito)) {
+    return null;
+  }
+
   const geoFromIp = existingId ? {} : await geolocateByIp(input.ip ?? null);
   const filePayload = {
     ...leadData,

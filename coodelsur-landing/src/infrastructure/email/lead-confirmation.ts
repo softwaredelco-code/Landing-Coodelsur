@@ -74,11 +74,14 @@ export function buildLeadConfirmationEmail(input: LeadConfirmationEmailInput) {
           ${row("Cuotas", getString(data, "cantidadCuotas"))}
           ${row("Valor cuota", valorCuota > 0 ? formatCOP(valorCuota) : "—")}
           ${row("Destino del crédito", getString(data, "destinoCredito"))}
+          ${row("Día de pago de la cuota", getString(data, "diaPagoCuota"))}
           ${row("Departamento", getString(data, "departamento"))}
           ${row("Municipio", getString(data, "municipio"))}
-          ${row("Sector", getString(data, "sectorDomicilio"))}
           ${row("Dirección", getString(data, "direccion"))}
           ${row("Barrio", getString(data, "barrio"))}
+          ${row("Ciudad", getString(data, "ciudad"))}
+          ${row("Estrato", getString(data, "estrato"))}
+          ${row("Sector", getString(data, "sectorDomicilio"))}
         </table>
         <p style="margin:24px 0 0;color:#64748b;font-size:13px;line-height:1.6;">
           Si necesitas actualizar algún dato, responde a este correo o escríbenos a

@@ -145,6 +145,11 @@ const EXPORT_COLUMNS: ExportColumn[] = [
     value: (l) => readString(datosOf(l), "destinoCredito"),
   },
   {
+    header: "Día pago cuota",
+    width: 14,
+    value: (l) => readString(datosOf(l), "diaPagoCuota"),
+  },
+  {
     header: "Ingresos mensuales",
     width: 18,
     value: (l) => {

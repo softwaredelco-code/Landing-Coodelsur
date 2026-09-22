@@ -54,7 +54,7 @@ const creditosCatalogo: Omit<CreditoConfig, "sections">[] = [
     nombre: microcreditoUrbanoConfig.nombre,
     descripcionCorta: microcreditoUrbanoConfig.descripcionCorta,
     descripcion: microcreditoUrbanoConfig.descripcion,
-    disponible: false,
+    disponible: true,
   },
   {
     slug: "consumo",
