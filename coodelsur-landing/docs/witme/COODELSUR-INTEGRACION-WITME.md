@@ -57,7 +57,7 @@ La **API Key** está en el documento *COODELSUR-CREDENCIALES-WITME.pdf*.
 |-------|-------------|
 | `witme_id` | ID del lead en Witme |
 | `email` | Correo electrónico |
-| `tipo_credito` | `microcredito_small` (default), `microcredito_urbano`, `microcredito_rural`, `consumo`, `comercial`, `libranza` |
+| `tipo_credito` | `microcredito_small` (default), `microcredito_urbano`, `libranza`, `consumo`, `comercial`, `libranza` |
 | `acepta_terminos` | `true` si aceptó términos |
 | `datos_formulario` | Objeto JSON con **todos** los campos del formulario Witme |
 

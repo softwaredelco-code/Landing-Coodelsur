@@ -4,10 +4,7 @@
  * Productos:
  * - Microcrédito Small:  $200.000 – $600.000
  * - Microcrédito urbano: $600.001 – $20.000.000
- * - Microcrédito rural:  $1.000.000 – $5.000.000
- *
- * Nota: rural y urbano se solapan entre $1M y $5M.
- * En ese intervalo el usuario debe confirmar cuál aplica.
+ * - Crédito Libranza:    $700.000 – $20.000.000
  *
  * Por ahora solo Small tiene formulario publicado.
  */
@@ -46,14 +43,7 @@ export const RANGOS_MONTO_CREDITO: readonly RangoMonto[] = [
     step: 100_000,
     formularioDisponible: false,
   },
-  {
-    tipo: "microcredito_rural",
-    nombre: "Microcrédito rural",
-    min: 1_000_000,
-    max: 5_000_000,
-    step: 100_000,
-    formularioDisponible: false,
-  },
+
   {
     tipo: "libranza",
     nombre: "Crédito Libranza",
@@ -113,7 +103,7 @@ export function resolverTipoPorMonto(monto: number): ResolucionMonto {
       ok: false,
       monto,
       motivo:
-        "El monto no coincide con un producto. Small: $200.000–$600.000 · Urbano: desde $600.001 · Rural: $1.000.000–$5.000.000.",
+        "El monto no coincide con un producto. Small: $200.000–$600.000 · Urbano: desde $600.001 · Libranza: $700.000–$20.000.000.",
     };
   }
 

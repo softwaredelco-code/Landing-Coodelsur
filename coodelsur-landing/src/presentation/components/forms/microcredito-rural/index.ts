@@ -1,1 +1,0 @@
-export { FormularioMicrocreditoRural } from "./FormularioMicrocreditoRural";

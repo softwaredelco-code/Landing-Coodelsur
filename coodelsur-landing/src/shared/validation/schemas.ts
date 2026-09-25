@@ -87,7 +87,6 @@ export type FormValues = z.infer<ReturnType<typeof buildFormSchema>>;
 export const leadApiSchema = z.object({
   tipoCredito: z.enum([
     "microcredito_small",
-    "microcredito_rural",
     "microcredito_urbano",
     "consumo",
     "comercial",
