@@ -265,18 +265,6 @@ function readAttachmentInfo(datos: Record<string, unknown>, field: string): stri
   return "No adjunto";
 }
 
-function readGeo(lead: LeadExportRecord, datos: Record<string, unknown>): string {
-  if (lead.latitud != null && lead.longitud != null) {
-    return `${lead.latitud}, ${lead.longitud}`;
-  }
-  const geo = datos.geolocalizacion;
-  if (geo && typeof geo === "object") {
-    const lat = (geo as Record<string, unknown>).lat;
-    const lng = (geo as Record<string, unknown>).lng;
-    if (lat != null && lng != null) return `${lat}, ${lng}`;
-  }
-  return "";
-}
 
 function readCedulaVerificacion(datos: Record<string, unknown>): string {
   const cv = datos.cedulaVerificacion;
@@ -576,16 +564,6 @@ const BASE_COLUMNS: ExportColumn[] = [
   { header: "Validación Cédula (Registraduría)", width: 30, value: (l) => readCedulaVerificacion(datosOf(l)) },
   { header: "Resultado Nodos", width: 16, value: (l) => readString(datosOf(l), "resultadoNodos") },
 
-  // 12. Geolocalización y Marketing (UTM)
-  { header: "Georreferenciación (Lat, Lng)", width: 22, value: (l) => readGeo(l, datosOf(l)) },
-  { header: "IP Solicitante", width: 16, value: (l) => l.ip ?? readString(datosOf(l), "ip") },
-  { header: "Ciudad Detectada (IP)", width: 18, value: (l) => l.ciudad ?? readString(datosOf(l), "ciudad") },
-  { header: "País Detectado (IP)", width: 16, value: (l) => l.pais ?? readString(datosOf(l), "pais") },
-  { header: "UTM Campaign", width: 18, value: (l) => l.utmCampaign ?? readString(datosOf(l), "utmCampaign") },
-  { header: "UTM Source", width: 18, value: (l) => l.utmSource ?? readString(datosOf(l), "utmSource") },
-  { header: "UTM Medium", width: 16, value: (l) => l.utmMedium ?? readString(datosOf(l), "utmMedium") },
-  { header: "UTM Term", width: 16, value: (l) => l.utmTerm ?? readString(datosOf(l), "utmTerm") },
-  { header: "UTM Content", width: 18, value: (l) => l.utmContent ?? readString(datosOf(l), "utmContent") },
 ];
 
 /* ─── Conjunto de llaves estándar para detectar campos extra ── */
@@ -614,6 +592,8 @@ const KNOWN_DATA_KEYS = new Set([
   "cedulaFrontal", "cedulaReverso", "videoVerificacion", "firma",
   "cedulaVerificacion", "resultadoNodos", "geolocalizacion",
   "aceptaTerminos", "fechaAceptacionTerminos", "ip", "utm", "geoCliente",
+  "utmCampaign", "utmSource", "utmMedium", "utmTerm", "utmContent",
+  "latitud", "longitud", "pais",
   "_progreso", "pasoActualFormulario", "draftLeadId", "id", "storage",
 ]);
 
