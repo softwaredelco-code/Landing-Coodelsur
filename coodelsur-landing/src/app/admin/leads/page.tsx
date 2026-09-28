@@ -135,6 +135,7 @@ export default function AdminLeadsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  const completasTotal = estadoCounts.completo ?? 0;
   const porContactarTotal =
     (estadoCounts.por_contactar ?? 0) +
     (estadoCounts.recibido ?? 0) +
@@ -205,8 +206,9 @@ export default function AdminLeadsPage() {
       title="Solicitudes de crédito"
       subtitle="Gestiona, revisa y exporta las solicitudes recibidas."
     >
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-7">
         <StatCard label="Total (filtro)" value={String(total)} />
+        <StatCard label="Completas" value={String(completasTotal)} tone="green" />
         <StatCard
           label="Por Contactar"
           value={String(porContactarTotal)}
@@ -253,6 +255,7 @@ export default function AdminLeadsPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm"
             >
               <option value="">Todos los estados</option>
+              <option value="completo">Completa</option>
               <option value="por_contactar">Por Contactar</option>
               <option value="aprobado">Aprobado</option>
               <option value="no_interesado">No interesado</option>

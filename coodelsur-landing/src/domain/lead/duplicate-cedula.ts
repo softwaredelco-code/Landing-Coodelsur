@@ -4,7 +4,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { withTimeout } from "@/shared/utils";
 
 const DEFAULT_DUPLICATE_DAYS = 30;
-const ACTIVE_STATES = new Set(["por_contactar", "aprobado", "recibido", "revisado", "contactado"]);
+const ACTIVE_STATES = new Set(["completo", "por_contactar", "aprobado", "recibido", "revisado", "contactado"]);
 
 export interface DuplicateCedulaResult {
   duplicate: boolean;

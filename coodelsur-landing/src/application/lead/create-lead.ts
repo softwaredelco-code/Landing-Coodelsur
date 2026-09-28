@@ -115,7 +115,7 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
     fechaAceptacionTerminos && !Number.isNaN(fechaAceptacionTerminos.getTime())
       ? fechaAceptacionTerminos
       : null;
-  const estadoFinal = input.estado ?? "por_contactar";
+  const estadoFinal = input.estado ?? "completo";
   const summary = buildLeadSummaryFields(processedData, estadoFinal);
 
   const forceFile = process.env.LEAD_STORE === "file";

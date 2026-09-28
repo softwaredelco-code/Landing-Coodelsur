@@ -49,6 +49,7 @@ interface ExportColumn {
 
 const ESTADO_LABELS: Record<string, string> = {
   incompleto: "Incompleta",
+  completo: "Completa",
   por_contactar: "Por Contactar",
   no_interesado: "No interesado",
   aprobado: "Aprobado",

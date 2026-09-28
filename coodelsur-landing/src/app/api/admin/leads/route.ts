@@ -36,11 +36,13 @@ export async function GET(request: Request) {
 
   try {
     const estadoFilter = estado
-      ? estado === "por_contactar"
-        ? { in: ["por_contactar", "recibido", "revisado", "contactado"] as LeadEstado[] }
-        : estado === "rechazado_no_cumple"
-          ? { in: ["rechazado_no_cumple", "descartado"] as LeadEstado[] }
-          : estado
+      ? estado === "completo"
+        ? { in: ["completo", "recibido"] as LeadEstado[] }
+        : estado === "por_contactar"
+          ? { in: ["por_contactar", "revisado", "contactado"] as LeadEstado[] }
+          : estado === "rechazado_no_cumple"
+            ? { in: ["rechazado_no_cumple", "descartado"] as LeadEstado[] }
+            : estado
       : undefined;
 
     const hasFilters = Boolean(estadoFilter || tipo || origen || q);

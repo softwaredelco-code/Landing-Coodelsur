@@ -139,6 +139,7 @@ export default function AdminLeadDetailPage() {
           className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm focus:border-coodel-primary focus:outline-none focus:ring-1 focus:ring-coodel-primary"
         >
           <option value="incompleto">Incompleta</option>
+          <option value="completo">Completa</option>
           <option value="por_contactar">Por Contactar</option>
           <option value="no_interesado">No interesado</option>
           <option value="aprobado">Aprobado</option>

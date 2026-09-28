@@ -11,6 +11,7 @@ datasource db {
 
 enum LeadEstado {
   incompleto           // Incompleta
+  completo             // Completa
   por_contactar        // Por Contactar
   no_interesado        // No interesado
   aprobado             // Aprobado
@@ -38,7 +39,7 @@ model Lead {
   /// Payload completo del formulario + metadata de adjuntos (paths, no binarios)
   datosFormulario          Json
   origen                   String     // web, witme, etc.
-  estado                   LeadEstado @default(por_contactar)
+  estado                   LeadEstado @default(completo)
   aceptaTerminos           Boolean    @default(false)
   fechaAceptacionTerminos  DateTime?
   utmSource                String?
