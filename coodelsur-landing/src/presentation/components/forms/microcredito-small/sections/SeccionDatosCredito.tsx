@@ -225,7 +225,7 @@ export function SeccionDatosCredito() {
             <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
             Detalle de la mora reportada
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 [&_label]:min-h-[2.75rem] [&_label]:flex [&_label]:items-end">
             <div>
               <Input
                 label="¿Con qué entidad tiene la mora?"
@@ -237,7 +237,7 @@ export function SeccionDatosCredito() {
             </div>
             <div>
               <Select
-                label="¿Hace cuánto tiempo?"
+                label="¿Hace cuánto tiempo tiene la mora?"
                 options={TIEMPOS_MORA}
                 placeholder="Seleccionar..."
                 required

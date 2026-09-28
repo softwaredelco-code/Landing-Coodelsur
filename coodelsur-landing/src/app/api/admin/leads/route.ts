@@ -18,6 +18,9 @@ function requireAdmin(request: Request): boolean {
   return isValidAdminToken(token, password);
 }
 
+let cachedEstadoCounts: { counts: Record<string, number>; timestamp: number } | null = null;
+const CACHE_TTL_MS = 20_000;
+
 export async function GET(request: Request) {
   if (!requireAdmin(request)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -32,8 +35,6 @@ export async function GET(request: Request) {
   const q = searchParams.get("q")?.trim()?.toLowerCase();
 
   try {
-    await pruneStaleIncompleteDrafts().catch(() => 0);
-
     const estadoFilter = estado
       ? estado === "por_contactar"
         ? { in: ["por_contactar", "recibido", "revisado", "contactado"] as LeadEstado[] }
@@ -41,6 +42,8 @@ export async function GET(request: Request) {
           ? { in: ["rechazado_no_cumple", "descartado"] as LeadEstado[] }
           : estado
       : undefined;
+
+    const hasFilters = Boolean(estadoFilter || tipo || origen || q);
 
     const where = {
       ...(estadoFilter ? { estado: estadoFilter } : {}),
@@ -58,48 +61,59 @@ export async function GET(request: Request) {
         : {}),
     };
 
-    const [leads, total, origenGroups, estadoGroups] = await Promise.all([
-      prisma.lead.findMany({
-        where,
-        orderBy: { fechaCreacion: "desc" },
-        take,
-        skip,
-        select: {
-          id: true,
-          tipoCredito: true,
-          nombre: true,
-          cedula: true,
-          telefono: true,
-          email: true,
-          origen: true,
-          estado: true,
-          aceptaTerminos: true,
-          ciudad: true,
-          fechaCreacion: true,
-          capitalSolicitado: true,
-          progresoFormulario: true,
-          pasoActualFormulario: true,
-        },
-      }),
-      prisma.lead.count({ where }),
-      prisma.lead.groupBy({
-        by: ["origen"],
-        where,
-        _count: { id: true },
-      }),
-      prisma.lead.groupBy({
+    // Obtener estadoCounts usando caché en memoria
+    let estadoCounts: Record<string, number>;
+    const now = Date.now();
+    if (cachedEstadoCounts && now - cachedEstadoCounts.timestamp < CACHE_TTL_MS) {
+      estadoCounts = cachedEstadoCounts.counts;
+    } else {
+      const estadoGroups = await prisma.lead.groupBy({
         by: ["estado"],
-        where,
         _count: { id: true },
-      }),
-    ]);
+      });
+      estadoCounts = Object.fromEntries(
+        estadoGroups.map((row) => [row.estado, row._count.id]),
+      );
+      cachedEstadoCounts = { counts: estadoCounts, timestamp: now };
+    }
 
-    const origenCounts = Object.fromEntries(
-      origenGroups.map((row) => [row.origen, row._count.id]),
-    );
-    const estadoCounts = Object.fromEntries(
-      estadoGroups.map((row) => [row.estado, row._count.id]),
-    );
+    const leadsQuery = prisma.lead.findMany({
+      where,
+      orderBy: { fechaCreacion: "desc" },
+      take,
+      skip,
+      select: {
+        id: true,
+        tipoCredito: true,
+        nombre: true,
+        cedula: true,
+        telefono: true,
+        email: true,
+        origen: true,
+        estado: true,
+        aceptaTerminos: true,
+        ciudad: true,
+        fechaCreacion: true,
+        capitalSolicitado: true,
+        progresoFormulario: true,
+        pasoActualFormulario: true,
+      },
+    });
+
+    let leads;
+    let total: number;
+
+    if (hasFilters) {
+      const [fetchedLeads, count] = await Promise.all([
+        leadsQuery,
+        prisma.lead.count({ where }),
+      ]);
+      leads = fetchedLeads;
+      total = count;
+    } else {
+      leads = await leadsQuery;
+      total = Object.values(estadoCounts).reduce((acc, curr) => acc + curr, 0);
+    }
 
     return NextResponse.json(
       {
@@ -107,7 +121,6 @@ export async function GET(request: Request) {
         total,
         take,
         skip,
-        origenCounts,
         estadoCounts,
         source: "database",
       },
@@ -134,10 +147,6 @@ export async function GET(request: Request) {
       );
     }
     const total = leads.length;
-    const origenCounts = leads.reduce<Record<string, number>>((acc, lead) => {
-      acc[lead.origen] = (acc[lead.origen] ?? 0) + 1;
-      return acc;
-    }, {});
     const estadoCounts = leads.reduce<Record<string, number>>((acc, lead) => {
       acc[lead.estado] = (acc[lead.estado] ?? 0) + 1;
       return acc;
@@ -147,7 +156,6 @@ export async function GET(request: Request) {
       total,
       take,
       skip,
-      origenCounts,
       estadoCounts,
       source: "file",
     });
@@ -169,6 +177,7 @@ export async function PATCH(request: Request) {
       where: { id: body.id },
       data: { estado: body.estado },
     });
+    cachedEstadoCounts = null;
     return NextResponse.json({ success: true, lead, source: "database" });
   } catch (error) {
     if (!isDbConnectionError(error) && getLeadFromFile(body.id)) {
@@ -179,6 +188,7 @@ export async function PATCH(request: Request) {
       if (!lead) {
         return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
       }
+      cachedEstadoCounts = null;
       return NextResponse.json({ success: true, lead, source: "file" });
     }
     throw error;

@@ -84,7 +84,6 @@ export default function AdminLeadsPage() {
   const [estado, setEstado] = useState("");
   const [origen, setOrigen] = useState("");
   const [appliedOrigen, setAppliedOrigen] = useState("");
-  const [origenCounts, setOrigenCounts] = useState<Record<string, number>>({});
   const [estadoCounts, setEstadoCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,12 +114,10 @@ export default function AdminLeadsPage() {
     const data = (await res.json()) as {
       leads: LeadRow[];
       total: number;
-      origenCounts?: Record<string, number>;
       estadoCounts?: Record<string, number>;
     };
     setLeads(data.leads);
     setTotal(data.total);
-    setOrigenCounts(data.origenCounts ?? {});
     setEstadoCounts(data.estadoCounts ?? {});
     setSelectedIds(new Set());
     setLoading(false);
