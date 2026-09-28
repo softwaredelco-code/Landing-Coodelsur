@@ -115,8 +115,20 @@ const nanocreditoBaseSchema = z.object({
   cuotaVidaDeudoresMensual: optionalNumber,
   destinoCredito: requiredText("Destino del crédito"),
   /** Microcrédito Small: pago oportuno 30 días después del desembolso (no lo elige el cliente). */
-  fechaPagoOportunoModo: z.literal("30_dias_despues_desembolso").default("30_dias_despues_desembolso"),
+  fechaPagoOportunoModo: z.preprocess(
+    (val) => (val == null ? "" : String(val).trim()),
+    z.string().optional(),
+  ),
   moraVigente: requiredText("Indica si tienes mora vigente"),
+  moraEntidad: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  moraTiempo: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  moraValor: optionalNumber,
   ingresosMensuales: requiredMoney("Ingresos mensuales"),
   origenOtrosIngresos: z.preprocess(
     (val) => (val == null ? "" : String(val)),
@@ -257,6 +269,19 @@ export function collectCrossFieldErrors(data: NanocreditoFormValues): StepFieldE
     }
   }
 
+  if (data.moraVigente === "si") {
+    if (!data.moraEntidad?.trim()) {
+      errors.push({ path: "moraEntidad", message: "Indica con qué entidad tienes la mora" });
+    }
+    if (!data.moraTiempo?.trim()) {
+      errors.push({ path: "moraTiempo", message: "Indica hace cuánto tiempo es la mora" });
+    }
+    const valMora = Number(data.moraValor);
+    if (data.moraValor == null || Number.isNaN(valMora) || valMora <= 0) {
+      errors.push({ path: "moraValor", message: "Indica el monto aproximado de la mora" });
+    }
+  }
+
   if (data.tieneVehiculo === "si") {
     const placa = (data.placaVehiculo ?? "").trim().toUpperCase();
     if (!placa) {
@@ -334,6 +359,9 @@ export const NANOCREDITO_STEPS = [
       "valorCuota",
       "destinoCredito",
       "moraVigente",
+      "moraEntidad",
+      "moraTiempo",
+      "moraValor",
       "ingresosMensuales",
       "origenOtrosIngresos",
       "origenOtrosIngresosOtro",
@@ -428,6 +456,9 @@ export const nanocreditoDefaultValues: Partial<NanocreditoFormValues> = {
   destinoCredito: "",
   fechaPagoOportunoModo: "30_dias_despues_desembolso",
   moraVigente: "",
+  moraEntidad: "",
+  moraTiempo: "",
+  moraValor: undefined,
   origenOtrosIngresos: "",
   origenOtrosIngresosOtro: "",
   departamento: "",

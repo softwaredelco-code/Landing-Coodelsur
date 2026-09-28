@@ -34,8 +34,16 @@ export async function GET(request: Request) {
   try {
     await pruneStaleIncompleteDrafts().catch(() => 0);
 
+    const estadoFilter = estado
+      ? estado === "por_contactar"
+        ? { in: ["por_contactar", "recibido", "revisado", "contactado"] as LeadEstado[] }
+        : estado === "rechazado_no_cumple"
+          ? { in: ["rechazado_no_cumple", "descartado"] as LeadEstado[] }
+          : estado
+      : undefined;
+
     const where = {
-      ...(estado ? { estado } : {}),
+      ...(estadoFilter ? { estado: estadoFilter } : {}),
       ...(tipo ? { tipoCredito: tipo } : {}),
       ...(origen ? { origen } : {}),
       ...(q
@@ -50,7 +58,7 @@ export async function GET(request: Request) {
         : {}),
     };
 
-    const [leads, total, origenGroups] = await Promise.all([
+    const [leads, total, origenGroups, estadoGroups] = await Promise.all([
       prisma.lead.findMany({
         where,
         orderBy: { fechaCreacion: "desc" },
@@ -79,10 +87,18 @@ export async function GET(request: Request) {
         where,
         _count: { id: true },
       }),
+      prisma.lead.groupBy({
+        by: ["estado"],
+        where,
+        _count: { id: true },
+      }),
     ]);
 
     const origenCounts = Object.fromEntries(
       origenGroups.map((row) => [row.origen, row._count.id]),
+    );
+    const estadoCounts = Object.fromEntries(
+      estadoGroups.map((row) => [row.estado, row._count.id]),
     );
 
     return NextResponse.json(
@@ -92,6 +108,7 @@ export async function GET(request: Request) {
         take,
         skip,
         origenCounts,
+        estadoCounts,
         source: "database",
       },
       {
@@ -121,12 +138,17 @@ export async function GET(request: Request) {
       acc[lead.origen] = (acc[lead.origen] ?? 0) + 1;
       return acc;
     }, {});
+    const estadoCounts = leads.reduce<Record<string, number>>((acc, lead) => {
+      acc[lead.estado] = (acc[lead.estado] ?? 0) + 1;
+      return acc;
+    }, {});
     return NextResponse.json({
       leads: leads.slice(skip, skip + take).map(mapLeadListRow),
       total,
       take,
       skip,
       origenCounts,
+      estadoCounts,
       source: "file",
     });
   }

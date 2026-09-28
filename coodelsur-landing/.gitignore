@@ -15,6 +15,7 @@
 /build
 /cpanel-deploy/
 cpanel-deploy.zip
+database-cpanel.zip
 
 # misc
 .DS_Store

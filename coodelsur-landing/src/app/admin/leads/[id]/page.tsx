@@ -4,7 +4,7 @@ import { AdminShell } from "@/presentation/components/admin/AdminShell";
 import { LeadAttachmentGallery } from "@/presentation/components/admin/LeadAttachmentGallery";
 import { LeadInfoGrid, LeadSummaryCard } from "@/presentation/components/admin/LeadInfoGrid";
 import { LeadUbicacionSection } from "@/presentation/components/admin/LeadUbicacionSection";
-import { StatusBadge } from "@/presentation/components/admin/StatusBadge";
+import { StatusBadge, ESTADO_LABELS } from "@/presentation/components/admin/StatusBadge";
 import { Button } from "@/presentation/components/ui/Button";
 import type { AdminLeadDetail } from "@/application/lead/admin-lead-detail";
 import { formatCOP } from "@/shared/utils";
@@ -136,13 +136,19 @@ export default function AdminLeadDetailPage() {
           value={lead.estado}
           disabled={saving}
           onChange={(e) => void updateEstado(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium capitalize shadow-sm"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm focus:border-coodel-primary focus:outline-none focus:ring-1 focus:ring-coodel-primary"
         >
           <option value="incompleto">Incompleta</option>
-          <option value="recibido">Recibida</option>
-          <option value="revisado">Revisada</option>
-          <option value="contactado">Contactada</option>
-          <option value="descartado">Descartada</option>
+          <option value="por_contactar">Por Contactar</option>
+          <option value="no_interesado">No interesado</option>
+          <option value="aprobado">Aprobado</option>
+          <option value="rechazado_reportado">Rechazado: Reportado</option>
+          <option value="rechazado_no_cumple">Rechazado: No cumple requisitos</option>
+          {["recibido", "revisado", "contactado", "descartado"].includes(lead.estado) && (
+            <option value={lead.estado} disabled>
+              {ESTADO_LABELS[lead.estado] ?? lead.estado} (Anterior)
+            </option>
+          )}
         </select>
       }
     >

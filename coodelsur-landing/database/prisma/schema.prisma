@@ -10,11 +10,16 @@ datasource db {
 }
 
 enum LeadEstado {
-  incompleto   // Borrador parcial del formulario
-  recibido     // Solicitud enviada por el usuario
-  revisado     // Revisión interna completada
-  contactado   // Equipo comercial contactó al solicitante
-  descartado   // Solicitud descartada
+  incompleto           // Incompleta
+  por_contactar        // Por Contactar
+  no_interesado        // No interesado
+  aprobado             // Aprobado
+  rechazado_reportado  // Rechazado: Reportado
+  rechazado_no_cumple  // Rechazado: No cumple requisitos
+  recibido             // Legacy
+  revisado             // Legacy
+  contactado           // Legacy
+  descartado           // Legacy
 }
 
 /// Solicitud de crédito (Microcrédito Small y futuros productos).
@@ -33,7 +38,7 @@ model Lead {
   /// Payload completo del formulario + metadata de adjuntos (paths, no binarios)
   datosFormulario          Json
   origen                   String     // web, witme, etc.
-  estado                   LeadEstado @default(recibido)
+  estado                   LeadEstado @default(por_contactar)
   aceptaTerminos           Boolean    @default(false)
   fechaAceptacionTerminos  DateTime?
   utmSource                String?

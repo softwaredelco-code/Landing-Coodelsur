@@ -1,4 +1,5 @@
 import { formSectionsNanocredito } from "@/shared/config/creditos/form-sections";
+import { TIEMPO_MORA_LABELS } from "@/shared/config/creditos/opciones";
 import { formatCOP } from "@/shared/utils";
 
 const KNOWN_FORM_FIELD_NAMES = new Set(
@@ -35,6 +36,7 @@ const MONEY_FIELDS = new Set([
   "cuotaCapitalInteres",
   "cuotaFianzaMensual",
   "cuotaVidaDeudoresMensual",
+  "moraValor",
 ]);
 
 const SKIP_FIELDS = new Set([
@@ -58,6 +60,13 @@ function formatFieldValue(name: string, value: unknown): string {
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
+    if (MONEY_FIELDS.has(name)) {
+      const num = Number(trimmed.replace(/[^0-9.-]+/g, ""));
+      if (Number.isFinite(num) && num > 0) return formatCOP(num);
+    }
+    if (name === "moraTiempo" && TIEMPO_MORA_LABELS[trimmed]) {
+      return TIEMPO_MORA_LABELS[trimmed];
+    }
     return trimmed || "—";
   }
   return "—";

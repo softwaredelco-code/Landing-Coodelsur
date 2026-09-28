@@ -6,6 +6,7 @@
  */
 
 import { isAttachmentAvailable } from "@/domain/lead/attachments";
+import { TIEMPO_MORA_LABELS } from "@/shared/config/creditos/opciones";
 import { formatCOP } from "@/shared/utils";
 import * as XLSX from "xlsx-js-style";
 
@@ -48,6 +49,12 @@ interface ExportColumn {
 
 const ESTADO_LABELS: Record<string, string> = {
   incompleto: "Incompleta",
+  por_contactar: "Por Contactar",
+  no_interesado: "No interesado",
+  aprobado: "Aprobado",
+  rechazado_reportado: "Rechazado: Reportado",
+  rechazado_no_cumple: "Rechazado: No cumple requisitos",
+  // Legacy
   recibido: "Recibida",
   revisado: "Revisada",
   contactado: "Contactada",
@@ -418,6 +425,26 @@ const BASE_COLUMNS: ExportColumn[] = [
     width: 18,
     value: (l) => readOption(datosOf(l), "moraVigente", SI_NO_LABELS),
   },
+  {
+    header: "Entidad en Mora",
+    width: 24,
+    value: (l) => readString(datosOf(l), "moraEntidad"),
+  },
+  {
+    header: "Tiempo en Mora",
+    width: 20,
+    value: (l) =>
+      readOption(datosOf(l), "moraTiempo", TIEMPO_MORA_LABELS) ||
+      readString(datosOf(l), "moraTiempo"),
+  },
+  {
+    header: "Monto de la Mora (COP)",
+    width: 22,
+    value: (l) => {
+      const v = readNumber(datosOf(l), "moraValor");
+      return v != null ? formatMoney(v) : "";
+    },
+  },
 
   // 5. Información financiera
   {
@@ -577,6 +604,7 @@ const KNOWN_DATA_KEYS = new Set([
   "destinoCredito", "diaPagoOportuno", "mesPagoOportuno", "anoPagoOportuno",
   "diaPagoCuota", "fechaPagoOportunoModo", "cuotaCapitalInteres", "cuotaFianzaMensual",
   "cuotaVidaDeudoresMensual", "valorCreditoFinanciado", "estudioCredito", "moraVigente",
+  "moraEntidad", "moraTiempo", "moraValor",
   "ingresosMensuales", "origenOtrosIngresos", "origenOtrosIngresosOtro", "otrosIngresos",
   "egresosMensuales", "activosTotales", "pasivosTotales",
   "ocupacion", "empresa", "empresaLaboral", "cargo", "cargoLaboral", "tipoContrato",

@@ -27,6 +27,24 @@ export const SI_NO = [
   { label: "No", value: "no" },
 ];
 
+export const TIEMPOS_MORA = [
+  { label: "Menos de 30 días", value: "menos_30_dias" },
+  { label: "De 30 a 60 días", value: "30_a_60_dias" },
+  { label: "De 61 a 90 días", value: "61_a_90_dias" },
+  { label: "De 91 a 180 días", value: "91_a_180_dias" },
+  { label: "De 181 a 360 días", value: "181_a_360_dias" },
+  { label: "Más de 1 año", value: "mas_1_ano" },
+];
+
+export const TIEMPO_MORA_LABELS: Record<string, string> = {
+  menos_30_dias: "Menos de 30 días",
+  "30_a_60_dias": "De 30 a 60 días",
+  "61_a_90_dias": "De 61 a 90 días",
+  "91_a_180_dias": "De 91 a 180 días",
+  "181_a_360_dias": "De 181 a 360 días",
+  mas_1_ano: "Más de 1 año",
+};
+
 export const SECTORES_DOMICILIO = [
   { label: "Urbano", value: "urbano" },
   { label: "Rural", value: "rural" },

@@ -48,10 +48,17 @@ const EXPORT_SELECT = {
 
 function buildWhere(options: FetchLeadsForExportOptions) {
   const q = options.q?.trim()?.toLowerCase();
+  const estadoFilter = options.estado
+    ? options.estado === "por_contactar"
+      ? { in: ["por_contactar", "recibido", "revisado", "contactado"] as LeadEstado[] }
+      : options.estado === "rechazado_no_cumple"
+        ? { in: ["rechazado_no_cumple", "descartado"] as LeadEstado[] }
+        : options.estado
+    : undefined;
 
   return {
     ...(options.ids?.length ? { id: { in: options.ids } } : {}),
-    ...(options.estado ? { estado: options.estado } : {}),
+    ...(estadoFilter ? { estado: estadoFilter } : {}),
     ...(options.tipoCredito ? { tipoCredito: options.tipoCredito } : {}),
     ...(options.origen ? { origen: options.origen } : {}),
     ...(q

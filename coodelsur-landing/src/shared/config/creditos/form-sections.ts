@@ -11,6 +11,7 @@ import {
   PARENTESCOS_REFERENCIA_FAMILIAR,
   SECTORES_DOMICILIO,
   SI_NO,
+  TIEMPOS_MORA,
   TIPOS_REFERENCIA,
   TIPOS_CUENTA,
   TIPOS_IDENTIFICACION,
@@ -83,6 +84,22 @@ export const formSectionsNanocredito: FormSectionConfig[] = [
         options: SI_NO,
         required: true,
         colSpan: 2,
+      },
+      {
+        name: "moraEntidad",
+        label: "Entidad de la mora",
+        type: "text",
+      },
+      {
+        name: "moraTiempo",
+        label: "Tiempo de la mora",
+        type: "select",
+        options: TIEMPOS_MORA,
+      },
+      {
+        name: "moraValor",
+        label: "Monto de la mora",
+        type: "number",
       },
       { name: "ingresosMensuales", label: "Ingresos mensuales", type: "number", required: true },
       {

@@ -169,6 +169,15 @@ const libranzaBaseSchema = z.object({
 
   /* ── 4. Centrales de riesgo ──────────────────────────────── */
   moraVigente: requiredText("Indica si tienes mora vigente"),
+  moraEntidad: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  moraTiempo: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  moraValor: optionalNumber,
 
   /* ── 5. Información laboral ──────────────────────────────── */
   actividadEconomica: requiredText("Actividad económica"),
@@ -257,6 +266,19 @@ export function collectCrossFieldErrors(data: LibranzaFormValues): StepFieldErro
   if (!validation.ok) {
     for (const message of validation.messages) {
       errors.push({ path: "cedula", message });
+    }
+  }
+
+  if (data.moraVigente === "si") {
+    if (!data.moraEntidad?.trim()) {
+      errors.push({ path: "moraEntidad", message: "Indica con qué entidad tienes la mora" });
+    }
+    if (!data.moraTiempo?.trim()) {
+      errors.push({ path: "moraTiempo", message: "Indica hace cuánto tiempo es la mora" });
+    }
+    const valMora = Number(data.moraValor);
+    if (data.moraValor == null || Number.isNaN(valMora) || valMora <= 0) {
+      errors.push({ path: "moraValor", message: "Indica el monto aproximado de la mora" });
     }
   }
 
@@ -368,7 +390,7 @@ export const LIBRANZA_STEPS = [
     id: "centralesRiesgo",
     title: "Centrales de riesgo",
     description: "Información sobre tu historial crediticio.",
-    fields: ["moraVigente"],
+    fields: ["moraVigente", "moraEntidad", "moraTiempo", "moraValor"],
   },
   {
     id: "laboral",
@@ -486,6 +508,9 @@ export const libranzaDefaultValues: Partial<LibranzaFormValues> = {
   anoPagoOportuno: String(new Date().getFullYear()),
 
   moraVigente: "",
+  moraEntidad: "",
+  moraTiempo: "",
+  moraValor: undefined,
 
   actividadEconomica: "",
   empresaLaboral: "",
