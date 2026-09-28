@@ -7,7 +7,6 @@ import {
   listLeadsFromFile,
   updateLeadEstadoInFile,
 } from "@/infrastructure/persistence/file-store";
-import { pruneStaleIncompleteDrafts } from "@/application/lead/save-draft-lead";
 import { mapLeadListRow } from "@/domain/lead/lead-summary";
 import type { LeadEstado } from "@prisma/client";
 
