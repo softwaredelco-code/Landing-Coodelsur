@@ -50,12 +50,12 @@ function buildWhere(options: FetchLeadsForExportOptions) {
   const q = options.q?.trim()?.toLowerCase();
   const estadoFilter = options.estado
     ? options.estado === "completo"
-      ? { in: ["completo", "recibido"] as LeadEstado[] }
+      ? { in: ["completo", "recibido"] as any }
       : options.estado === "por_contactar"
-        ? { in: ["por_contactar", "revisado", "contactado"] as LeadEstado[] }
+        ? { in: ["por_contactar", "revisado", "contactado"] as any }
         : options.estado === "rechazado_no_cumple"
-          ? { in: ["rechazado_no_cumple", "descartado"] as LeadEstado[] }
-          : options.estado
+          ? { in: ["rechazado_no_cumple", "descartado"] as any }
+          : (options.estado as any)
     : undefined;
 
   return {

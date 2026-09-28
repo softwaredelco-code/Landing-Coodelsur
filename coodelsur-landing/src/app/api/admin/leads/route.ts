@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const take = Math.min(Number(searchParams.get("take") ?? 50), 100);
   const skip = Math.max(Number(searchParams.get("skip") ?? 0), 0);
-  const estado = searchParams.get("estado") as LeadEstado | null;
+  const estado = searchParams.get("estado")?.trim() || null;
   const tipo = searchParams.get("tipoCredito");
   const origen = searchParams.get("origen")?.trim();
   const q = searchParams.get("q")?.trim()?.toLowerCase();
@@ -36,12 +36,12 @@ export async function GET(request: Request) {
   try {
     const estadoFilter = estado
       ? estado === "completo"
-        ? { in: ["completo", "recibido"] as LeadEstado[] }
+        ? { in: ["completo", "recibido"] as any }
         : estado === "por_contactar"
-          ? { in: ["por_contactar", "revisado", "contactado"] as LeadEstado[] }
+          ? { in: ["por_contactar", "revisado", "contactado"] as any }
           : estado === "rechazado_no_cumple"
-            ? { in: ["rechazado_no_cumple", "descartado"] as LeadEstado[] }
-            : estado
+            ? { in: ["rechazado_no_cumple", "descartado"] as any }
+            : (estado as any)
       : undefined;
 
     const hasFilters = Boolean(estadoFilter || tipo || origen || q);
@@ -168,24 +168,24 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { id?: string; estado?: LeadEstado };
-  if (!body.id || !body.estado) {
+  const body = (await request.json().catch(() => ({}))) as { id?: string; estado?: string };
+  const leadId = body.id?.trim();
+  const leadEstado = body.estado?.trim();
+
+  if (!leadId || !leadEstado) {
     return NextResponse.json({ error: "id y estado requeridos" }, { status: 400 });
   }
 
   try {
     const lead = await prisma.lead.update({
-      where: { id: body.id },
-      data: { estado: body.estado },
+      where: { id: leadId },
+      data: { estado: leadEstado as any },
     });
     cachedEstadoCounts = null;
     return NextResponse.json({ success: true, lead, source: "database" });
   } catch (error) {
-    if (!isDbConnectionError(error) && getLeadFromFile(body.id)) {
-      // id existe en archivo aunque el error no sea de conexión
-    }
-    if (isDbConnectionError(error) || getLeadFromFile(body.id)) {
-      const lead = updateLeadEstadoInFile(body.id, body.estado);
+    if (isDbConnectionError(error) || getLeadFromFile(leadId)) {
+      const lead = updateLeadEstadoInFile(leadId, leadEstado);
       if (!lead) {
         return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
       }
