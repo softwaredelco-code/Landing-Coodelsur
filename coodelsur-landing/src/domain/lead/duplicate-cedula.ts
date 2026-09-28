@@ -4,7 +4,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { withTimeout } from "@/shared/utils";
 
 const DEFAULT_DUPLICATE_DAYS = 30;
-const ACTIVE_STATES = new Set(["completo", "por_contactar", "aprobado", "recibido", "revisado", "contactado"]);
+const ACTIVE_STATES = new Set(["completo", "por_contactar", "aprobado", "desembolsado", "recibido", "revisado", "contactado"]);
 
 export interface DuplicateCedulaResult {
   duplicate: boolean;
@@ -69,7 +69,7 @@ export async function findRecentDuplicateCedula(
       prisma.lead.findFirst({
         where: {
           cedula: normalizedCedula,
-          estado: { in: ["por_contactar", "aprobado", "recibido", "revisado", "contactado"] },
+          estado: { in: ["completo", "por_contactar", "aprobado", "desembolsado", "recibido", "revisado", "contactado"] },
           fechaCreacion: { gte: cutoff },
         },
         orderBy: { fechaCreacion: "desc" },

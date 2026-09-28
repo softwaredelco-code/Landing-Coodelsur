@@ -9,7 +9,81 @@ export function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+export async function compressImageFile(
+  file: File,
+  maxDimension = 1600,
+  quality = 0.82,
+): Promise<{ dataUrl: string; size: number }> {
+  if (typeof window === "undefined" || !file.type.startsWith("image/")) {
+    const dataUrl = await readFileAsDataUrl(file);
+    return { dataUrl, size: file.size };
+  }
+
+  if (file.type === "image/svg+xml" || file.type === "image/gif") {
+    const dataUrl = await readFileAsDataUrl(file);
+    return { dataUrl, size: file.size };
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        readFileAsDataUrl(file).then((dataUrl) => resolve({ dataUrl, size: file.size }));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            readFileAsDataUrl(file).then((dataUrl) => resolve({ dataUrl, size: file.size }));
+            return;
+          }
+          const dataUrl = canvas.toDataURL("image/jpeg", quality);
+          resolve({ dataUrl, size: blob.size });
+        },
+        "image/jpeg",
+        quality,
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      readFileAsDataUrl(file).then((dataUrl) => resolve({ dataUrl, size: file.size }));
+    };
+
+    img.src = objectUrl;
+  });
+}
+
 export async function fileToCapture(file: File, fallbackName: string): Promise<FileCapture> {
+  if (file.type.startsWith("image/")) {
+    const compressed = await compressImageFile(file);
+    return {
+      fileName: file.name || fallbackName,
+      mimeType: "image/jpeg",
+      size: compressed.size,
+      preview: compressed.dataUrl,
+    };
+  }
+
   const preview = await readFileAsDataUrl(file);
   return {
     fileName: file.name || fallbackName,
@@ -34,18 +108,30 @@ export async function captureVideoFrame(
   fileName = "foto-cedula.jpg",
 ): Promise<FileCapture> {
   const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  let width = video.videoWidth;
+  let height = video.videoHeight;
+  const maxDim = 1600;
+  if (width > maxDim || height > maxDim) {
+    if (width > height) {
+      height = Math.round((height * maxDim) / width);
+      width = maxDim;
+    } else {
+      width = Math.round((width * maxDim) / height);
+      height = maxDim;
+    }
+  }
+  canvas.width = width;
+  canvas.height = height;
 
   const context = canvas.getContext("2d");
   if (!context || canvas.width === 0 || canvas.height === 0) {
     throw new Error("No se pudo capturar la imagen");
   }
 
-  context.drawImage(video, 0, 0);
+  context.drawImage(video, 0, 0, width, height);
 
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/jpeg", 0.92);
+    canvas.toBlob(resolve, "image/jpeg", 0.85);
   });
 
   if (!blob) throw new Error("No se pudo generar la foto");

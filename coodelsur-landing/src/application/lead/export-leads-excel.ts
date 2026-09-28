@@ -53,6 +53,7 @@ const ESTADO_LABELS: Record<string, string> = {
   por_contactar: "Por Contactar",
   no_interesado: "No interesado",
   aprobado: "Aprobado",
+  desembolsado: "Desembolsado",
   rechazado_reportado: "Rechazado: Reportado",
   rechazado_no_cumple: "Rechazado: No cumple requisitos",
   // Legacy

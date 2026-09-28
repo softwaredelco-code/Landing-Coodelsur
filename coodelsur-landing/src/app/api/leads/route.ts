@@ -49,8 +49,16 @@ export async function POST(request: Request) {
     });
 
     if (!formResult.success) {
+      const fieldErrors = formResult.error.flatten().fieldErrors;
+      const issues = formResult.error.issues;
+      const issueMessages = Array.from(new Set(issues.map((i) => i.message)));
+      const errorSummary = `Campos incompletos o con error: ${issueMessages.slice(0, 3).join(". ")}`;
       return NextResponse.json(
-        { error: "Datos inválidos", details: formResult.error.flatten().fieldErrors },
+        {
+          error: errorSummary,
+          details: fieldErrors,
+          issues: issues.map((i) => ({ field: i.path.join("."), message: i.message })),
+        },
         { status: 422 },
       );
     }
@@ -65,8 +73,9 @@ export async function POST(request: Request) {
       const detected = resolverTipoPorMonto(capital);
       return NextResponse.json(
         {
-          error: "El monto no corresponde al tipo de crédito indicado",
+          error: "El monto solicitado no corresponde al tipo de crédito indicado",
           details: {
+            capitalSeleccionado: ["El monto no corresponde al rango de este producto"],
             tipoCredito: tipoCanonico,
             capital,
             sugerido: detected.ok
@@ -90,8 +99,12 @@ export async function POST(request: Request) {
     });
 
     if (!apiResult.success) {
+      const issues = apiResult.error.issues.map((i) => i.message);
       return NextResponse.json(
-        { error: "Validación fallida", details: apiResult.error.flatten() },
+        {
+          error: `Datos de solicitud incompletos: ${issues.slice(0, 3).join(". ")}`,
+          details: apiResult.error.flatten().fieldErrors,
+        },
         { status: 422 },
       );
     }
@@ -109,7 +122,10 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: cedulaVerificacion.message,
-          details: { cedulaVerificacion: cedulaVerificacion.status },
+          details: {
+            cedula: [cedulaVerificacion.message],
+            cedulaVerificacion: cedulaVerificacion.status,
+          },
         },
         { status: 422 },
       );
@@ -153,9 +169,13 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error && error.message.includes("supera el límite")
         ? error.message
-        : error instanceof Error
-          ? `Error al guardar: ${error.message}`
-          : "Error interno al procesar la solicitud";
+        : error instanceof Error && error.message.includes("Tiempo agotado")
+          ? error.message
+          : error instanceof Error && error.message.includes("PrismaClient")
+            ? "No se pudo conectar a la base de datos para guardar la solicitud. Intenta de nuevo."
+            : error instanceof Error
+              ? `Error al guardar: ${error.message}`
+              : "No se pudo procesar la solicitud en el servidor. Intenta de nuevo.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

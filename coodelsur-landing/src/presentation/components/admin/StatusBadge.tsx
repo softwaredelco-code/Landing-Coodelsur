@@ -6,6 +6,7 @@ const ESTADO_STYLES: Record<string, string> = {
   por_contactar: "bg-blue-100 text-blue-900 ring-blue-200",
   no_interesado: "bg-slate-100 text-slate-700 ring-slate-200",
   aprobado: "bg-teal-100 text-teal-900 ring-teal-200",
+  desembolsado: "bg-purple-100 text-purple-900 ring-purple-200",
   rechazado_reportado: "bg-red-100 text-red-900 ring-red-200",
   rechazado_no_cumple: "bg-orange-100 text-orange-900 ring-orange-200",
   // Legacy
@@ -21,6 +22,7 @@ export const ESTADO_LABELS: Record<string, string> = {
   por_contactar: "Por Contactar",
   no_interesado: "No interesado",
   aprobado: "Aprobado",
+  desembolsado: "Desembolsado",
   rechazado_reportado: "Rechazado: Reportado",
   rechazado_no_cumple: "Rechazado: No cumple requisitos",
   // Legacy

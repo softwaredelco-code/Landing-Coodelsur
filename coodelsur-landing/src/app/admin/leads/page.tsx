@@ -142,6 +142,7 @@ export default function AdminLeadsPage() {
     (estadoCounts.revisado ?? 0) +
     (estadoCounts.contactado ?? 0);
   const aprobadosTotal = estadoCounts.aprobado ?? 0;
+  const desembolsadosTotal = estadoCounts.desembolsado ?? 0;
   const noInteresadoTotal = estadoCounts.no_interesado ?? 0;
   const rechazadosTotal =
     (estadoCounts.rechazado_reportado ?? 0) +
@@ -206,7 +207,7 @@ export default function AdminLeadsPage() {
       title="Solicitudes de crédito"
       subtitle="Gestiona, revisa y exporta las solicitudes recibidas."
     >
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-7">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
         <StatCard label="Total (filtro)" value={String(total)} />
         <StatCard label="Completas" value={String(completasTotal)} tone="green" />
         <StatCard
@@ -215,6 +216,7 @@ export default function AdminLeadsPage() {
           tone="blue"
         />
         <StatCard label="Aprobados" value={String(aprobadosTotal)} tone="green" />
+        <StatCard label="Desembolsados" value={String(desembolsadosTotal)} tone="purple" />
         <StatCard label="No interesado" value={String(noInteresadoTotal)} tone="zinc" />
         <StatCard
           label="Rechazados"
@@ -258,6 +260,7 @@ export default function AdminLeadsPage() {
               <option value="completo">Completa</option>
               <option value="por_contactar">Por Contactar</option>
               <option value="aprobado">Aprobado</option>
+              <option value="desembolsado">Desembolsado</option>
               <option value="no_interesado">No interesado</option>
               <option value="rechazado_reportado">Rechazado: Reportado</option>
               <option value="rechazado_no_cumple">Rechazado: No cumple requisitos</option>
@@ -523,13 +526,14 @@ function StatCard({
 }: {
   label: string;
   value: string;
-  tone?: "default" | "blue" | "amber" | "violet" | "green" | "rose" | "zinc";
+  tone?: "default" | "blue" | "amber" | "violet" | "purple" | "green" | "rose" | "zinc";
 }) {
   const tones = {
     default: "border-gray-200",
     blue: "border-blue-100 bg-blue-50/40",
     amber: "border-amber-100 bg-amber-50/40",
     violet: "border-violet-100 bg-violet-50/40",
+    purple: "border-purple-100 bg-purple-50/40",
     green: "border-emerald-100 bg-emerald-50/40",
     rose: "border-red-100 bg-red-50/40",
     zinc: "border-slate-200 bg-slate-50/40",

@@ -143,6 +143,7 @@ export default function AdminLeadDetailPage() {
           <option value="por_contactar">Por Contactar</option>
           <option value="no_interesado">No interesado</option>
           <option value="aprobado">Aprobado</option>
+          <option value="desembolsado">Desembolsado</option>
           <option value="rechazado_reportado">Rechazado: Reportado</option>
           <option value="rechazado_no_cumple">Rechazado: No cumple requisitos</option>
           {["recibido", "revisado", "contactado", "descartado"].includes(lead.estado) && (

@@ -192,13 +192,29 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
   };
 
   const onInvalid = (formErrors: FieldErrors<NanocreditoFormValues>) => {
-    const firstInvalid = NANOCREDITO_STEPS.findIndex((s) =>
+    const errorKeys = Object.keys(formErrors) as (keyof NanocreditoFormValues)[];
+    if (errorKeys.length === 0) return;
+
+    let firstInvalid = NANOCREDITO_STEPS.findIndex((s) =>
       s.fields.some((field) => formErrors[field as keyof NanocreditoFormValues]),
     );
-    if (firstInvalid >= 0) {
-      setStep(firstInvalid);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    if (firstInvalid < 0) {
+      firstInvalid = 0;
     }
+
+    setStep(firstInvalid);
+
+    const errorDetails = errorKeys
+      .map((k) => formErrors[k]?.message)
+      .filter((m): m is string => typeof m === "string" && m.trim().length > 0);
+
+    const summaryText =
+      errorDetails.length > 0
+        ? `Por favor completa o corrige los siguientes campos: ${errorDetails.slice(0, 3).join(". ")}`
+        : "Hay campos obligatorios incompletos o con datos incorrectos. Revisa los campos resaltados en rojo.";
+
+    setSubmitError(summaryText);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const onSubmit = async (data: NanocreditoFormValues) => {
@@ -239,15 +255,89 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
         signal: AbortSignal.timeout(90_000),
       });
 
-      const result = (await response.json().catch(() => ({}))) as {
+      let result: {
         success?: boolean;
         id?: string;
         error?: string;
-        details?: unknown;
-      };
+        details?: Record<string, string[] | unknown>;
+        issues?: Array<{ field: string; message: string }>;
+      } = {};
+
+      try {
+        result = (await response.json()) as typeof result;
+      } catch {
+        // Respuesta no-JSON (ej. HTML 413 o 504 de Nginx/cPanel)
+      }
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || "No se pudo enviar la solicitud. Intenta de nuevo.");
+        if (response.status === 413) {
+          const stepVerif = NANOCREDITO_STEPS.findIndex((s) => s.id === "verificacion");
+          if (stepVerif >= 0) setStep(stepVerif);
+          throw new Error(
+            "Los archivos adjuntos son demasiado pesados para el servidor. Por favor toma fotos directamente con la cámara o selecciona imágenes más livianas.",
+          );
+        }
+
+        // Extraer errores específicos por campo retornados por el backend
+        const fieldErrors: Record<string, string> = {};
+        if (result.details && typeof result.details === "object") {
+          for (const [key, val] of Object.entries(result.details)) {
+            if (Array.isArray(val) && typeof val[0] === "string") {
+              fieldErrors[key] = val[0];
+            } else if (typeof val === "string") {
+              fieldErrors[key] = val;
+            }
+          }
+        }
+        if (Array.isArray(result.issues)) {
+          for (const issue of result.issues) {
+            if (issue.field && issue.message && !fieldErrors[issue.field]) {
+              fieldErrors[issue.field] = issue.message;
+            }
+          }
+        }
+
+        // Si la verificación de cédula / edad / duplicado falló
+        if (
+          result.error &&
+          (result.error.toLowerCase().includes("identificación") ||
+            result.error.toLowerCase().includes("cédula") ||
+            result.error.toLowerCase().includes("edad") ||
+            result.error.toLowerCase().includes("nacimiento") ||
+            result.error.toLowerCase().includes("expedición"))
+        ) {
+          if (!fieldErrors.cedula) {
+            fieldErrors.cedula = result.error;
+          }
+        }
+
+        // Aplicar errores a react-hook-form para marcar los campos en rojo
+        for (const [fieldName, message] of Object.entries(fieldErrors)) {
+          setError(fieldName as Path<NanocreditoFormValues>, {
+            type: "server",
+            message,
+          });
+        }
+
+        // Navegar automáticamente al paso donde ocurrió el primer error
+        const errorFieldNames = Object.keys(fieldErrors);
+        if (errorFieldNames.length > 0) {
+          const targetStep = NANOCREDITO_STEPS.findIndex((s) =>
+            s.fields.some((field) => errorFieldNames.includes(field)),
+          );
+          if (targetStep >= 0) {
+            setStep(targetStep);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
+        }
+
+        const specificDetails = Object.values(fieldErrors).slice(0, 3).join(". ");
+        const errorMessage = specificDetails
+          ? `Por favor corrige la siguiente información: ${specificDetails}`
+          : result.error ||
+            "No se pudo enviar la solicitud. Por favor revisa que todos los campos requeridos estén completos e intenta de nuevo.";
+
+        throw new Error(errorMessage);
       }
 
       setLeadId(result.id ?? null);
@@ -330,6 +420,18 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
             />
           </div>
         </div>
+
+        {submitError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 shadow-sm" role="alert">
+            <div className="flex items-start gap-2.5">
+              <span className="text-base leading-none">⚠️</span>
+              <div>
+                <p className="font-semibold text-red-900">Atención al enviar la solicitud:</p>
+                <p className="mt-0.5 leading-relaxed">{submitError}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <FormSection
           id={current.id}
