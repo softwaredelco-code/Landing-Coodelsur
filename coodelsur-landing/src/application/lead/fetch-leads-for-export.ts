@@ -11,7 +11,7 @@ export const MAX_LEADS_EXPORT = 5000;
 
 export interface FetchLeadsForExportOptions {
   ids?: string[];
-  estado?: LeadEstado | null;
+  estado?: string | null;
   tipoCredito?: string | null;
   origen?: string | null;
   q?: string | null;
