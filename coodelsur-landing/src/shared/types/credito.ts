@@ -1,6 +1,5 @@
 export type TipoCredito =
   | "microcredito_small"
-  | "microcredito_rural"
   | "microcredito_urbano"
   | "consumo"
   | "comercial"

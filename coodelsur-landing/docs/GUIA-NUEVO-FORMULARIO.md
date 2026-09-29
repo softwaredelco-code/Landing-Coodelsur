@@ -1,6 +1,6 @@
 # Guía para desarrollar un nuevo formulario de crédito
 
-Documento de onboarding para quien va a implementar el **Microcrédito urbano** o **Microcrédito rural**. El formulario **Microcrédito Small** ya está en producción y sirve como referencia de arquitectura, patrones y convenciones.
+Documento de onboarding para quien va a implementar el **Microcrédito urbano** o **Crédito Libranza**. El formulario **Microcrédito Small** ya está en producción y sirve como referencia de arquitectura, patrones y convenciones.
 
 ---
 
@@ -10,7 +10,7 @@ Documento de onboarding para quien va a implementar el **Microcrédito urbano** 
 |----------|-------------|------------|--------|
 | Microcrédito Small | $200.000 – $600.000 | ✅ Publicado | Referencia completa |
 | Microcrédito urbano | $600.001 – $20.000.000 | ❌ | Por implementar |
-| Microcrédito rural | $1.000.000 – $5.000.000 | ❌ | Por implementar |
+| Crédito Libranza | $1.000.000 – $5.000.000 | ❌ | Por implementar |
 
 **Regla de negocio importante:** entre $1M y $5M el monto aplica tanto a urbano como a rural. El usuario debe elegir cuál producto quiere (`MontoSelector` ya maneja esa ambigüedad).
 
@@ -150,19 +150,19 @@ La API (`route.ts`):
 
 ---
 
-## 5. Qué ya está preparado para urbano/rural
+## 5. Qué ya está preparado para urbano/libranza
 
 No partes de cero. El proyecto ya tiene stubs y defaults:
 
 | Qué | Dónde | Estado |
 |-----|-------|--------|
-| Tipos `microcredito_urbano` / `microcredito_rural` | `src/types/credito.ts` | ✅ |
+| Tipos `microcredito_urbano` / `libranza` | `src/types/credito.ts` | ✅ |
 | Rangos de monto | `src/config/creditos/montos.ts` | ✅ (`formularioDisponible: false`) |
 | Catálogo de productos | `src/config/creditos/index.ts` | ✅ (`disponible: false`, `sections: []`) |
 | Parámetros amortización default | `src/config/creditos/amortizacion.ts` | ✅ (tasas provisionales) |
 | Tabla `CreditoParametros` en BD | Prisma + admin `/admin/parametros` | ✅ |
 | Schema genérico por config | `buildFormSchema()` en `schemas.ts` | ✅ (alternativa simple) |
-| API acepta tipos urbano/rural | `leadApiSchema` | ✅ |
+| API acepta tipos urbano/libranza | `leadApiSchema` | ✅ |
 | Pantalla “próximamente” | `SolicitudUnificada.tsx` | ✅ |
 
 **Lo que falta:** definición de campos/pasos del negocio, schema Zod dedicado (recomendado), componentes de sección, orquestador de formulario, hooks de borrador, integración en `SolicitudUnificada`, y pruebas end-to-end.
@@ -202,7 +202,7 @@ const formSchema =
     ? nanocreditoSchema
     : tipoCanonico === "microcredito_urbano"
       ? microcreditoUrbanoSchema  // crear
-      : tipoCanonico === "microcredito_rural"
+      : tipoCanonico === "libranza"
         ? microcreditoRuralSchema // crear
         : buildFormSchema(tipoCanonico);
 ```
@@ -304,7 +304,7 @@ En el formulario:
 - `ParametrosAmortizacionProvider` carga `/api/creditos/parametros` en background.
 - `calcularDesgloseCuota(tipo, monto, cuotas, parametros)` actualiza campos de cuota automáticamente.
 
-Defaults provisionales urbano/rural están en `src/config/creditos/amortizacion.ts` — **confirmar con Coodelsur antes de producción**.
+Defaults provisionales urbano/libranza están en `src/config/creditos/amortizacion.ts` — **confirmar con Coodelsur antes de producción**.
 
 ---
 
@@ -346,7 +346,7 @@ src/hooks/
 
 ## 11. Cómo probar tu trabajo
 
-1. **Selector de monto:** elegir un monto del rango urbano/rural y confirmar que abre tu formulario (no “próximamente”).
+1. **Selector de monto:** elegir un monto del rango urbano/libranza y confirmar que abre tu formulario (no “próximamente”).
 2. **Validación por paso:** campos vacíos, reglas condicionales, mensajes en español.
 3. **Amortización:** cambiar monto/cuotas y ver desglose coherente.
 4. **Borrador:** cerrar pestaña, reabrir — recuperación local; con datos mínimos, visible en admin como `incompleto`.

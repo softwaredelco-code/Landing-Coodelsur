@@ -13,7 +13,7 @@ const SLUGS_LEGACY = ["nanocredito", "microcredito"] as const;
 
 function resolveTipo(slug: string): TipoCredito | null {
   if (slug === "nanocredito") return "microcredito_small";
-  if (slug === "microcredito") return "microcredito_rural";
+  if (slug === "microcredito") return "libranza";
   if (isTipoCredito(slug)) return slug;
   return null;
 }

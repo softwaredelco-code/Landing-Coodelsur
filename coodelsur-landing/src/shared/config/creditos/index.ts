@@ -1,7 +1,7 @@
 import type { CreditoConfig, TipoCredito } from "@/shared/types/credito";
 import { microcreditoSmallConfig } from "./nanocredito";
 import { microcreditoUrbanoConfig } from "./urbano";
-import { microcreditoRuralConfig } from "./rural";
+
 import { consumoConfig } from "./consumo";
 import { comercialConfig } from "./comercial";
 import { libranzaConfig } from "./libranza";
@@ -42,13 +42,7 @@ const creditosCatalogo: Omit<CreditoConfig, "sections">[] = [
     descripcion: microcreditoSmallConfig.descripcion,
     disponible: true,
   },
-  {
-    slug: "microcredito_rural",
-    nombre: microcreditoRuralConfig.nombre,
-    descripcionCorta: microcreditoRuralConfig.descripcionCorta,
-    descripcion: microcreditoRuralConfig.descripcion,
-    disponible: false,
-  },
+
   {
     slug: "microcredito_urbano",
     nombre: microcreditoUrbanoConfig.nombre,
@@ -81,7 +75,7 @@ const creditosCatalogo: Omit<CreditoConfig, "sections">[] = [
 
 export const creditosConfig: Record<TipoCredito, CreditoConfig> = {
   microcredito_small: microcreditoSmallConfig,
-  microcredito_rural: microcreditoRuralConfig,
+
   microcredito_urbano: microcreditoUrbanoConfig,
   consumo: consumoConfig,
   comercial: comercialConfig,
@@ -95,7 +89,7 @@ export const creditosDisponibles = creditosList.filter((c) => c.disponible);
 export function getCreditoConfig(slug: string): CreditoConfig | undefined {
   // Compatibilidad con slugs antiguos en bookmarks / campañas
   if (slug === "nanocredito") return creditosConfig.microcredito_small;
-  if (slug === "microcredito") return creditosConfig.microcredito_rural;
+  if (slug === "microcredito") return creditosConfig.microcredito_small;
   return creditosConfig[slug as TipoCredito];
 }
 

@@ -31,13 +31,7 @@ export const FORMULARIOS_PRODUCTO: Record<TipoCredito, FormularioProductoMeta> =
     validation: "shared/validation/microcredito-urbano/schema.ts",
     implementado: false,
   },
-  microcredito_rural: {
-    tipo: "microcredito_rural",
-    ruta: "/credito/microcredito_rural",
-    carpeta: "microcredito-rural",
-    validation: "shared/validation/microcredito-rural/schema.ts",
-    implementado: false,
-  },
+
   consumo: {
     tipo: "consumo",
     ruta: "/credito/consumo",
