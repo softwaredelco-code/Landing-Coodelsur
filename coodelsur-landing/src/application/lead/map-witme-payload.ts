@@ -139,6 +139,8 @@ export function normalizeTipoCreditoFromWitme(raw: string | undefined): TipoCred
     libranza: "libranza",
     "credito libranza": "libranza",
     rural: "libranza",
+    microcredito_rural: "libranza",
+    "microcredito rural": "libranza",
     microcredito_urbano: "microcredito_urbano",
     "microcredito urbano": "microcredito_urbano",
     urbano: "microcredito_urbano",
@@ -146,7 +148,6 @@ export function normalizeTipoCreditoFromWitme(raw: string | undefined): TipoCred
     microcrédito: "libranza",
     consumo: "consumo",
     comercial: "comercial",
-    libranza: "libranza",
   };
   return map[raw?.toLowerCase() ?? ""] ?? "microcredito_small";
 }
