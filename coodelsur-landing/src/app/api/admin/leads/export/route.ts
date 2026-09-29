@@ -19,45 +19,52 @@ export async function GET(request: Request) {
     return adminUnauthorizedResponse();
   }
 
-  const { searchParams } = new URL(request.url);
-  const idsParam = searchParams.get("ids")?.trim();
-  const ids = idsParam
-    ? idsParam
-        .split(",")
-        .map((id) => id.trim())
-        .filter(Boolean)
-    : undefined;
-  const estado = searchParams.get("estado") as LeadEstado | null;
-  const tipoCredito = searchParams.get("tipoCredito");
-  const origen = searchParams.get("origen");
-  const q = searchParams.get("q");
+  try {
+    const { searchParams } = new URL(request.url);
+    const idsParam = searchParams.get("ids")?.trim();
+    const ids = idsParam
+      ? idsParam
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean)
+      : undefined;
+    const estado = searchParams.get("estado")?.trim() || null;
+    const tipoCredito = searchParams.get("tipoCredito")?.trim() || null;
+    const origen = searchParams.get("origen")?.trim() || null;
+    const q = searchParams.get("q")?.trim() || null;
 
-  const leads = await fetchLeadsForExport({
-    ids,
-    estado: estado || null,
-    tipoCredito: tipoCredito || null,
-    origen: origen || null,
-    q,
-  });
+    const leads = await fetchLeadsForExport({
+      ids,
+      estado,
+      tipoCredito,
+      origen,
+      q,
+    });
 
-  if (leads.length === 0) {
-    return NextResponse.json(
-      { error: "No hay solicitudes para exportar con los criterios indicados" },
-      { status: 404 },
-    );
+    if (leads.length === 0) {
+      return NextResponse.json(
+        { error: "No hay solicitudes para exportar con los criterios indicados" },
+        { status: 404 },
+      );
+    }
+
+    const buffer = buildLeadsExcelBuffer(leads);
+    const scope = ids?.length ? "selected" : "report";
+    const filename = buildExportFilename(scope);
+
+    return new Response(new Uint8Array(buffer), {
+      status: 200,
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    console.error("[GET /api/admin/leads/export]", error);
+    const message =
+      error instanceof Error ? error.message : "Error al generar el archivo Excel";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const buffer = buildLeadsExcelBuffer(leads);
-  const scope = ids?.length ? "selected" : "report";
-  const filename = buildExportFilename(scope);
-
-  return new NextResponse(new Uint8Array(buffer), {
-    status: 200,
-    headers: {
-      "Content-Type":
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    },
-  });
 }

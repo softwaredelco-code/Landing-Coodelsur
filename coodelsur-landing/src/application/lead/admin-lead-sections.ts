@@ -51,7 +51,11 @@ const SKIP_FIELDS = new Set([
 /** Ya se muestran en la tarjeta de contacto del detalle. */
 const CONTACT_SUMMARY_FIELDS = new Set(["nombre", "email", "cedula", "telefono"]);
 
-function formatFieldValue(name: string, value: unknown): string {
+function formatFieldValue(
+  name: string,
+  value: unknown,
+  options?: readonly { label: string; value: string }[],
+): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Sí" : "No";
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -67,6 +71,10 @@ function formatFieldValue(name: string, value: unknown): string {
     if (name === "moraTiempo" && TIEMPO_MORA_LABELS[trimmed]) {
       return TIEMPO_MORA_LABELS[trimmed];
     }
+    if (options && options.length > 0) {
+      const matched = options.find((opt) => opt.value === trimmed);
+      if (matched) return matched.label;
+    }
     return trimmed || "—";
   }
   return "—";
@@ -80,7 +88,7 @@ export function buildAdminLeadSections(datosFormulario: unknown): AdminLeadSecti
       : {};
 
   return formSectionsNanocredito
-    .filter((section) => section.id !== "verificacion" && section.id !== "domicilio")
+    .filter((section) => section.id !== "verificacion")
     .map((section) => ({
       id: section.id,
       title: section.title,
@@ -92,7 +100,7 @@ export function buildAdminLeadSections(datosFormulario: unknown): AdminLeadSecti
         )
         .map((field) => ({
           label: field.label,
-          value: formatFieldValue(field.name, datos[field.name]),
+          value: formatFieldValue(field.name, datos[field.name], field.options),
         })),
     }))
     .filter((section) => section.fields.some((field) => field.value !== "—"));

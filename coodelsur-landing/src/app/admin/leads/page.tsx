@@ -55,8 +55,15 @@ async function downloadExcelExport(url: string, fallbackFilename: string) {
     return "unauthorized" as const;
   }
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    return data?.error ?? "No se pudo generar el Excel";
+    const text = await res.text().catch(() => "");
+    let errorMsg = "No se pudo generar el Excel";
+    try {
+      const data = JSON.parse(text) as { error?: string };
+      if (data?.error) errorMsg = data.error;
+    } catch {
+      if (text && text.length < 150) errorMsg = text;
+    }
+    return errorMsg;
   }
 
   const disposition = res.headers.get("Content-Disposition") ?? "";
@@ -176,7 +183,7 @@ export default function AdminLeadsPage() {
     if (scope === "selected") {
       params.set("ids", Array.from(selectedIds).join(","));
     } else {
-      if (q) params.set("q", appliedQ);
+      if (appliedQ) params.set("q", appliedQ);
       if (estado) params.set("estado", estado);
       if (appliedOrigen) params.set("origen", appliedOrigen);
     }
