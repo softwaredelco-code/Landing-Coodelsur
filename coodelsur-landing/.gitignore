@@ -41,6 +41,8 @@ docs/witme/COODELSUR-CREDENCIALES-WITME.pdf
 ~$*
 docs/~$*
 *.xlsx
+!public/templates/*.xlsx
+!templates/*.xlsx
 
 # vercel
 .vercel
