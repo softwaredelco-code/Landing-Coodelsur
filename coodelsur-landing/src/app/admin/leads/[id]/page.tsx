@@ -110,8 +110,14 @@ export default function AdminLeadDetailPage() {
         return;
       }
       if (!res.ok) {
-        const errorJson = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(errorJson.error || "No se pudo generar el análisis en Excel");
+        let msg = "No se pudo generar el análisis en Excel";
+        try {
+          const errorJson = (await res.json()) as { error?: string };
+          if (errorJson?.error) msg = errorJson.error;
+        } catch {
+          msg = `El servidor respondió con estado ${res.status}. Intenta de nuevo en unos segundos.`;
+        }
+        throw new Error(msg);
       }
 
       let filename = `AnalisisCredito_${lead.cedula}_Nano.xlsx`;
