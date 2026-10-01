@@ -105,16 +105,18 @@ export async function findIncompleteLeadIdForContact(
   draftId?: string | null,
 ): Promise<string | null> {
   const forceFile = process.env.LEAD_STORE === "file";
+  const toId = (match: { id: string } | { finalized: true } | null) =>
+    match && "id" in match ? match.id : null;
 
   if (!forceFile) {
     try {
-      return await findDraftToUpdate(prisma, draftId ?? undefined, cedula, telefono);
+      return toId(await findDraftToUpdate(prisma, draftId ?? undefined, cedula, telefono));
     } catch (error) {
       if (!isDbConnectionError(error)) throw error;
     }
   }
 
-  return findDraftToUpdateInFile(draftId ?? undefined, cedula, telefono);
+  return toId(findDraftToUpdateInFile(draftId ?? undefined, cedula, telefono));
 }
 
 /** Elimina borradores incompletos cuando ya existe una solicitud enviada del mismo contacto. */

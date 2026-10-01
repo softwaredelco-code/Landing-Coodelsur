@@ -5,7 +5,7 @@ import { Select } from "@/presentation/components/ui/Select";
 import {
   ESTADOS_CIVILES,
   GENEROS,
-  NIVELES_EDUCACION,
+  NIVELES_EDUCACION_URBANO,
   TIPOS_IDENTIFICACION,
   requiereNombreConyuge,
 } from "@/shared/config/creditos/opciones";
@@ -230,7 +230,7 @@ export function SeccionDatosGenerales() {
       )}
       <Select
         label="Nivel de educación"
-        options={NIVELES_EDUCACION}
+        options={NIVELES_EDUCACION_URBANO}
         placeholder="Seleccionar..."
         required
         error={errors.nivelEducacion?.message}

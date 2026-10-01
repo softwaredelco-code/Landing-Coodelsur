@@ -31,7 +31,8 @@ export function requiereNombreConyuge(estadoCivil: string | undefined | null): b
   );
 }
 
-export const NIVELES_EDUCACION = [
+/** Niveles de educación para Microcrédito urbano. */
+export const NIVELES_EDUCACION_URBANO = [
   { label: "Ninguno", value: "ninguno" },
   { label: "Primaria", value: "primaria" },
   { label: "Bachillerato", value: "bachillerato" },
