@@ -158,6 +158,11 @@ export function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Buffer {
   const sheetFlujo = wb.Sheets["Flujo Empleado"];
   if (sheetFlujo) {
     if (sheetFlujo["D8"]) { sheetFlujo["D8"].v = ingresos; sheetFlujo["D8"].t = "n"; }
+    if (sheetFlujo["D9"]) {
+      const quanto = Number(datos.quantoMedio || datos.ingresosMedio || (ingresos > 0 ? ingresos : 3011000));
+      sheetFlujo["D9"].v = quanto;
+      sheetFlujo["D9"].t = "n";
+    }
   }
 
   // 3. Inyectar datos en 'Analisis'
@@ -187,6 +192,10 @@ export function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Buffer {
         : "No reportada";
 
     const esCotizante = datos.esCotizante !== undefined ? (datos.esCotizante ? "SI" : "NO") : "SI";
+    if (sheetAnalisis["C15"]) {
+      sheetAnalisis["C15"].v = esCotizante;
+      sheetAnalisis["C15"].t = "s";
+    }
 
     const concepto = [
       `Tipo crédito:  ${linea}`,
@@ -211,6 +220,32 @@ export function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Buffer {
       delete sheetAnalisis["C32"].f;
       sheetAnalisis["C32"].v = `Fecha:  ${fechaValida.toLocaleDateString("es-CO")}`;
       sheetAnalisis["C32"].t = "s";
+    }
+  }
+
+  // 4. Inyectar datos en 'Referenciación' si está disponible
+  const sheetRef = wb.Sheets["Referenciación"];
+  if (sheetRef) {
+    if (empresa && empresa !== "No reporta") {
+      sheetRef["C11"] = { v: empresa, t: "s" };
+      if (datos.empresaTelefono || datos.telefonoEmpresa) {
+        sheetRef["F11"] = { v: String(datos.empresaTelefono || datos.telefonoEmpresa), t: "s" };
+      }
+      sheetRef["C13"] = { v: cargo, t: "s" };
+    }
+    if (datos.referenciaFamiliarNombre) {
+      sheetRef["C17"] = { v: String(datos.referenciaFamiliarNombre), t: "s" };
+      if (datos.referenciaFamiliarTelefono) {
+        sheetRef["F17"] = { v: String(datos.referenciaFamiliarTelefono), t: "s" };
+      }
+      sheetRef["C19"] = { v: String(datos.referenciaFamiliarParentesco || datos.parentesco || "Familiar"), t: "s" };
+    }
+    if (datos.referenciaPersonalNombre) {
+      sheetRef["C35"] = { v: String(datos.referenciaPersonalNombre), t: "s" };
+      if (datos.referenciaPersonalTelefono) {
+        sheetRef["F35"] = { v: String(datos.referenciaPersonalTelefono), t: "s" };
+      }
+      sheetRef["C37"] = { v: String(datos.referenciaPersonalParentesco || "Personal / Amigo"), t: "s" };
     }
   }
 
