@@ -104,7 +104,12 @@ export default function AdminLeadDetailPage() {
     if (!lead) return;
     setDownloadingExcel(true);
     try {
-      const res = await fetch(`/api/admin/leads/${lead.id}/analisis-excel`);
+      let res = await fetch(`/api/admin/leads/${lead.id}/analisis-excel`);
+      if (res.status === 503) {
+        // En cPanel/Passenger, si el worker está reiniciando, reintentamos automáticamente tras 1.5s
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        res = await fetch(`/api/admin/leads/${lead.id}/analisis-excel`);
+      }
       if (res.status === 401) {
         router.replace("/admin");
         return;

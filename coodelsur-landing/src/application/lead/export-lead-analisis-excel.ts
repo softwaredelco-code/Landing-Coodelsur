@@ -114,6 +114,14 @@ export function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Buffer {
     cellDates: true,
   });
 
+  // Podar metadatos excesivos (!cols de 16,384 columnas) que disparan memoria y 503 en cPanel
+  for (const sheetName of wb.SheetNames) {
+    const s = wb.Sheets[sheetName];
+    if (!s) continue;
+    if (s["!cols"] && s["!cols"].length > 30) s["!cols"] = s["!cols"].slice(0, 30);
+    if (s["!rows"] && s["!rows"].length > 100) s["!rows"] = s["!rows"].slice(0, 100);
+  }
+
   const datos = (lead.datosFormulario || {}) as Record<string, unknown>;
   const nombre = (lead.nombre || "").trim().toUpperCase();
   const cedula = String(lead.cedula || "").trim();
