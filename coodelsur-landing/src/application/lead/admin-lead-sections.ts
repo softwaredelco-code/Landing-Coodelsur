@@ -1,4 +1,5 @@
 import { formSectionsNanocredito } from "@/shared/config/creditos/form-sections";
+import { TIEMPO_MORA_LABELS } from "@/shared/config/creditos/opciones";
 import { formatCOP } from "@/shared/utils";
 
 const KNOWN_FORM_FIELD_NAMES = new Set(
@@ -35,6 +36,7 @@ const MONEY_FIELDS = new Set([
   "cuotaCapitalInteres",
   "cuotaFianzaMensual",
   "cuotaVidaDeudoresMensual",
+  "moraValor",
 ]);
 
 const SKIP_FIELDS = new Set([
@@ -49,7 +51,11 @@ const SKIP_FIELDS = new Set([
 /** Ya se muestran en la tarjeta de contacto del detalle. */
 const CONTACT_SUMMARY_FIELDS = new Set(["nombre", "email", "cedula", "telefono"]);
 
-function formatFieldValue(name: string, value: unknown): string {
+function formatFieldValue(
+  name: string,
+  value: unknown,
+  options?: readonly { label: string; value: string }[],
+): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Sí" : "No";
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -58,6 +64,17 @@ function formatFieldValue(name: string, value: unknown): string {
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
+    if (MONEY_FIELDS.has(name)) {
+      const num = Number(trimmed.replace(/[^0-9.-]+/g, ""));
+      if (Number.isFinite(num) && num > 0) return formatCOP(num);
+    }
+    if (name === "moraTiempo" && TIEMPO_MORA_LABELS[trimmed]) {
+      return TIEMPO_MORA_LABELS[trimmed];
+    }
+    if (options && options.length > 0) {
+      const matched = options.find((opt) => opt.value === trimmed);
+      if (matched) return matched.label;
+    }
     return trimmed || "—";
   }
   return "—";
@@ -71,7 +88,7 @@ export function buildAdminLeadSections(datosFormulario: unknown): AdminLeadSecti
       : {};
 
   return formSectionsNanocredito
-    .filter((section) => section.id !== "verificacion" && section.id !== "domicilio")
+    .filter((section) => section.id !== "verificacion")
     .map((section) => ({
       id: section.id,
       title: section.title,
@@ -83,7 +100,7 @@ export function buildAdminLeadSections(datosFormulario: unknown): AdminLeadSecti
         )
         .map((field) => ({
           label: field.label,
-          value: formatFieldValue(field.name, datos[field.name]),
+          value: formatFieldValue(field.name, datos[field.name], field.options),
         })),
     }))
     .filter((section) => section.fields.some((field) => field.value !== "—"));

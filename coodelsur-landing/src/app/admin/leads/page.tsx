@@ -55,8 +55,15 @@ async function downloadExcelExport(url: string, fallbackFilename: string) {
     return "unauthorized" as const;
   }
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    return data?.error ?? "No se pudo generar el Excel";
+    const text = await res.text().catch(() => "");
+    let errorMsg = "No se pudo generar el Excel";
+    try {
+      const data = JSON.parse(text) as { error?: string };
+      if (data?.error) errorMsg = data.error;
+    } catch {
+      if (text && text.length < 150) errorMsg = text;
+    }
+    return errorMsg;
   }
 
   const disposition = res.headers.get("Content-Disposition") ?? "";
@@ -72,16 +79,19 @@ async function downloadExcelExport(url: string, fallbackFilename: string) {
   return null;
 }
 
+const PAGE_SIZE = 50;
+
 export default function AdminLeadsPage() {
   const router = useRouter();
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [appliedQ, setAppliedQ] = useState("");
   const [estado, setEstado] = useState("");
   const [origen, setOrigen] = useState("");
   const [appliedOrigen, setAppliedOrigen] = useState("");
-  const [origenCounts, setOrigenCounts] = useState<Record<string, number>>({});
+  const [estadoCounts, setEstadoCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -92,6 +102,8 @@ export default function AdminLeadsPage() {
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
+    params.set("take", String(PAGE_SIZE));
+    params.set("skip", String((page - 1) * PAGE_SIZE));
     if (appliedQ) params.set("q", appliedQ);
     if (estado) params.set("estado", estado);
     if (appliedOrigen) params.set("origen", appliedOrigen);
@@ -109,40 +121,41 @@ export default function AdminLeadsPage() {
     const data = (await res.json()) as {
       leads: LeadRow[];
       total: number;
-      origenCounts?: Record<string, number>;
+      estadoCounts?: Record<string, number>;
     };
     setLeads(data.leads);
     setTotal(data.total);
-    setOrigenCounts(data.origenCounts ?? {});
+    setEstadoCounts(data.estadoCounts ?? {});
     setSelectedIds(new Set());
     setLoading(false);
-  }, [appliedQ, appliedOrigen, estado, router]);
+  }, [appliedQ, appliedOrigen, estado, page, router]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const applyFilters = () => {
+    setPage(1);
     setAppliedQ(q.trim());
     setAppliedOrigen(origen);
   };
 
-  const stats = useMemo(() => {
-    const counts = {
-      recibido: 0,
-      incompleto: 0,
-      revisado: 0,
-      contactado: 0,
-      descartado: 0,
-    };
-    for (const lead of leads) {
-      if (lead.estado in counts) {
-        counts[lead.estado as keyof typeof counts] += 1;
-      }
-    }
-    return counts;
-  }, [leads]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  const completasTotal = estadoCounts.completo ?? 0;
+  const porContactarTotal =
+    (estadoCounts.por_contactar ?? 0) +
+    (estadoCounts.recibido ?? 0) +
+    (estadoCounts.revisado ?? 0) +
+    (estadoCounts.contactado ?? 0);
+  const aprobadosTotal = estadoCounts.aprobado ?? 0;
+  const desembolsadosTotal = estadoCounts.desembolsado ?? 0;
+  const noInteresadoTotal = estadoCounts.no_interesado ?? 0;
+  const rechazadosTotal =
+    (estadoCounts.rechazado_reportado ?? 0) +
+    (estadoCounts.rechazado_no_cumple ?? 0) +
+    (estadoCounts.descartado ?? 0);
+  const incompletasTotal = estadoCounts.incompleto ?? 0;
   const allVisibleSelected = useMemo(
     () => leads.length > 0 && leads.every((lead) => selectedIds.has(lead.id)),
     [leads, selectedIds],
@@ -170,7 +183,7 @@ export default function AdminLeadsPage() {
     if (scope === "selected") {
       params.set("ids", Array.from(selectedIds).join(","));
     } else {
-      if (q) params.set("q", appliedQ);
+      if (appliedQ) params.set("q", appliedQ);
       if (estado) params.set("estado", estado);
       if (appliedOrigen) params.set("origen", appliedOrigen);
     }
@@ -201,13 +214,23 @@ export default function AdminLeadsPage() {
       title="Solicitudes de crédito"
       subtitle="Gestiona, revisa y exporta las solicitudes recibidas."
     >
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
         <StatCard label="Total (filtro)" value={String(total)} />
-        <StatCard label="Witme" value={String(origenCounts.witme ?? 0)} tone="violet" />
-        <StatCard label="Web directo" value={String(origenCounts.directo ?? 0)} tone="blue" />
-        <StatCard label="Recibidas" value={String(stats.recibido)} tone="blue" />
-        <StatCard label="Incompletas" value={String(stats.incompleto)} tone="amber" />
-        <StatCard label="Contactadas" value={String(stats.contactado)} tone="green" />
+        <StatCard label="Completas" value={String(completasTotal)} tone="green" />
+        <StatCard
+          label="Por Contactar"
+          value={String(porContactarTotal)}
+          tone="blue"
+        />
+        <StatCard label="Aprobados" value={String(aprobadosTotal)} tone="green" />
+        <StatCard label="Desembolsados" value={String(desembolsadosTotal)} tone="purple" />
+        <StatCard label="No interesado" value={String(noInteresadoTotal)} tone="zinc" />
+        <StatCard
+          label="Rechazados"
+          value={String(rechazadosTotal)}
+          tone="rose"
+        />
+        <StatCard label="Incompletas" value={String(incompletasTotal)} tone="amber" />
       </div>
 
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:p-5">
@@ -234,15 +257,21 @@ export default function AdminLeadsPage() {
             <select
               id="admin-estado"
               value={estado}
-              onChange={(e) => setEstado(e.target.value)}
+              onChange={(e) => {
+                setPage(1);
+                setEstado(e.target.value);
+              }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm"
             >
-              <option value="">Todos</option>
-              <option value="incompleto">Incompletas</option>
-              <option value="recibido">Recibidas</option>
-              <option value="revisado">Revisadas</option>
-              <option value="contactado">Contactadas</option>
-              <option value="descartado">Descartadas</option>
+              <option value="">Todos los estados</option>
+              <option value="completo">Completa</option>
+              <option value="por_contactar">Por Contactar</option>
+              <option value="aprobado">Aprobado</option>
+              <option value="desembolsado">Desembolsado</option>
+              <option value="no_interesado">No interesado</option>
+              <option value="rechazado_reportado">Rechazado: Reportado</option>
+              <option value="rechazado_no_cumple">Rechazado: No cumple requisitos</option>
+              <option value="incompleto">Incompleta</option>
             </select>
           </div>
           <div className="w-full lg:w-52">
@@ -414,11 +443,84 @@ export default function AdminLeadsPage() {
         </div>
       )}
 
-      {!loading && total > leads.length && (
-        <p className="mt-3 text-xs text-gray-500">
-          Mostrando {leads.length} de {total}. El informe exporta todas las coincidencias (hasta
-          5.000).
-        </p>
+      {/* Paginación de a 50 solicitudes */}
+      {!loading && !error && total > 0 && (
+        <div className="mt-4 flex flex-col items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm sm:flex-row">
+          <p className="text-xs text-gray-500">
+            Mostrando{" "}
+            <span className="font-semibold text-gray-800">
+              {(page - 1) * PAGE_SIZE + 1}
+            </span>{" "}
+            a{" "}
+            <span className="font-semibold text-gray-800">
+              {Math.min(page * PAGE_SIZE, total)}
+            </span>{" "}
+            de <span className="font-semibold text-gray-800">{total}</span> solicitudes
+            {totalPages > 1 && (
+              <span className="text-gray-400"> (Página {page} de {totalPages})</span>
+            )}
+          </p>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                <span>Anterior</span>
+              </button>
+
+              <div className="flex items-center gap-1 px-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                  .reduce<number[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) {
+                      acc.push(-1);
+                    }
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, idx) =>
+                    p === -1 ? (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-xs text-gray-400">
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPage(p)}
+                        className={`min-w-[2rem] rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+                          page === p
+                            ? "bg-coodel-primary text-white shadow-sm"
+                            : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ),
+                  )}
+              </div>
+
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span>Siguiente</span>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </AdminShell>
   );
@@ -431,14 +533,17 @@ function StatCard({
 }: {
   label: string;
   value: string;
-  tone?: "default" | "blue" | "amber" | "violet" | "green";
+  tone?: "default" | "blue" | "amber" | "violet" | "purple" | "green" | "rose" | "zinc";
 }) {
   const tones = {
     default: "border-gray-200",
     blue: "border-blue-100 bg-blue-50/40",
     amber: "border-amber-100 bg-amber-50/40",
     violet: "border-violet-100 bg-violet-50/40",
+    purple: "border-purple-100 bg-purple-50/40",
     green: "border-emerald-100 bg-emerald-50/40",
+    rose: "border-red-100 bg-red-50/40",
+    zinc: "border-slate-200 bg-slate-50/40",
   };
 
   return (

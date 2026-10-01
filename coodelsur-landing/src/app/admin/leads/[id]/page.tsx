@@ -4,7 +4,7 @@ import { AdminShell } from "@/presentation/components/admin/AdminShell";
 import { LeadAttachmentGallery } from "@/presentation/components/admin/LeadAttachmentGallery";
 import { LeadInfoGrid, LeadSummaryCard } from "@/presentation/components/admin/LeadInfoGrid";
 import { LeadUbicacionSection } from "@/presentation/components/admin/LeadUbicacionSection";
-import { StatusBadge } from "@/presentation/components/admin/StatusBadge";
+import { StatusBadge, ESTADO_LABELS } from "@/presentation/components/admin/StatusBadge";
 import { Button } from "@/presentation/components/ui/Button";
 import type { AdminLeadDetail } from "@/application/lead/admin-lead-detail";
 import { formatCOP } from "@/shared/utils";
@@ -14,6 +14,8 @@ import { useEffect, useState } from "react";
 
 const TIPO_CREDITO_LABELS: Record<string, string> = {
   microcredito_small: "Microcrédito Small",
+  libranza: "Crédito Libranza",
+  microcredito_urbano: "Microcrédito Urbano",
 };
 
 export default function AdminLeadDetailPage() {
@@ -23,6 +25,7 @@ export default function AdminLeadDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -97,6 +100,60 @@ export default function AdminLeadDetailPage() {
     window.alert("No se pudo eliminar la solicitud. Intenta de nuevo.");
   };
 
+  const handleDownloadAnalisisExcel = async () => {
+    if (!lead) return;
+    setDownloadingExcel(true);
+    try {
+      let res = await fetch(`/api/admin/leads/${lead.id}/analisis-excel`);
+      if (res.status === 503) {
+        // En cPanel/Passenger, si el worker está reiniciando, reintentamos automáticamente tras 1.5s
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        res = await fetch(`/api/admin/leads/${lead.id}/analisis-excel`);
+      }
+      if (res.status === 401) {
+        router.replace("/admin");
+        return;
+      }
+      if (!res.ok) {
+        let msg = "No se pudo generar el análisis en Excel";
+        try {
+          const errorJson = (await res.json()) as { error?: string };
+          if (errorJson?.error) msg = errorJson.error;
+        } catch {
+          msg = `El servidor respondió con estado ${res.status}. Intenta de nuevo en unos segundos.`;
+        }
+        throw new Error(msg);
+      }
+
+      let filename = `AnalisisCredito_${lead.cedula}_Nano.xlsx`;
+      const disposition = res.headers.get("Content-Disposition");
+      if (disposition) {
+        const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (utf8Match && utf8Match[1]) {
+          filename = decodeURIComponent(utf8Match[1]);
+        } else {
+          const match = disposition.match(/filename="?([^";]+)"?/i);
+          if (match && match[1]) filename = match[1];
+        }
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[downloadAnalisisExcel]", err);
+      window.alert(err instanceof Error ? err.message : "Error al descargar el análisis en Excel");
+    } finally {
+      setDownloadingExcel(false);
+    }
+  };
+
   if (error) {
     return (
       <AdminShell title="Solicitud no encontrada" backHref="/admin/leads" backLabel="Solicitudes">
@@ -132,18 +189,52 @@ export default function AdminLeadDetailPage() {
       backHref="/admin/leads"
       backLabel="Solicitudes"
       actions={
-        <select
-          value={lead.estado}
-          disabled={saving}
-          onChange={(e) => void updateEstado(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium capitalize shadow-sm"
-        >
-          <option value="incompleto">Incompleta</option>
-          <option value="recibido">Recibida</option>
-          <option value="revisado">Revisada</option>
-          <option value="contactado">Contactada</option>
-          <option value="descartado">Descartada</option>
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            loading={downloadingExcel}
+            disabled={downloadingExcel}
+            onClick={() => void handleDownloadAnalisisExcel()}
+            className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs sm:text-sm px-3.5 py-2 shadow-sm"
+          >
+            <svg
+              className="h-4 w-4 shrink-0 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            Descargar Análisis
+          </Button>
+          <select
+            value={lead.estado}
+            disabled={saving}
+            onChange={(e) => void updateEstado(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm focus:border-coodel-primary focus:outline-none focus:ring-1 focus:ring-coodel-primary"
+          >
+            <option value="incompleto">Incompleta</option>
+            <option value="completo">Completa</option>
+            <option value="por_contactar">Por Contactar</option>
+            <option value="no_interesado">No interesado</option>
+            <option value="aprobado">Aprobado</option>
+            <option value="desembolsado">Desembolsado</option>
+            <option value="rechazado_reportado">Rechazado: Reportado</option>
+            <option value="rechazado_no_cumple">Rechazado: No cumple requisitos</option>
+            {["recibido", "revisado", "contactado", "descartado"].includes(lead.estado) && (
+              <option value={lead.estado} disabled>
+                {ESTADO_LABELS[lead.estado] ?? lead.estado} (Anterior)
+              </option>
+            )}
+          </select>
+        </div>
       }
     >
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -247,16 +338,41 @@ export default function AdminLeadDetailPage() {
         <Button variant="outline" type="button" onClick={() => router.push("/admin/leads")}>
           Volver al listado
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          loading={deleting}
-          disabled={deleting || saving}
-          onClick={() => void deleteSolicitud()}
-          className="border-red-200 text-red-700 hover:bg-red-50"
-        >
-          Eliminar solicitud
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="primary"
+            loading={downloadingExcel}
+            disabled={downloadingExcel}
+            onClick={() => void handleDownloadAnalisisExcel()}
+            className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+          >
+            <svg
+              className="h-4 w-4 shrink-0 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            Descargar Análisis Excel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            loading={deleting}
+            disabled={deleting || saving}
+            onClick={() => void deleteSolicitud()}
+            className="border-red-200 text-red-700 hover:bg-red-50"
+          >
+            Eliminar solicitud
+          </Button>
+        </div>
       </div>
     </AdminShell>
   );

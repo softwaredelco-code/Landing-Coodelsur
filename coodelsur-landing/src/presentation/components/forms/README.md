@@ -27,7 +27,7 @@ Componentes compartidos (cámara, firma, file upload): en la raíz de `forms/`.
 |----------|------|
 | Microcrédito Small | `/credito/microcredito_small` |
 | Microcrédito urbano | `/credito/microcredito_urbano` |
-| Microcrédito rural | `/credito/microcredito_rural` |
+| Crédito Libranza | `/credito/libranza` |
 | Consumo | `/credito/consumo` |
 | Comercial | `/credito/comercial` |
 | Libranza | `/credito/libranza` |

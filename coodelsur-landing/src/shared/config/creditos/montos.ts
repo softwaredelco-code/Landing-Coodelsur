@@ -4,12 +4,12 @@
  * Productos:
  * - Microcrédito Small:  $200.000 – $600.000
  * - Microcrédito urbano: $700.000 – $7.000.000
- * - Microcrédito rural:  $1.000.000 – $5.000.000
+ * - Crédito Libranza:    $700.000 – $20.000.000
  *
- * Nota: rural y urbano se solapan entre $1M y $5M.
+ * Nota: urbano y libranza se solapan entre $700.000 y $7.000.000.
  * En ese intervalo el usuario debe confirmar cuál aplica.
  *
- * Small y urbano tienen formulario publicado.
+ * Small, urbano y libranza tienen formulario publicado.
  */
 
 import type { TipoCredito } from "@/shared/types/credito";
@@ -43,18 +43,19 @@ export const RANGOS_MONTO_CREDITO: readonly RangoMonto[] = [
     step: 100_000,
     formularioDisponible: true,
   },
+
   {
-    tipo: "microcredito_rural",
-    nombre: "Microcrédito rural",
-    min: 1_000_000,
-    max: 5_000_000,
+    tipo: "libranza",
+    nombre: "Crédito Libranza",
+    min: 700_000,
+    max: 20_000_000,
     step: 100_000,
-    formularioDisponible: false,
+    formularioDisponible: true,
   },
 ] as const;
 
 export const MONTO_SELECTOR_MIN = 200_000;
-export const MONTO_SELECTOR_MAX = 7_000_000;
+export const MONTO_SELECTOR_MAX = 20_000_000;
 export const MONTO_SELECTOR_STEP = 50_000;
 /** Valor inicial dentro de Small (único formulario activo). */
 export const MONTO_SELECTOR_DEFAULT = 400_000;
@@ -84,7 +85,7 @@ export function listarCandidatosPorMonto(monto: number): RangoMonto[] {
 
 /**
  * Resuelve el/los productos aplicables a un monto.
- * Si hay ambigüedad (p. ej. $2M → rural y urbano), `candidatos.length > 1`
+ * Si hay ambigüedad (p. ej. $2M → urbano y libranza), `candidatos.length > 1`
  * y `rango` queda vacío hasta la elección del usuario.
  */
 export function resolverTipoPorMonto(monto: number): ResolucionMonto {
@@ -102,7 +103,7 @@ export function resolverTipoPorMonto(monto: number): ResolucionMonto {
       ok: false,
       monto,
       motivo:
-        "El monto no coincide con un producto. Small: $200.000–$600.000 · Urbano: $700.000–$7.000.000 · Rural: $1.000.000–$5.000.000.",
+        "El monto no coincide con un producto. Small: $200.000–$600.000 · Urbano: $700.000–$7.000.000 · Libranza: $700.000–$20.000.000.",
     };
   }
 

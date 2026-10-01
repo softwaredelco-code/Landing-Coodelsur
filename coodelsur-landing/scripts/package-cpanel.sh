@@ -22,6 +22,9 @@ cp -a "$STANDALONE/." "$OUT/"
 mkdir -p "$OUT/.next/static"
 cp -a "$STATIC/." "$OUT/.next/static/"
 cp -a "$ROOT/public" "$OUT/public"
+if [[ -d "$ROOT/templates" ]]; then
+  cp -a "$ROOT/templates" "$OUT/templates"
+fi
 # Usar server.js generado por Next standalone (no el custom de la raíz).
 cp -a "$ROOT/database" "$OUT/database"
 

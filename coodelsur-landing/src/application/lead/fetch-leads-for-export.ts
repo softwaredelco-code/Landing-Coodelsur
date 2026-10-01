@@ -11,7 +11,7 @@ export const MAX_LEADS_EXPORT = 5000;
 
 export interface FetchLeadsForExportOptions {
   ids?: string[];
-  estado?: LeadEstado | null;
+  estado?: string | null;
   tipoCredito?: string | null;
   origen?: string | null;
   q?: string | null;
@@ -48,10 +48,19 @@ const EXPORT_SELECT = {
 
 function buildWhere(options: FetchLeadsForExportOptions) {
   const q = options.q?.trim()?.toLowerCase();
+  const estadoFilter = options.estado
+    ? options.estado === "completo"
+      ? { in: ["completo", "recibido"] as any }
+      : options.estado === "por_contactar"
+        ? { in: ["por_contactar", "revisado", "contactado"] as any }
+        : options.estado === "rechazado_no_cumple"
+          ? { in: ["rechazado_no_cumple", "descartado"] as any }
+          : (options.estado as any)
+    : undefined;
 
   return {
     ...(options.ids?.length ? { id: { in: options.ids } } : {}),
-    ...(options.estado ? { estado: options.estado } : {}),
+    ...(estadoFilter ? { estado: estadoFilter } : {}),
     ...(options.tipoCredito ? { tipoCredito: options.tipoCredito } : {}),
     ...(options.origen ? { origen: options.origen } : {}),
     ...(q

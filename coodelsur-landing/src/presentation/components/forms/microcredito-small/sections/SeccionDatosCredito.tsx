@@ -14,6 +14,7 @@ import {
   DESTINOS_CREDITO,
   ORIGENES_OTROS_INGRESOS,
   SI_NO,
+  TIEMPOS_MORA,
 } from "@/shared/config/creditos/opciones";
 import { getRangoPorTipo } from "@/shared/config/creditos/montos";
 import { calcularDesgloseCuota } from "@/domain/credito/amortizacion";
@@ -37,6 +38,7 @@ export function SeccionDatosCredito() {
   const cuotas = Number(watch("cantidadCuotas") || 0);
   const tipoCredito = watch("tipoCredito") || "microcredito_small";
   const origenOtrosIngresos = watch("origenOtrosIngresos");
+  const moraVigente = watch("moraVigente");
   const parametros = useParametrosAmortizacion(tipoCredito);
   const opcionesCuotas = useMemo(
     () =>
@@ -205,9 +207,65 @@ export function SeccionDatosCredito() {
           placeholder="Seleccionar..."
           required
           error={errors.moraVigente?.message}
-          {...register("moraVigente")}
+          {...register("moraVigente", {
+            onChange: (event) => {
+              if (event.target.value !== "si") {
+                setValue("moraEntidad", "", { shouldValidate: true });
+                setValue("moraTiempo", "", { shouldValidate: true });
+                setValue("moraValor", undefined, { shouldValidate: true });
+              }
+            },
+          })}
         />
       </div>
+
+      {moraVigente === "si" && (
+        <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-4">
+          <div className="flex items-center gap-2 text-amber-800 font-medium text-sm">
+            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+            Detalle de la mora reportada
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 [&_label]:min-h-[2.75rem] [&_label]:flex [&_label]:items-end">
+            <div>
+              <Input
+                label="¿Con qué entidad tiene la mora?"
+                placeholder="Ej. Bancolombia, Claro..."
+                required
+                error={errors.moraEntidad?.message}
+                {...register("moraEntidad")}
+              />
+            </div>
+            <div>
+              <Select
+                label="¿Hace cuánto tiempo tiene la mora?"
+                options={TIEMPOS_MORA}
+                placeholder="Seleccionar..."
+                required
+                error={errors.moraTiempo?.message}
+                {...register("moraTiempo")}
+              />
+            </div>
+            <div>
+              <Controller
+                name="moraValor"
+                control={control}
+                render={({ field }) => (
+                  <CurrencyInput
+                    label="¿De qué monto es la mora?"
+                    name={field.name}
+                    value={field.value}
+                    required
+                    onValueChange={field.onChange}
+                    onBlur={field.onBlur}
+                    ref={field.ref}
+                    error={errors.moraValor?.message}
+                  />
+                )}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <Controller
         name="ingresosMensuales"

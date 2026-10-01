@@ -20,7 +20,7 @@ import { z } from "zod";
 export const PRODUCTOS_PARAMETRIZABLES = [
   { tipo: "microcredito_small" as const, nombre: "Microcrédito Small", disponible: true },
   { tipo: "microcredito_urbano" as const, nombre: "Microcrédito urbano", disponible: false },
-  { tipo: "microcredito_rural" as const, nombre: "Microcrédito rural", disponible: false },
+  { tipo: "libranza" as const, nombre: "Crédito Libranza", disponible: true },
 ] as const;
 
 export type ProductoParametrizable = (typeof PRODUCTOS_PARAMETRIZABLES)[number]["tipo"];
@@ -252,19 +252,19 @@ export async function listCreditoParametrosRecords(): Promise<CreditoParametrosR
   await warmParametrosCache();
   const rows = cachedDbRows ?? [];
 
-  if (rows.length === 0) {
-    return PRODUCTOS_PARAMETRIZABLES.map((producto) => defaultRecord(producto.tipo));
-  }
-
-  return rows.map((row) =>
-    parametrosToRecord(
-      row.tipoCredito as ProductoParametrizable,
-      rowToParametros(row),
-      row.nombreVisible,
-      row.fechaActualizacion,
-      row.activo,
-    ),
-  );
+  return PRODUCTOS_PARAMETRIZABLES.map((producto) => {
+    const row = rows.find((r) => r.tipoCredito === producto.tipo);
+    if (row) {
+      return parametrosToRecord(
+        producto.tipo,
+        rowToParametros(row),
+        row.nombreVisible,
+        row.fechaActualizacion,
+        row.activo,
+      );
+    }
+    return defaultRecord(producto.tipo);
+  });
 }
 
 export async function getPublicParametrosMap(): Promise<

@@ -11,10 +11,10 @@ Solo entre $1M y $5M puede pedir confirmación (rural vs urbano).
 |----------|-------------|------------|
 | Microcrédito Small | $200.000 – $600.000 | Disponible |
 | Microcrédito urbano | $600.001 – $20.000.000 | Próximamente |
-| Microcrédito rural | $1.000.000 – $5.000.000 | Próximamente |
+| Crédito Libranza | $1.000.000 – $5.000.000 | Próximamente |
 
 Nota: $600.000 queda en Small (“hasta 600.000”). Urbano arranca en $600.001.
-Entre $1M y $5M hay solape rural/urbano → el usuario elige.
+Entre $1M y $5M hay solape libranza/urbano → el usuario elige.
 
 Fuente de verdad: `src/shared/config/creditos/montos.ts`
 
@@ -27,7 +27,7 @@ flowchart TD
   Detect -->|un candidato Small| Form["FormularioPorTipo"]
   Detect -->|1M–5M solape| Eleccion["Elegir rural o urbano"]
   Eleccion --> Prox["Pantalla próximamente + WhatsApp"]
-  Detect -->|urbano/rural sin form| Prox
+  Detect -->|urbano/libranza sin form| Prox
   Detect -->|fuera de rango| ErrorUi["Mensaje de rango inválido"]
   Form --> Api["POST /api/leads"]
   Api --> Store["Lead en PostgreSQL"]

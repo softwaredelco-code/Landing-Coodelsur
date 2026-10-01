@@ -58,7 +58,7 @@ function toFileLead(input: CreateLeadInput, processedData: Record<string, unknow
     email: input.email || null,
     datosFormulario: processedData,
     origen: input.origen || inferOrigen(utm),
-    estado: input.estado ?? "recibido",
+    estado: input.estado ?? "por_contactar",
     aceptaTerminos,
     fechaAceptacionTerminos: fechaAceptacionTerminos?.toISOString() ?? null,
     utmSource: utm.utmSource ?? null,
@@ -115,7 +115,7 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
     fechaAceptacionTerminos && !Number.isNaN(fechaAceptacionTerminos.getTime())
       ? fechaAceptacionTerminos
       : null;
-  const estadoFinal = input.estado ?? "recibido";
+  const estadoFinal = input.estado ?? "completo";
   const summary = buildLeadSummaryFields(processedData, estadoFinal);
 
   const forceFile = process.env.LEAD_STORE === "file";
@@ -235,7 +235,7 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
         email: input.email || null,
         datosFormulario: processedData,
         origen: input.origen || inferOrigen(utm),
-        estado: input.estado ?? "recibido",
+        estado: input.estado ?? "por_contactar",
         aceptaTerminos,
         fechaAceptacionTerminos: fechaOk?.toISOString() ?? null,
         utmSource: utm.utmSource ?? null,
