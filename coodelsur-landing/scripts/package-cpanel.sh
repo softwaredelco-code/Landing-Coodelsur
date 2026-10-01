@@ -25,6 +25,9 @@ cp -a "$ROOT/public" "$OUT/public"
 if [[ -d "$ROOT/templates" ]]; then
   cp -a "$ROOT/templates" "$OUT/templates"
 fi
+if [[ -d "$ROOT/docs" ]]; then
+  cp -a "$ROOT/docs" "$OUT/docs"
+fi
 # Usar server.js generado por Next standalone (no el custom de la raíz).
 cp -a "$ROOT/database" "$OUT/database"
 

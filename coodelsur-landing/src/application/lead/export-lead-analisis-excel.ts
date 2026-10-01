@@ -32,8 +32,10 @@ let cachedTemplateBuffer: Buffer | null = null;
 
 function resolveTemplatePath(): string {
   const candidates = [
+    path.join(process.cwd(), "docs", "AnalisisCredito_Barrera_1116548410_Nano.xlsx"),
     path.join(process.cwd(), "public", "templates", "analisis-credito-template.xlsx"),
     path.join(process.cwd(), "templates", "analisis-credito-template.xlsx"),
+    path.join(__dirname, "..", "..", "..", "docs", "AnalisisCredito_Barrera_1116548410_Nano.xlsx"),
     path.join(__dirname, "..", "..", "..", "public", "templates", "analisis-credito-template.xlsx"),
     path.join(__dirname, "..", "..", "..", "templates", "analisis-credito-template.xlsx"),
   ];
@@ -44,7 +46,7 @@ function resolveTemplatePath(): string {
     }
   }
 
-  throw new Error("No se encontró la plantilla de análisis de crédito (analisis-credito-template.xlsx)");
+  throw new Error("No se encontró la plantilla de análisis de crédito (docs/AnalisisCredito_Barrera_1116548410_Nano.xlsx)");
 }
 
 function getTemplateBuffer(): Buffer {
@@ -243,6 +245,9 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
         ? `${datos.referenciaFamiliarNombre} (${datos.referenciaFamiliarTelefono})`
         : "No reportada";
 
+    const novedad = String(datos.novedad || datos.novedades || "");
+    const propiedades = String(datos.propiedades || datos.tienePropiedades || "");
+
     const concepto = [
       `Tipo crédito:  ${linea}`,
       `Adres:  ${esCotizante === "SI" ? "Cotizante" : "No cotizante"}`,
@@ -251,8 +256,8 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
       `Dirección:  ${dir}`,
       `Tel Cel:  ${lead.telefono || "No reportado"}`,
       `Cuenta:  ${cuenta}`,
-      `Mora reportada:  ${mora}`,
-      `Ref. Familiar:  ${refFamiliar}`,
+      `Novedad:  ${novedad}`,
+      `Propiedades:  ${propiedades}`,
       `Nota:  Solicitud web registrada el ${fechaValida.toLocaleString("es-CO")}`,
     ].join("\n");
 
@@ -294,7 +299,7 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
   const wbFile = zip.file("xl/workbook.xml");
   if (wbFile) {
     let wbXml = await wbFile.async("text");
-    wbXml = wbXml.replace(/<calcPr[^>]*\/?>/, '<calcPr calcId="191029" fullCalcOnLoad="1" forceFullCalculation="1"/>');
+    wbXml = wbXml.replace(/<calcPr[^>]*\/?>/, '<calcPr calcId="152511" fullCalcOnLoad="1" forceFullCalculation="1"/>');
     zip.file("xl/workbook.xml", wbXml);
   }
 
