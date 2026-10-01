@@ -211,8 +211,6 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
   const sheet3File = zip.file("xl/worksheets/sheet3.xml");
   if (sheet3File) {
     let s3 = await sheet3File.async("text");
-    s3 = updateCell(s3, "C4", { value: nombre, isString: true });
-    s3 = updateCell(s3, "C5", { value: cedula, isString: false });
     s3 = updateCell(s3, "D8", { value: ingresos, isString: false, defaultStyle: "117" });
     s3 = updateCell(s3, "D9", { value: quanto, isString: false, defaultStyle: "117" });
     zip.file("xl/worksheets/sheet3.xml", s3);
@@ -222,20 +220,10 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
   const sheet4File = zip.file("xl/worksheets/sheet4.xml");
   if (sheet4File) {
     let s4 = await sheet4File.async("text");
-    s4 = updateCell(s4, "C4", { value: nombre, isString: true });
-    s4 = updateCell(s4, "C5", { value: cedula, isString: false });
-    s4 = updateCell(s4, "C6", { value: destino, isString: true });
-    s4 = updateCell(s4, "E4", { value: empresa, isString: true });
-    s4 = updateCell(s4, "E5", { value: cargo, isString: true });
-    s4 = updateCell(s4, "E6", { value: linea, isString: true });
     s4 = updateCell(s4, "C10", { value: Number(datos.puntajeBegini || 0), isString: false, defaultStyle: "192" });
 
     const esCotizante = datos.esCotizante !== undefined ? (datos.esCotizante ? "SI" : "NO") : "SI";
     s4 = updateCell(s4, "C15", { value: esCotizante, isString: true, defaultStyle: "193" });
-
-    s4 = updateCell(s4, "C19", { value: montoSolicitado, isString: false });
-    s4 = updateCell(s4, "C20", { value: montoSolicitado, isString: false });
-    s4 = updateCell(s4, "C23", { value: montoSolicitado, isString: false });
 
     const dirParts = [
       datos.direccion,
@@ -306,11 +294,7 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
   const wbFile = zip.file("xl/workbook.xml");
   if (wbFile) {
     let wbXml = await wbFile.async("text");
-    if (wbXml.includes("<calcPr")) {
-      wbXml = wbXml.replace(/<calcPr([^>]*)>/, '<calcPr$1 fullCalcOnLoad="1" forceFullCalculation="1">');
-    } else {
-      wbXml = wbXml.replace("</workbook>", '<calcPr fullCalcOnLoad="1" forceFullCalculation="1"/></workbook>');
-    }
+    wbXml = wbXml.replace(/<calcPr[^>]*\/?>/, '<calcPr calcId="191029" fullCalcOnLoad="1" forceFullCalculation="1"/>');
     zip.file("xl/workbook.xml", wbXml);
   }
 
