@@ -53,7 +53,24 @@ export function LeadUbicacionSection({ lead }: { lead: AdminLeadDetail }) {
     typeof longitud === "number" &&
     Number.isFinite(latitud) &&
     Number.isFinite(longitud);
-  const hasAny = hasDomicilio(domicilio) || geoFormulario || hasGeoIp || ciudad || pais;
+
+  // Si las coordenadas registradas en el lead son idénticas a las del formulario GPS,
+  // corresponden al mismo punto capturado y no deben mostrarse duplicadas como "IP".
+  const isDuplicateCoords =
+    Boolean(geoFormulario) &&
+    hasGeoIp &&
+    Math.abs(geoFormulario!.lat - latitud!) < 0.001 &&
+    Math.abs(geoFormulario!.lng - longitud!) < 0.001;
+
+  const showGpsMap = Boolean(geoFormulario);
+  const showDistinctIpSeparated = Boolean(geoFormulario) && hasGeoIp && !isDuplicateCoords;
+
+  const hasAny =
+    hasDomicilio(domicilio) ||
+    showGpsMap ||
+    hasGeoIp ||
+    ciudad ||
+    pais;
 
   if (!hasAny) {
     return (
@@ -115,23 +132,31 @@ export function LeadUbicacionSection({ lead }: { lead: AdminLeadDetail }) {
           </div>
         )}
 
-        {geoFormulario && (
+        {/* 1. Ubicación GPS capturada en el formulario (prioridad máxima) */}
+        {showGpsMap && (
           <div>
             <h3 className="mb-2 text-sm font-semibold text-coodel-dark">
               Ubicación GPS (capturada en el formulario)
             </h3>
-            <p className="mb-3 text-xs text-gray-500">
+            <p className="mb-2 text-xs text-gray-500">
               Coordenadas que el solicitante autorizó desde su dispositivo al llenar el formulario.
             </p>
+            {(ciudad || pais) && (
+              <p className="mb-3 text-xs text-gray-600">
+                <span className="font-medium text-gray-500">Zona detectada por red:</span>{" "}
+                {[ciudad, pais].filter(Boolean).join(", ")}
+              </p>
+            )}
             <MapPreview
-              lat={geoFormulario.lat}
-              lng={geoFormulario.lng}
+              lat={geoFormulario!.lat}
+              lng={geoFormulario!.lng}
               title="Ubicación GPS del solicitante"
             />
           </div>
         )}
 
-        {(hasGeoIp || ciudad || pais) && (
+        {/* 2. Ubicación por IP (solo cuando no hubo GPS en el formulario) */}
+        {!showGpsMap && (hasGeoIp || ciudad || pais) && (
           <div>
             <h3 className="mb-2 text-sm font-semibold text-coodel-dark">
               Ubicación aproximada (IP al enviar)
@@ -140,9 +165,7 @@ export function LeadUbicacionSection({ lead }: { lead: AdminLeadDetail }) {
               {(ciudad || pais) && (
                 <div className="sm:col-span-2">
                   <dt className="text-gray-500">Ciudad / país detectados</dt>
-                  <dd>
-                    {[ciudad, pais].filter(Boolean).join(", ") || "—"}
-                  </dd>
+                  <dd>{[ciudad, pais].filter(Boolean).join(", ") || "—"}</dd>
                 </div>
               )}
               {hasGeoIp && (
@@ -159,6 +182,23 @@ export function LeadUbicacionSection({ lead }: { lead: AdminLeadDetail }) {
                 title="Ubicación aproximada por IP"
               />
             )}
+          </div>
+        )}
+
+        {/* 3. Caso especial: si hubo GPS pero la IP proviene de una ciudad claramente distinta */}
+        {showDistinctIpSeparated && (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-coodel-dark">
+              Ubicación por operador de red (IP diferente al GPS)
+            </h3>
+            <p className="mb-3 text-xs text-gray-500">
+              Ubicación del nodo de conexión del operador móvil/internet.
+            </p>
+            <MapPreview
+              lat={latitud!}
+              lng={longitud!}
+              title="Ubicación por operador de red"
+            />
           </div>
         )}
       </div>
