@@ -25,6 +25,7 @@ import {
 } from "@/infrastructure/persistence/file-store";
 import {
   cleanupIncompleteDraftsForContact,
+  dedupeIncompleteDrafts,
   findIncompleteLeadIdForContact,
 } from "@/application/lead/save-draft-lead";
 import type { LeadPayload, UtmParams, GeoLocation } from "@/shared/types/credito";
@@ -142,6 +143,25 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
       }
 
       if (promoteDraftId) {
+        const existingLead = await prisma.lead.findUnique({
+          where: { id: promoteDraftId },
+          select: { origen: true, datosFormulario: true },
+        });
+
+        const finalOrigen =
+          input.origen ||
+          (existingLead?.origen === "witme" ? "witme" : inferOrigen(utm));
+
+        const existingDatos =
+          typeof existingLead?.datosFormulario === "object" && existingLead.datosFormulario !== null
+            ? (existingLead.datosFormulario as Record<string, unknown>)
+            : {};
+
+        const mergedDatos = {
+          ...existingDatos,
+          ...processedData,
+        };
+
         const lead = await withTimeout(
           prisma.lead.update({
             where: { id: promoteDraftId },
@@ -152,8 +172,8 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
               telefono: input.telefono,
               email: input.email || null,
               ...summary,
-              datosFormulario: processedData as Prisma.InputJsonValue,
-              origen: input.origen || inferOrigen(utm),
+              datosFormulario: mergedDatos as Prisma.InputJsonValue,
+              origen: finalOrigen,
               estado: estadoFinal,
               aceptaTerminos,
               fechaAceptacionTerminos: fechaOk,
@@ -172,7 +192,13 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
           20_000,
           "Tiempo agotado al guardar la solicitud en base de datos",
         );
-        await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+
+        if (estadoFinal !== "incompleto") {
+          await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+        } else {
+          await dedupeIncompleteDrafts(prisma, lead.id, input.cedula, input.telefono);
+        }
+
         return {
           id: lead.id,
           tipoCredito: lead.tipoCredito,
@@ -211,7 +237,12 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
         "Tiempo agotado al guardar la solicitud en base de datos",
       );
 
-      await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+      if (estadoFinal !== "incompleto") {
+        await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+      } else {
+        await dedupeIncompleteDrafts(prisma, lead.id, input.cedula, input.telefono);
+      }
+
       return { id: lead.id, tipoCredito: lead.tipoCredito, nombre: lead.nombre, storage: "database" };
     } catch (error) {
       if (!isDbConnectionError(error)) {
@@ -250,7 +281,9 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
         longitud: geo.longitud ?? null,
       });
       if (updated) {
-        await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+        if (estadoFinal !== "incompleto") {
+          await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+        }
         return {
           id: updated.id,
           tipoCredito: updated.tipoCredito,
@@ -262,7 +295,9 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
   }
 
   const fileLead = toFileLead(input, processedData, geo, utm, aceptaTerminos, fechaOk);
-  await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+  if (estadoFinal !== "incompleto") {
+    await cleanupIncompleteDraftsForContact(input.cedula, input.telefono);
+  }
   return {
     id: fileLead.id,
     tipoCredito: fileLead.tipoCredito,

@@ -1,11 +1,16 @@
 import { createLead } from "@/application/lead/create-lead";
-import { mapWitmePayload } from "@/application/lead/map-witme-payload";
+import { mapWitmePayload, type MappedWitmeLead } from "@/application/lead/map-witme-payload";
+import { calcularProgresoFormulario } from "@/domain/lead/form-progress";
 import { getClientIp } from "@/shared/utils";
+import type { TipoCredito } from "@/shared/types/credito";
 import { NextResponse } from "next/server";
 
 /**
  * Webhook Witme → Coodelsur.
- * Witme envía cada lead completado; se guarda en PostgreSQL y aparece en /admin/leads.
+ * Witme envía cada lead (inicial o incompleto); se guarda en PostgreSQL con estado "incompleto"
+ * y origen "witme". La respuesta retorna la URL de redirección directa al formulario con los
+ * datos precargados para que el cliente termine de llenar los campos faltantes.
+ * Al enviarse la solicitud completa, se actualiza el mismo registro y pasa a estado completo/recibido.
  *
  * Auth: Authorization: Bearer <WITME_API_KEY>
  */
@@ -18,6 +23,75 @@ function validateWitmeAuth(request: Request): boolean {
 
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   return token === apiKey;
+}
+
+/** Obtiene el origen/host de la petición de forma dinámica (compatible con proxies y cPanel). */
+function getRequestOrigin(request: Request): string {
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = forwardedHost || request.headers.get("host");
+  const proto =
+    request.headers.get("x-forwarded-proto") ||
+    (host?.includes("localhost") ? "http" : "https");
+
+  if (host) {
+    return `${proto}://${host}`.replace(/\/$/, "");
+  }
+
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (envUrl && !envUrl.includes("localhost")) {
+    return envUrl.replace(/\/$/, "");
+  }
+
+  return "https://solicitar-credito.coodelsursas.com.co";
+}
+
+/** Construye la URL de redirección con el borrador enlazado y los datos precargados. */
+function buildWitmeRedirectUrl(
+  baseUrl: string,
+  tipoCredito: TipoCredito,
+  leadId: string,
+  mapped: MappedWitmeLead,
+): string {
+  const formPath =
+    tipoCredito === "microcredito_small"
+      ? "/credito/microcredito_small"
+      : tipoCredito === "libranza"
+        ? "/credito/libranza"
+        : `/credito/${tipoCredito}`;
+
+  const params = new URLSearchParams();
+
+  // Enlace del borrador en la DB para que el frontend lo reconozca y actualice
+  params.set("draftLeadId", leadId);
+  params.set("leadId", leadId);
+
+  // Datos básicos del solicitante
+  if (mapped.nombre) params.set("nombre", mapped.nombre);
+  if (mapped.cedula) params.set("cedula", mapped.cedula);
+  if (mapped.telefono) params.set("telefono", mapped.telefono);
+  if (mapped.email) params.set("email", mapped.email);
+
+  // Monto y plazo seleccionados
+  const capital = mapped.datosFormulario.capitalSeleccionado;
+  if (capital && !Number.isNaN(Number(capital)) && Number(capital) > 0) {
+    params.set("monto", String(capital));
+    params.set("capitalSeleccionado", String(capital));
+  }
+
+  const cuotas = mapped.datosFormulario.cantidadCuotas;
+  if (cuotas && !Number.isNaN(Number(cuotas)) && Number(cuotas) > 0) {
+    params.set("cuotas", String(cuotas));
+    params.set("cantidadCuotas", String(cuotas));
+  }
+
+  // Atribución de campaña para asegurar origen Witme
+  params.set("utm_source", mapped.utm.utmSource || "witme");
+  params.set("utm_medium", mapped.utm.utmMedium || "api_redirect");
+  if (mapped.utm.utmCampaign) params.set("utm_campaign", mapped.utm.utmCampaign);
+  if (mapped.utm.utmContent) params.set("utm_content", mapped.utm.utmContent);
+  params.set("ref", "witme");
+
+  return `${baseUrl}${formPath}?${params.toString()}`;
 }
 
 export async function POST(request: Request) {
@@ -41,6 +115,9 @@ export async function POST(request: Request) {
 
     const ip = getClientIp(request);
 
+    // Calcular avance inicial del formulario con los campos que envió Witme
+    mapped.datosFormulario._progreso = calcularProgresoFormulario(mapped.datosFormulario, 0);
+
     const lead = await createLead({
       tipoCredito: mapped.tipoCredito,
       nombre: mapped.nombre,
@@ -49,16 +126,29 @@ export async function POST(request: Request) {
       email: mapped.email,
       datosFormulario: mapped.datosFormulario,
       origen: "witme",
+      estado: "incompleto",
       utm: mapped.utm,
       ip,
       aceptaTerminos: mapped.aceptaTerminos,
     });
 
+    const origin = getRequestOrigin(request);
+    const redirectUrl = buildWitmeRedirectUrl(origin, mapped.tipoCredito, lead.id, mapped);
+
     return NextResponse.json(
       {
         success: true,
         id: lead.id,
+        leadId: lead.id,
+        draftLeadId: lead.id,
+        estado: "incompleto",
         origen: "witme",
+        redirect_url: redirectUrl,
+        redirectUrl: redirectUrl,
+        url: redirectUrl,
+        redirect: redirectUrl,
+        message:
+          "Lead registrado como incompleto. Redirigir al cliente a 'redirect_url' para completar los campos faltantes.",
         storage: lead.storage ?? "database",
       },
       { status: 201 },
@@ -69,14 +159,14 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://tu-dominio.com";
+export async function GET(request: Request) {
+  const origin = getRequestOrigin(request);
 
   return NextResponse.json({
     service: "witme-webhook",
     configured: Boolean(process.env.WITME_API_KEY?.trim()),
     method: "POST",
-    url: `${siteUrl}/api/leads/witme`,
+    url: `${origin}/api/leads/witme`,
     auth: "Authorization: Bearer <WITME_API_KEY>",
     requiredFields: ["nombre", "cedula|documento", "telefono|celular"],
     optionalFields: [
@@ -88,21 +178,35 @@ export async function GET() {
       "utm_source",
       "utm_campaign",
     ],
+    responseExample: {
+      success: true,
+      id: "c7a2b9f1-0000-0000-0000-000000000000",
+      leadId: "c7a2b9f1-0000-0000-0000-000000000000",
+      draftLeadId: "c7a2b9f1-0000-0000-0000-000000000000",
+      estado: "incompleto",
+      origen: "witme",
+      redirect_url: `${origin}/credito/microcredito_small?draftLeadId={LEAD_ID}&leadId={LEAD_ID}&nombre={NOMBRE}&cedula={CEDULA}&telefono={TELEFONO}&email={EMAIL}&monto={MONTO}&utm_source=witme&utm_medium=api_redirect&ref=witme`,
+      redirectUrl: `${origin}/credito/microcredito_small?draftLeadId={LEAD_ID}&leadId={LEAD_ID}&...`,
+      url: `${origin}/credito/microcredito_small?draftLeadId={LEAD_ID}&leadId={LEAD_ID}&...`,
+      message: "Lead registrado como incompleto. Redirigir al cliente a 'redirect_url' para completar los campos faltantes.",
+    },
+    flowInstructions: [
+      "1. Witme envía los datos disponibles por POST /api/leads/witme.",
+      "2. Coodelsur registra el lead con estado 'incompleto' y origen 'witme'.",
+      "3. La API responde HTTP 201 con 'redirect_url' conteniendo el leadId y campos precargados.",
+      "4. Witme redirige al cliente a esa URL.",
+      "5. El cliente visualiza sus datos precargados y completa los pasos faltantes (fotos, banco, etc.).",
+      "6. Al enviar el formulario final, el lead existente se actualiza a 'completo' sin duplicar registros.",
+    ],
     redirectExamples: {
-      landing: `${siteUrl}/?utm_source=witme&utm_medium=redirect&utm_campaign={CAMPAIGN_ID}`,
-      formWithAmount: `${siteUrl}/solicitar?monto=400000&utm_source=witme&utm_medium=redirect&utm_campaign={CAMPAIGN_ID}`,
-      shortRef: `${siteUrl}/solicitar?monto=400000&ref=witme&utm_campaign={CAMPAIGN_ID}`,
-      productDirect: `${siteUrl}/credito/microcredito_small?utm_source=witme&utm_medium=redirect`,
+      landing: `${origin}/?utm_source=witme&utm_medium=redirect&utm_campaign={CAMPAIGN_ID}`,
+      formWithAmount: `${origin}/solicitar?monto=400000&utm_source=witme&utm_medium=redirect&utm_campaign={CAMPAIGN_ID}`,
+      shortRef: `${origin}/solicitar?monto=400000&ref=witme&utm_campaign={CAMPAIGN_ID}`,
+      productDirect: `${origin}/credito/microcredito_small?utm_source=witme&utm_medium=redirect`,
     },
     trackingNotes: [
-      "Opción A (webhook): origen del lead = witme automáticamente.",
-      "Opción B (redirect): incluir utm_source=witme o ref=witme para marcar el lead como Witme en admin.",
-      "Sin esos parámetros, el lead se registra como web directo.",
-    ],
-    notes: [
-      "Los campos pueden ir en el root del JSON o dentro de datos / datos_formulario.",
-      "Acepta snake_case (capital_solicitado) y camelCase (capitalSeleccionado).",
-      "Cada lead aparece en el panel admin con origen witme.",
+      "Opción A (webhook + redirect): el webhook guarda el lead incompleto y retorna redirect_url para finalizarlo.",
+      "Opción B (redirect directo): incluir utm_source=witme o ref=witme para marcar el lead como Witme en admin.",
     ],
   });
 }

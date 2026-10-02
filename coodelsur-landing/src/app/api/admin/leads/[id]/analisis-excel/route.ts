@@ -46,7 +46,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Solicitud no encontrada" }, { status: 404 });
     }
 
-    const buffer = buildLeadAnalisisExcelBuffer({
+    const buffer = await buildLeadAnalisisExcelBuffer({
       id: lead.id,
       nombre: lead.nombre,
       cedula: lead.cedula,

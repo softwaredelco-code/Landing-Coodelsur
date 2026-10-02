@@ -1,20 +1,16 @@
 /**
- * Generador completo del archivo Excel de Análisis de Crédito individual.
- * Inyecta los datos de la solicitud en la plantilla corporativa oficial
- * manteniendo intactas las 11 hojas de cálculo originales:
- * 1. Simulador
- * 2. Plan de pagos
- * 3. Flujo Empleado
- * 4. Analisis
- * 5. Guion
- * 6. Preguntas_Reto
- * 7. Referenciación
- * 8. Fotos
- * 9. Preguntas reto
- * 10. ListaDepegable
- * 11. Evidencia Fotografica
+ * Generador fiel del archivo Excel de Análisis de Crédito individual.
+ *
+ * Utiliza JSZip para modificar directamente los nodos XML de las celdas
+ * de la plantilla oficial de Coodelsur, PRESERVANDO EL 100% de los estilos:
+ * - Colores corporativos (azul oscuro #002060, azul medio #0070C0, verde claro)
+ * - Bordes, fuentes y alineaciones originales
+ * - Formatos numéricos de moneda ($ #,##0) y porcentajes (0,00%)
+ * - Reglas de formato condicional (verde "Prestar", rojo "Rechazar")
+ * - Logotipos, encabezados y las 11 hojas de cálculo intactas
+ * - Fórmulas vivas con recálculo automático al abrir en Excel (fullCalcOnLoad="1")
  */
-import * as XLSX from "xlsx-js-style";
+import JSZip from "jszip";
 import path from "path";
 import fs from "fs";
 
@@ -36,8 +32,10 @@ let cachedTemplateBuffer: Buffer | null = null;
 
 function resolveTemplatePath(): string {
   const candidates = [
+    path.join(process.cwd(), "docs", "AnalisisCredito_Barrera_1116548410_Nano.xlsx"),
     path.join(process.cwd(), "public", "templates", "analisis-credito-template.xlsx"),
     path.join(process.cwd(), "templates", "analisis-credito-template.xlsx"),
+    path.join(__dirname, "..", "..", "..", "docs", "AnalisisCredito_Barrera_1116548410_Nano.xlsx"),
     path.join(__dirname, "..", "..", "..", "public", "templates", "analisis-credito-template.xlsx"),
     path.join(__dirname, "..", "..", "..", "templates", "analisis-credito-template.xlsx"),
   ];
@@ -48,7 +46,7 @@ function resolveTemplatePath(): string {
     }
   }
 
-  throw new Error("No se encontró la plantilla de análisis de crédito (analisis-credito-template.xlsx)");
+  throw new Error("No se encontró la plantilla de análisis de crédito (docs/AnalisisCredito_Barrera_1116548410_Nano.xlsx)");
 }
 
 function getTemplateBuffer(): Buffer {
@@ -79,7 +77,7 @@ export function buildAnalisisFileName(nombre: string, cedula: string): string {
 }
 
 function formatDestinoCredito(raw?: unknown): string {
-  if (!raw || typeof raw !== "string") return "Libre Inversión";
+  if (!raw || typeof raw !== "string") return "Consolidación de Deudas";
   const map: Record<string, string> = {
     consolidacion_deudas: "Consolidación de Deudas",
     gastos_personales: "Gastos Personales",
@@ -87,7 +85,7 @@ function formatDestinoCredito(raw?: unknown): string {
     educacion: "Educación",
     salud: "Salud",
     viajes: "Viajes / Recreación",
-    vivienda: "Mejoras de Vivienda",
+    vivienda: "Mejoras de vivienda",
   };
   return map[raw.toLowerCase()] || raw;
 }
@@ -105,22 +103,73 @@ function formatLineaCredito(tipoCredito: string): string {
   }
 }
 
-export function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Buffer {
-  const templateBuffer = getTemplateBuffer();
-  const wb = XLSX.read(templateBuffer, {
-    type: "buffer",
-    cellStyles: true,
-    cellFormula: true,
-    cellDates: true,
-  });
+function escapeXml(unsafe: unknown): string {
+  if (unsafe === null || unsafe === undefined) return "";
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
-  // Podar metadatos excesivos (!cols de 16,384 columnas) que disparan memoria y 503 en cPanel
-  for (const sheetName of wb.SheetNames) {
-    const s = wb.Sheets[sheetName];
-    if (!s) continue;
-    if (s["!cols"] && s["!cols"].length > 30) s["!cols"] = s["!cols"].slice(0, 30);
-    if (s["!rows"] && s["!rows"].length > 100) s["!rows"] = s["!rows"].slice(0, 100);
+interface UpdateCellOptions {
+  value: string | number;
+  isString?: boolean;
+  formula?: string;
+  defaultStyle?: string;
+}
+
+/**
+ * Actualiza o inserta una celda en el XML de una hoja conservando su estilo y fórmula.
+ */
+function updateCell(xml: string, cellRef: string, options: UpdateCellOptions): string {
+  const { value, isString = false, formula, defaultStyle } = options;
+  const cellRegex = new RegExp('<c\\s+r="' + cellRef + '"(?:\\s+[^>]*)?(?:\\/>|>[\\s\\S]*?<\\/c>)');
+  const match = xml.match(cellRegex);
+
+  let styleAttr = defaultStyle ? `s="${defaultStyle}"` : "";
+  let existingFormula = formula;
+
+  if (match) {
+    const sMatch = match[0].match(/s="(\d+)"/);
+    if (sMatch) styleAttr = `s="${sMatch[1]}"`;
+    if (!existingFormula) {
+      const fMatch = match[0].match(/<f[^>]*>([\s\S]*?)<\/f>/);
+      if (fMatch) existingFormula = fMatch[1];
+    }
   }
+
+  let newCell = "";
+  if (existingFormula) {
+    if (isString) {
+      newCell = `<c r="${cellRef}" ${styleAttr} t="str"><f>${existingFormula}</f><v>${escapeXml(value)}</v></c>`;
+    } else {
+      const num = isNaN(Number(value)) ? 0 : Number(value);
+      newCell = `<c r="${cellRef}" ${styleAttr}><f>${existingFormula}</f><v>${num}</v></c>`;
+    }
+  } else if (isString) {
+    newCell = `<c r="${cellRef}" ${styleAttr} t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+  } else {
+    const num = isNaN(Number(value)) ? 0 : Number(value);
+    newCell = `<c r="${cellRef}" ${styleAttr}><v>${num}</v></c>`;
+  }
+
+  if (match) {
+    return xml.replace(cellRegex, newCell);
+  } else {
+    const rowNum = cellRef.replace(/[A-Z]/g, "");
+    const rowRegex = new RegExp('(<row[^>]*r="' + rowNum + '"[^>]*>)([\\s\\S]*?)(<\\/row>)');
+    if (rowRegex.test(xml)) {
+      return xml.replace(rowRegex, (_m, open, content, close) => open + content + newCell + close);
+    }
+    return xml;
+  }
+}
+
+export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Promise<Buffer> {
+  const templateBuffer = getTemplateBuffer();
+  const zip = await JSZip.loadAsync(templateBuffer);
 
   const datos = (lead.datosFormulario || {}) as Record<string, unknown>;
   const nombre = (lead.nombre || "").trim().toUpperCase();
@@ -133,53 +182,50 @@ export function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Buffer {
   const montoSolicitado = Number(lead.capitalSolicitado || datos.capitalSeleccionado || datos.monto || 0);
   const cuotas = Number(lead.cantidadCuotas || datos.cantidadCuotas || 2);
   const ingresos = Number(datos.ingresosMensuales || datos.ingresos_mensuales || datos.ingresos || 0);
+  const quanto = Number(datos.quantoMedio || datos.ingresosMedio || (ingresos > 0 ? ingresos : 3011000));
 
   const fechaSolicitud = new Date(lead.fechaCreacion);
   const fechaValida = !isNaN(fechaSolicitud.getTime()) ? fechaSolicitud : new Date();
+  const dia = fechaValida.getDate();
+  const mes = fechaValida.getMonth() + 1;
+  const ano = fechaValida.getFullYear();
 
-  // 1. Inyectar datos en 'Plan de pagos' (Hoja principal de cálculo)
-  const sheetPlan = wb.Sheets["Plan de pagos"];
-  if (sheetPlan) {
-    if (sheetPlan["M5"]) { sheetPlan["M5"].v = nombre; sheetPlan["M5"].t = "s"; }
-    if (sheetPlan["M6"]) { sheetPlan["M6"].v = cedula; sheetPlan["M6"].t = "s"; }
-    if (sheetPlan["M7"]) { sheetPlan["M7"].v = destino; sheetPlan["M7"].t = "s"; }
-    if (sheetPlan["M8"]) { sheetPlan["M8"].v = empresa; sheetPlan["M8"].t = "s"; }
-    if (sheetPlan["M9"]) { sheetPlan["M9"].v = cargo; sheetPlan["M9"].t = "s"; }
-    if (sheetPlan["M10"]) { sheetPlan["M10"].v = linea; sheetPlan["M10"].t = "s"; }
-
-    if (sheetPlan["P13"]) { sheetPlan["P13"].v = montoSolicitado; sheetPlan["P13"].t = "n"; }
-    if (sheetPlan["P14"]) { sheetPlan["P14"].v = montoSolicitado; sheetPlan["P14"].t = "n"; }
-    if (sheetPlan["F8"]) { sheetPlan["F8"].v = cuotas; sheetPlan["F8"].t = "n"; }
-
-    if (sheetPlan["F9"]) { sheetPlan["F9"].v = fechaValida.getDate(); sheetPlan["F9"].t = "n"; }
-    if (sheetPlan["G9"]) { sheetPlan["G9"].v = fechaValida.getMonth() + 1; sheetPlan["G9"].t = "n"; }
-    if (sheetPlan["H9"]) { sheetPlan["H9"].v = fechaValida.getFullYear(); sheetPlan["H9"].t = "n"; }
-
-    // Limpiar celdas fuera de rango en la columna lejana XEV para optimizar tamaño del XML
-    delete sheetPlan["XEV5"];
-    delete sheetPlan["XEV6"];
-    delete sheetPlan["XEV7"];
-    sheetPlan["!ref"] = "A1:R25";
+  // 1. Hoja 'Plan de pagos' (xl/worksheets/sheet2.xml)
+  const sheet2File = zip.file("xl/worksheets/sheet2.xml");
+  if (sheet2File) {
+    let s2 = await sheet2File.async("text");
+    s2 = updateCell(s2, "M5", { value: nombre, isString: true, defaultStyle: "262" });
+    s2 = updateCell(s2, "M6", { value: cedula, isString: false, defaultStyle: "262" });
+    s2 = updateCell(s2, "M7", { value: destino, isString: true, defaultStyle: "262" });
+    s2 = updateCell(s2, "M8", { value: empresa, isString: true, defaultStyle: "262" });
+    s2 = updateCell(s2, "M9", { value: cargo, isString: true, defaultStyle: "262" });
+    s2 = updateCell(s2, "M10", { value: linea, isString: true, defaultStyle: "263" });
+    s2 = updateCell(s2, "P13", { value: montoSolicitado, isString: false, defaultStyle: "68" });
+    s2 = updateCell(s2, "P14", { value: montoSolicitado, isString: false, defaultStyle: "68" });
+    s2 = updateCell(s2, "F8", { value: cuotas, isString: false, defaultStyle: "288" });
+    s2 = updateCell(s2, "F9", { value: dia, isString: false, defaultStyle: "49" });
+    s2 = updateCell(s2, "G9", { value: mes, isString: false, defaultStyle: "49" });
+    s2 = updateCell(s2, "H9", { value: ano, isString: false, defaultStyle: "50" });
+    zip.file("xl/worksheets/sheet2.xml", s2);
   }
 
-  // 2. Inyectar datos en 'Flujo Empleado'
-  const sheetFlujo = wb.Sheets["Flujo Empleado"];
-  if (sheetFlujo) {
-    if (sheetFlujo["D8"]) { sheetFlujo["D8"].v = ingresos; sheetFlujo["D8"].t = "n"; }
-    if (sheetFlujo["D9"]) {
-      const quanto = Number(datos.quantoMedio || datos.ingresosMedio || (ingresos > 0 ? ingresos : 3011000));
-      sheetFlujo["D9"].v = quanto;
-      sheetFlujo["D9"].t = "n";
-    }
+  // 2. Hoja 'Flujo Empleado' (xl/worksheets/sheet3.xml)
+  const sheet3File = zip.file("xl/worksheets/sheet3.xml");
+  if (sheet3File) {
+    let s3 = await sheet3File.async("text");
+    s3 = updateCell(s3, "D8", { value: ingresos, isString: false, defaultStyle: "117" });
+    s3 = updateCell(s3, "D9", { value: quanto, isString: false, defaultStyle: "117" });
+    zip.file("xl/worksheets/sheet3.xml", s3);
   }
 
-  // 3. Inyectar datos en 'Analisis'
-  const sheetAnalisis = wb.Sheets["Analisis"];
-  if (sheetAnalisis) {
-    if (sheetAnalisis["C10"]) {
-      sheetAnalisis["C10"].v = Number(datos.puntajeBegini || 0);
-      sheetAnalisis["C10"].t = "n";
-    }
+  // 3. Hoja 'Analisis' (xl/worksheets/sheet4.xml)
+  const sheet4File = zip.file("xl/worksheets/sheet4.xml");
+  if (sheet4File) {
+    let s4 = await sheet4File.async("text");
+    s4 = updateCell(s4, "C10", { value: Number(datos.puntajeBegini || 0), isString: false, defaultStyle: "192" });
+
+    const esCotizante = datos.esCotizante !== undefined ? (datos.esCotizante ? "SI" : "NO") : "SI";
+    s4 = updateCell(s4, "C15", { value: esCotizante, isString: true, defaultStyle: "193" });
 
     const dirParts = [
       datos.direccion,
@@ -199,11 +245,8 @@ export function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Buffer {
         ? `${datos.referenciaFamiliarNombre} (${datos.referenciaFamiliarTelefono})`
         : "No reportada";
 
-    const esCotizante = datos.esCotizante !== undefined ? (datos.esCotizante ? "SI" : "NO") : "SI";
-    if (sheetAnalisis["C15"]) {
-      sheetAnalisis["C15"].v = esCotizante;
-      sheetAnalisis["C15"].t = "s";
-    }
+    const novedad = String(datos.novedad || datos.novedades || "");
+    const propiedades = String(datos.propiedades || datos.tienePropiedades || "");
 
     const concepto = [
       `Tipo crédito:  ${linea}`,
@@ -213,51 +256,59 @@ export function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Buffer {
       `Dirección:  ${dir}`,
       `Tel Cel:  ${lead.telefono || "No reportado"}`,
       `Cuenta:  ${cuenta}`,
-      `Mora reportada:  ${mora}`,
-      `Ref. Familiar:  ${refFamiliar}`,
+      `Novedad:  ${novedad}`,
+      `Propiedades:  ${propiedades}`,
       `Nota:  Solicitud web registrada el ${fechaValida.toLocaleString("es-CO")}`,
     ].join("\n");
 
-    if (sheetAnalisis["D19"]) {
-      delete sheetAnalisis["D19"].f;
-      sheetAnalisis["D19"].v = concepto;
-      sheetAnalisis["D19"].t = "s";
-    }
+    s4 = updateCell(s4, "D19", { value: concepto, isString: true, defaultStyle: "342" });
+    s4 = updateCell(s4, "C32", { value: `Fecha:  ${fechaValida.toLocaleDateString("es-CO")}`, isString: true, defaultStyle: "209" });
 
-    if (sheetAnalisis["C32"]) {
-      delete sheetAnalisis["C32"].f;
-      sheetAnalisis["C32"].v = `Fecha:  ${fechaValida.toLocaleDateString("es-CO")}`;
-      sheetAnalisis["C32"].t = "s";
-    }
+    zip.file("xl/worksheets/sheet4.xml", s4);
   }
 
-  // 4. Inyectar datos en 'Referenciación' si está disponible
-  const sheetRef = wb.Sheets["Referenciación"];
-  if (sheetRef) {
+  // 4. Hoja 'Referenciación' (xl/worksheets/sheet7.xml)
+  const sheet7File = zip.file("xl/worksheets/sheet7.xml");
+  if (sheet7File) {
+    let s7 = await sheet7File.async("text");
     if (empresa && empresa !== "No reporta") {
-      sheetRef["C11"] = { v: empresa, t: "s" };
+      s7 = updateCell(s7, "C11", { value: empresa, isString: true, defaultStyle: "358" });
       if (datos.empresaTelefono || datos.telefonoEmpresa) {
-        sheetRef["F11"] = { v: String(datos.empresaTelefono || datos.telefonoEmpresa), t: "s" };
+        s7 = updateCell(s7, "F11", { value: String(datos.empresaTelefono || datos.telefonoEmpresa), isString: true, defaultStyle: "358" });
       }
-      sheetRef["C13"] = { v: cargo, t: "s" };
+      s7 = updateCell(s7, "C13", { value: cargo, isString: true, defaultStyle: "358" });
     }
     if (datos.referenciaFamiliarNombre) {
-      sheetRef["C17"] = { v: String(datos.referenciaFamiliarNombre), t: "s" };
+      s7 = updateCell(s7, "C17", { value: String(datos.referenciaFamiliarNombre), isString: true, defaultStyle: "358" });
       if (datos.referenciaFamiliarTelefono) {
-        sheetRef["F17"] = { v: String(datos.referenciaFamiliarTelefono), t: "s" };
+        s7 = updateCell(s7, "F17", { value: String(datos.referenciaFamiliarTelefono), isString: true, defaultStyle: "358" });
       }
-      sheetRef["C19"] = { v: String(datos.referenciaFamiliarParentesco || datos.parentesco || "Familiar"), t: "s" };
+      s7 = updateCell(s7, "C19", { value: String(datos.referenciaFamiliarParentesco || datos.parentesco || "Familiar"), isString: true, defaultStyle: "358" });
     }
     if (datos.referenciaPersonalNombre) {
-      sheetRef["C35"] = { v: String(datos.referenciaPersonalNombre), t: "s" };
+      s7 = updateCell(s7, "C35", { value: String(datos.referenciaPersonalNombre), isString: true, defaultStyle: "358" });
       if (datos.referenciaPersonalTelefono) {
-        sheetRef["F35"] = { v: String(datos.referenciaPersonalTelefono), t: "s" };
+        s7 = updateCell(s7, "F35", { value: String(datos.referenciaPersonalTelefono), isString: true, defaultStyle: "358" });
       }
-      sheetRef["C37"] = { v: String(datos.referenciaPersonalParentesco || "Personal / Amigo"), t: "s" };
+      s7 = updateCell(s7, "C37", { value: String(datos.referenciaPersonalParentesco || "Personal / Amigo"), isString: true, defaultStyle: "358" });
     }
+    zip.file("xl/worksheets/sheet7.xml", s7);
   }
 
-  // Generar el archivo binario completo con todas las 11 hojas
-  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx", compression: true });
-  return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  // 5. Forzar recálculo automático de todas las fórmulas al abrir en Excel
+  const wbFile = zip.file("xl/workbook.xml");
+  if (wbFile) {
+    let wbXml = await wbFile.async("text");
+    wbXml = wbXml.replace(/<calcPr[^>]*\/?>/, '<calcPr calcId="152511" fullCalcOnLoad="1" forceFullCalculation="1"/>');
+    zip.file("xl/workbook.xml", wbXml);
+  }
+
+  // Generar binario preservando 100% de la compresión, estilos y relaciones
+  const buffer = await zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+  });
+
+  return buffer;
 }

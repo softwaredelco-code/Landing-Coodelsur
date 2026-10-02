@@ -7,6 +7,10 @@ import { notFound } from "next/navigation";
 
 interface CreditoPageProps {
   params: { slug: string };
+  searchParams?: {
+    monto?: string;
+    [key: string]: string | string[] | undefined;
+  };
 }
 
 const SLUGS_LEGACY = ["nanocredito", "microcredito"] as const;
@@ -32,12 +36,15 @@ export async function generateMetadata({ params }: CreditoPageProps): Promise<Me
   };
 }
 
-export default function CreditoPage({ params }: CreditoPageProps) {
+export default function CreditoPage({ params, searchParams }: CreditoPageProps) {
   const tipo = resolveTipo(params.slug);
   if (!tipo) notFound();
 
   const config = getCreditoConfig(params.slug);
   if (!config) notFound();
+
+  const rawMonto = Number(searchParams?.monto);
+  const initialMonto = Number.isFinite(rawMonto) && rawMonto > 0 ? rawMonto : undefined;
 
   return (
     <div className="min-h-screen bg-coodel-surface">
@@ -67,7 +74,7 @@ export default function CreditoPage({ params }: CreditoPageProps) {
       </div>
 
       <div className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-10">
-        <FormularioPorTipo tipo={tipo} config={config} />
+        <FormularioPorTipo tipo={tipo} config={config} initialMonto={initialMonto} />
       </div>
     </div>
   );
