@@ -25,7 +25,7 @@ function recordToForm(record: CreditoParametrosRecord): FormState {
     estudioCreditoModo: record.estudioCreditoModo,
     estudioCreditoValor: String(record.estudioCreditoValor),
     fianzaMensualPorcentaje: (record.fianzaMensualPorcentaje * 100)
-      .toFixed(2)
+      .toFixed(4)
       .replace(/\.?0+$/, ""),
     vidaDeudoresPorcentaje: (record.vidaDeudoresPorcentaje * 100)
       .toFixed(4)

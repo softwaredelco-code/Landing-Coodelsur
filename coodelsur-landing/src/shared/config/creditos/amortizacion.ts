@@ -39,10 +39,10 @@ export const DEFAULT_AMORTIZACION_POR_TIPO: Partial<Record<TipoCredito, Parametr
     plazosPermitidos: [1, 2, 3],
   },
   microcredito_urbano: {
-    // Tasas pendientes de confirmación con Coodelsur — ajustar cuando se publique el formulario.
-    tasaMensual: 0.019,
+    // 28,32 % E.A. ≈ 2,10 % mensual. Fondo de cobertura: $7.422 por millón al mes.
+    tasaMensual: 0.021,
     estudioCredito: { modo: "porcentaje", porcentaje: 0.15 },
-    fianzaMensualPorcentaje: 0.1,
+    fianzaMensualPorcentaje: 7_422 / 1_000_000,
     vidaDeudoresPorcentaje: 437 / 200_000,
     plazosPermitidos: [6, 12, 18, 24, 36],
   },

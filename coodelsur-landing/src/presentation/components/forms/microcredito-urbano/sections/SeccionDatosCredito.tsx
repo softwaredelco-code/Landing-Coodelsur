@@ -138,9 +138,12 @@ export function SeccionDatosCredito() {
           {formatCOP(desglose?.valorCuotaTotal ?? Number(watch("valorCuota") || 0))}
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          Calculado con tasa del {(parametros.tasaMensual * 100).toFixed(1).replace(".", ",")} %
-          mensual, fianza ({(parametros.fianzaMensualPorcentaje * 100).toFixed(2).replace(".", ",")}{" "}
-          % del monto) y vida deudores (
+          Calculado con tasa del {(parametros.tasaMensual * 100).toFixed(2).replace(".", ",")} %
+          mensual (
+          {((Math.pow(1 + parametros.tasaMensual, 12) - 1) * 100).toFixed(2).replace(".", ",")} %
+          E.A.), fondo de cobertura (
+          {formatCOP(Math.round(parametros.fianzaMensualPorcentaje * 1_000_000))} por millón) y vida
+          deudores (
           {(parametros.vidaDeudoresPorcentaje * 100).toFixed(4).replace(".", ",")} % del monto).
         </p>
         {errors.valorCuota?.message && (
@@ -157,7 +160,7 @@ export function SeccionDatosCredito() {
               <span className="font-medium">{formatCOP(desglose.cuotaCapitalInteres)}</span>
             </li>
             <li className="flex justify-between gap-4">
-              <span>Fianza mensual</span>
+              <span>Fondo de cobertura</span>
               <span className="font-medium">{formatCOP(desglose.fianzaMensual)}</span>
             </li>
             <li className="flex justify-between gap-4">

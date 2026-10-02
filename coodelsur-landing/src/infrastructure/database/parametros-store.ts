@@ -19,7 +19,7 @@ import { z } from "zod";
 
 export const PRODUCTOS_PARAMETRIZABLES = [
   { tipo: "microcredito_small" as const, nombre: "Microcrédito Small", disponible: true },
-  { tipo: "microcredito_urbano" as const, nombre: "Microcrédito urbano", disponible: false },
+  { tipo: "microcredito_urbano" as const, nombre: "Microcrédito urbano", disponible: true },
   { tipo: "libranza" as const, nombre: "Crédito Libranza", disponible: true },
 ] as const;
 
