@@ -250,7 +250,7 @@ async function findDraftToUpdate(
   return existing?.id ?? null;
 }
 
-async function dedupeIncompleteDrafts(
+export async function dedupeIncompleteDrafts(
   client: DraftLookupClient,
   keepId: string,
   cedula: string,
@@ -410,14 +410,38 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
           const existingId = await findDraftToUpdate(tx, input.draftId, cedula, telefono);
           const geoFromIp = existingId ? {} : geoCandidate;
 
+          let finalOrigen = leadData.origen;
+          let mergedDatos = leadData.datosFormulario as Record<string, unknown>;
+
+          if (existingId) {
+            const existingDraft = await tx.lead.findUnique({
+              where: { id: existingId },
+              select: { origen: true, datosFormulario: true },
+            });
+            if (existingDraft?.origen === "witme") {
+              finalOrigen = "witme";
+            }
+            if (
+              existingDraft?.datosFormulario &&
+              typeof existingDraft.datosFormulario === "object" &&
+              !Array.isArray(existingDraft.datosFormulario)
+            ) {
+              mergedDatos = {
+                ...(existingDraft.datosFormulario as Record<string, unknown>),
+                ...mergedDatos,
+              };
+            }
+          }
+
           const payload = {
             ...leadData,
+            origen: finalOrigen,
             ip: input.ip ?? null,
             ciudad: geoFromIp.ciudad ?? null,
             pais: geoFromIp.pais ?? null,
             latitud: geoFromIp.latitud ?? null,
             longitud: geoFromIp.longitud ?? null,
-            datosFormulario: leadData.datosFormulario as Prisma.InputJsonValue,
+            datosFormulario: mergedDatos as Prisma.InputJsonValue,
           };
 
           const saved = existingId

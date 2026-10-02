@@ -30,7 +30,7 @@ import { deserializeUtm } from "@/presentation/tracking/utm";
 import { getUtmFromCookie } from "@/presentation/tracking/TrackingProvider";
 import { trackEvent } from "@/presentation/tracking/analytics";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FormProvider, useForm, type FieldErrors, type Path } from "react-hook-form";
 
 const STEP_COMPONENTS = [
@@ -81,6 +81,27 @@ export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
 
   const { handleSubmit, trigger, reset, getValues, setError, setValue } = methods;
   const totalSteps = LIBRANZA_STEPS.length;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const draftId = params.get("draftLeadId") || params.get("leadId") || params.get("draftId");
+    if (draftId) {
+      sessionStorage.setItem("coodelsur_server_draft_id", draftId);
+    }
+    const nombre = params.get("nombre");
+    if (nombre) setValue("nombre", nombre.trim());
+    const cedula = params.get("cedula") || params.get("documento");
+    if (cedula) setValue("cedula", cedula.trim());
+    const telefono = params.get("telefono") || params.get("celular");
+    if (telefono) setValue("telefono", telefono.trim());
+    const email = params.get("email") || params.get("correo");
+    if (email) setValue("email", email.trim());
+    const monto = params.get("monto") || params.get("capitalSeleccionado");
+    if (monto && !Number.isNaN(Number(monto)) && Number(monto) > 0) {
+      setValue("capitalSeleccionado", Number(monto));
+    }
+  }, [setValue]);
 
   const current = LIBRANZA_STEPS[step];
   const StepFields = STEP_COMPONENTS[step];
@@ -165,10 +186,15 @@ export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
       }
 
       const utm = deserializeUtm(getUtmFromCookie() ?? undefined) ?? undefined;
+      const draftLeadId =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem("coodelsur_server_draft_id")
+          : null;
 
       const payload = {
         ...data,
         utm,
+        draftLeadId: draftLeadId ?? undefined,
         geoCliente: data.geolocalizacion
           ? { lat: data.geolocalizacion.lat, lng: data.geolocalizacion.lng }
           : undefined,
@@ -274,6 +300,9 @@ export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
         monto: data.capitalSeleccionado,
         lead_id: result.id,
       });
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("coodelsur_server_draft_id");
+      }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("[FormularioLibranza] submit", error);

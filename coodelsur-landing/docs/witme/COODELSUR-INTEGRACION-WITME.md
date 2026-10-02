@@ -92,14 +92,41 @@ Campos extra en snake_case o camelCase. Adjuntos por URL (`https://...`) o base6
 
 | Código | Significado |
 |--------|-------------|
-| **201** | Lead creado — body: `{ "success": true, "id": "uuid", "origen": "witme" }` |
-| **401** | API Key inválida |
-| **422** | Faltan nombre, cédula o teléfono |
+| **201** | Lead registrado como borrador incompleto. Retorna `redirect_url` para redirigir al usuario al formulario y completar los campos faltantes. |
+| **401** | API Key inválida o ausente en el header `Authorization: Bearer <API_KEY>` |
+| **422** | Faltan campos mínimos (`nombre`, `cedula` y `telefono`) |
 | **500** | Error temporal — reintentar a 5 s, 15 s y 45 s |
+
+#### Ejemplo de respuesta HTTP 201:
+
+```json
+{
+  "success": true,
+  "id": "c7a2b9f1-0000-0000-0000-000000000000",
+  "leadId": "c7a2b9f1-0000-0000-0000-000000000000",
+  "draftLeadId": "c7a2b9f1-0000-0000-0000-000000000000",
+  "estado": "incompleto",
+  "origen": "witme",
+  "redirect_url": "https://solicitar-credito.coodelsursas.com.co/credito/microcredito_small?draftLeadId=c7a2b9f1-0000-0000-0000-000000000000&leadId=c7a2b9f1-0000-0000-0000-000000000000&nombre=Carlos+Gomez&cedula=1098765432&telefono=3109876543&email=carlos%40example.com&monto=400000&utm_source=witme&utm_medium=api_redirect&ref=witme",
+  "redirectUrl": "https://solicitar-credito.coodelsursas.com.co/credito/microcredito_small?draftLeadId=c7a2b9f1-0000-0000-0000-000000000000...",
+  "url": "https://solicitar-credito.coodelsursas.com.co/credito/microcredito_small?draftLeadId=c7a2b9f1-0000-0000-0000-000000000000...",
+  "redirect": "https://solicitar-credito.coodelsursas.com.co/credito/microcredito_small?draftLeadId=c7a2b9f1-0000-0000-0000-000000000000...",
+  "message": "Lead registrado como incompleto. Redirigir al cliente a 'redirect_url' para completar los campos faltantes.",
+  "storage": "database"
+}
+```
+
+> **Flujo de finalización:**
+> 1. Witme envía los datos iniciales por `POST /api/leads/witme`.
+> 2. Coodelsur guarda el registro con estado `incompleto` y origen `witme`.
+> 3. Witme toma la propiedad `redirect_url` (o `redirectUrl` / `url`) de la respuesta y redirige al cliente a esa URL.
+> 4. El cliente entra directamente al formulario de Coodelsur con sus datos ya precargados (nombre, documento, celular, correo, monto).
+> 5. El cliente completa los campos pendientes (dirección, banco, referencias y fotos de documento) y pulsa "Enviar solicitud".
+> 6. La solicitud actualiza el registro en la base de datos de Coodelsur, pasando a estado `completo` con origen `witme` sin duplicar el lead.
 
 ### 2.6 Prueba
 
-Ver comando cURL en *COODELSUR-CREDENCIALES-WITME.pdf*. Resultado esperado: **HTTP 201**.
+Ver comando cURL en *COODELSUR-CREDENCIALES-WITME.pdf*. Resultado esperado: **HTTP 201** con `redirect_url`.
 
 ---
 
