@@ -23,7 +23,8 @@ Copy-Item "$standalone\*" $out -Recurse
 New-Item -ItemType Directory -Path (Join-Path $out ".next\static") -Force | Out-Null
 Copy-Item "$static\*" (Join-Path $out ".next\static") -Recurse
 if (Test-Path $public) {
-  Copy-Item $public (Join-Path $out "public") -Recurse
+  New-Item -ItemType Directory -Path (Join-Path $out "public") -Force | Out-Null
+  Copy-Item "$public\*" (Join-Path $out "public") -Recurse -Force
 }
 
 $zip = Join-Path $root "cpanel-deploy.zip"

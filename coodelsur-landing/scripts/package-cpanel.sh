@@ -21,7 +21,12 @@ mkdir -p "$OUT"
 cp -a "$STANDALONE/." "$OUT/"
 mkdir -p "$OUT/.next/static"
 cp -a "$STATIC/." "$OUT/.next/static/"
-cp -a "$ROOT/public" "$OUT/public"
+mkdir -p "$OUT/public"
+cp -a "$ROOT/public/." "$OUT/public/"
+if [[ -d "$OUT/public/public" ]]; then
+  cp -a "$OUT/public/public/." "$OUT/public/"
+  rm -rf "$OUT/public/public"
+fi
 if [[ -d "$ROOT/templates" ]]; then
   cp -a "$ROOT/templates" "$OUT/templates"
 fi
