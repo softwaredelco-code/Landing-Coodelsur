@@ -24,9 +24,13 @@ export const metadata: Metadata = {
     "Solicita tu crédito con Coodelsur. Completa el formulario en línea y contacta a un asesor.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://credito.coodelsursas.com.co"),
   icons: {
-    icon: [{ url: "/images/logo.jpg", type: "image/jpeg" }],
-    shortcut: "/images/logo.jpg",
-    apple: "/images/logo.jpg",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png" },
+      { url: "/images/logo.jpg", type: "image/jpeg" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/favicon.png",
   },
 };
 

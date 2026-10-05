@@ -57,15 +57,19 @@ const requiredInt = (label: string, min = 0) =>
   );
 
 function requiredFile(message: string) {
-  return z.object(
-    {
-      fileName: z.string().min(1),
-      mimeType: z.string(),
-      size: z.number().nonnegative(),
-      preview: z.string().min(1),
-    },
-    { required_error: message, invalid_type_error: message },
-  );
+  return z
+    .object(
+      {
+        fileName: z.string().default("archivo"),
+        mimeType: z.string().default("application/octet-stream"),
+        size: z.number().default(0),
+        preview: z.string().default(""),
+      },
+      { required_error: message, invalid_type_error: message },
+    )
+    .refine((file) => typeof file?.preview === "string" && file.preview.trim().length > 0, {
+      message,
+    });
 }
 
 const geoCoordsSchema: z.ZodType<GeoCoords> = z.object({
@@ -260,7 +264,11 @@ export function collectCrossFieldErrors(data: NanocreditoFormValues): StepFieldE
   if (Number.isFinite(capital) && Number.isFinite(cantidadCuotas) && cantidadCuotas > 0) {
     const desglose = calcularDesgloseCuota(data.tipoCredito, capital, cantidadCuotas);
 
-    if (Math.abs(Number(data.valorCuota) - desglose.valorCuotaTotal) > 1) {
+    if (
+      data.valorCuota != null &&
+      Number.isFinite(Number(data.valorCuota)) &&
+      Math.abs(Number(data.valorCuota) - desglose.valorCuotaTotal) > 500
+    ) {
       errors.push({
         path: "valorCuota",
         message:

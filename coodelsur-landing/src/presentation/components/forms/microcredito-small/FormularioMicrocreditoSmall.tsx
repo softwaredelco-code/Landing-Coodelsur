@@ -54,6 +54,84 @@ const STEP_COMPONENTS = [
 
 const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
+const FIELD_LABELS_ES: Record<string, string> = {
+  nombre: "Nombre y apellido",
+  email: "Correo electrónico",
+  tipoIdentificacion: "Tipo de documento",
+  cedula: "Número de cédula",
+  telefono: "Teléfono celular",
+  genero: "Género",
+  estadoCivil: "Estado civil",
+  fechaNacimiento: "Fecha de nacimiento",
+  fechaExpedicion: "Fecha de expedición",
+  personasACargo: "Personas a cargo",
+  estrato: "Estrato socioeconómico",
+  capitalSeleccionado: "Monto del crédito",
+  cantidadCuotas: "Plazo / cuotas",
+  valorCuota: "Valor de cuota",
+  destinoCredito: "Destino del crédito",
+  moraVigente: "Mora vigente",
+  moraEntidad: "Entidad en mora",
+  moraTiempo: "Tiempo de mora",
+  moraValor: "Valor aproximado de mora",
+  ingresosMensuales: "Ingresos mensuales",
+  origenOtrosIngresos: "Origen de otros ingresos",
+  origenOtrosIngresosOtro: "Detalle de otros ingresos",
+  otrosIngresos: "Valor de otros ingresos",
+  departamento: "Departamento",
+  municipio: "Municipio / Ciudad",
+  sectorDomicilio: "Sector de domicilio",
+  direccion: "Dirección de residencia",
+  barrio: "Barrio",
+  tieneVivienda: "Vivienda propia",
+  tieneVehiculo: "Vehículo propio",
+  placaVehiculo: "Placa del vehículo",
+  ocupacion: "Ocupación laboral",
+  empresa: "Nombre de empresa",
+  cargo: "Cargo laboral",
+  fechaIngreso: "Fecha de vinculación laboral",
+  referenciaTipo: "Tipo de referencia",
+  referenciaParentesco: "Parentesco de referencia",
+  referenciaParentescoOtro: "Detalle de parentesco",
+  referenciaFamiliarNombre: "Nombre de la referencia",
+  referenciaFamiliarTelefono: "Teléfono de la referencia",
+  tipoCuenta: "Tipo de cuenta bancaria",
+  entidadBancaria: "Banco o entidad financiera",
+  numeroCuenta: "Número de cuenta o llave bancaria",
+  geolocalizacion: "Ubicación GPS",
+  cedulaFrontal: "Foto frontal de la cédula",
+  cedulaReverso: "Foto posterior de la cédula",
+  videoVerificacion: "Video de verificación de rostro",
+  aceptaTerminos: "Aceptación de hábeas data y términos legales",
+  firma: "Firma de aceptación",
+};
+
+function focusAndHighlightField(fieldName?: string) {
+  if (!fieldName || typeof document === "undefined") return;
+  const root = fieldName.split(".")[0];
+
+  setTimeout(() => {
+    const el =
+      document.getElementById(root) ||
+      document.getElementById(`${root}-container`) ||
+      document.getElementById(`${root}-upload`) ||
+      document.getElementById(`${root}-file`) ||
+      document.querySelector(`[name="${root}"]`) ||
+      document.getElementById(`${root}-error`);
+
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      if ("focus" in el && typeof (el as HTMLElement).focus === "function") {
+        (el as HTMLElement).focus();
+      }
+      el.classList.add("ring-4", "ring-red-400", "ring-offset-2", "transition-all");
+      setTimeout(() => {
+        el.classList.remove("ring-4", "ring-red-400", "ring-offset-2");
+      }, 4000);
+    }
+  }, 120);
+}
+
 export function FormularioMicrocreditoSmall(props: CreditoFormProps) {
   return (
     <ParametrosAmortizacionProvider>
@@ -192,29 +270,41 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
   };
 
   const onInvalid = (formErrors: FieldErrors<NanocreditoFormValues>) => {
-    const errorKeys = Object.keys(formErrors) as (keyof NanocreditoFormValues)[];
-    if (errorKeys.length === 0) return;
+    const rawKeys = Object.keys(formErrors) as (keyof NanocreditoFormValues)[];
+    if (rawKeys.length === 0) return;
 
-    let firstInvalid = NANOCREDITO_STEPS.findIndex((s) =>
-      s.fields.some((field) => formErrors[field as keyof NanocreditoFormValues]),
+    // Normalizar llaves quitando sub-propiedades como .preview
+    const rootKeys = rawKeys.map((k) => String(k).split(".")[0] as keyof NanocreditoFormValues);
+
+    let firstInvalidStep = NANOCREDITO_STEPS.findIndex((s) =>
+      s.fields.some((field) => rootKeys.includes(field as keyof NanocreditoFormValues)),
     );
-    if (firstInvalid < 0) {
-      firstInvalid = 0;
+    if (firstInvalidStep < 0) {
+      firstInvalidStep = 0;
     }
 
-    setStep(firstInvalid);
+    setStep(firstInvalidStep);
 
-    const errorDetails = errorKeys
-      .map((k) => formErrors[k]?.message)
-      .filter((m): m is string => typeof m === "string" && m.trim().length > 0);
+    const firstInvalidField = String(rootKeys[0]);
+    focusAndHighlightField(firstInvalidField);
+
+    const bulletItems = rawKeys.map((k) => {
+      const root = String(k).split(".")[0];
+      const friendlyName = FIELD_LABELS_ES[root] || root;
+      const rawMsg = formErrors[k]?.message;
+      const msg =
+        typeof rawMsg === "string" && rawMsg.trim().length > 0
+          ? rawMsg
+          : "Requerido o con formato incorrecto";
+      return `• ${friendlyName}: ${msg}`;
+    });
 
     const summaryText =
-      errorDetails.length > 0
-        ? `Por favor completa o corrige los siguientes campos: ${errorDetails.slice(0, 3).join(". ")}`
+      bulletItems.length > 0
+        ? `Por favor completa o corrige los siguientes datos marcados en rojo:\n${bulletItems.slice(0, 5).join("\n")}`
         : "Hay campos obligatorios incompletos o con datos incorrectos. Revisa los campos resaltados en rojo.";
 
     setSubmitError(summaryText);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const onSubmit = async (data: NanocreditoFormValues) => {
@@ -237,10 +327,31 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
         return;
       }
 
+      // Asegurar sincronización exacta de fórmulas antes del envío
+      const capital = Number(data.capitalSeleccionado || 0);
+      const cuotas = Number(data.cantidadCuotas || 0);
+      let synchedData = { ...data };
+      if (capital > 0 && cuotas > 0) {
+        try {
+          const desglose = calcularDesgloseCuota(data.tipoCredito, capital, cuotas);
+          synchedData = {
+            ...synchedData,
+            valorCuota: desglose.valorCuotaTotal,
+            valorCreditoFinanciado: desglose.valorCreditoFinanciado,
+            estudioCredito: desglose.estudioCredito,
+            cuotaCapitalInteres: desglose.cuotaCapitalInteres,
+            cuotaFianzaMensual: desglose.fianzaMensual,
+            cuotaVidaDeudoresMensual: desglose.vidaDeudoresMensual,
+          };
+        } catch {
+          // Mantener datos originales si no aplica
+        }
+      }
+
       const utm = deserializeUtm(getUtmFromCookie() ?? undefined) ?? undefined;
 
       const payload = {
-        ...data,
+        ...synchedData,
         utm,
         draftLeadId: draftLeadId ?? undefined,
         geoCliente: data.geolocalizacion
@@ -266,15 +377,22 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
       try {
         result = (await response.json()) as typeof result;
       } catch {
-        // Respuesta no-JSON (ej. HTML 413 o 504 de Nginx/cPanel)
+        // Respuesta no-JSON (ej. HTML 413, 503 o 504 de Nginx/cPanel/LiteSpeed)
       }
 
       if (!response.ok || !result.success) {
         if (response.status === 413) {
           const stepVerif = NANOCREDITO_STEPS.findIndex((s) => s.id === "verificacion");
           if (stepVerif >= 0) setStep(stepVerif);
+          focusAndHighlightField("videoVerificacion");
           throw new Error(
-            "Los archivos adjuntos son demasiado pesados para el servidor. Por favor toma fotos directamente con la cámara o selecciona imágenes más livianas.",
+            "Los archivos adjuntos son demasiado pesados para el servidor. Por favor graba un video más corto o selecciona imágenes más livianas.",
+          );
+        }
+
+        if (response.status === 503) {
+          throw new Error(
+            "El servidor está temporalmente ocupado procesando solicitudes. Tus datos se encuentran seguros; por favor pulsa 'Enviar solicitud' de nuevo en unos segundos.",
           );
         }
 
@@ -282,17 +400,19 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
         const fieldErrors: Record<string, string> = {};
         if (result.details && typeof result.details === "object") {
           for (const [key, val] of Object.entries(result.details)) {
+            const rootKey = key.split(".")[0];
             if (Array.isArray(val) && typeof val[0] === "string") {
-              fieldErrors[key] = val[0];
+              fieldErrors[rootKey] = val[0];
             } else if (typeof val === "string") {
-              fieldErrors[key] = val;
+              fieldErrors[rootKey] = val;
             }
           }
         }
         if (Array.isArray(result.issues)) {
           for (const issue of result.issues) {
-            if (issue.field && issue.message && !fieldErrors[issue.field]) {
-              fieldErrors[issue.field] = issue.message;
+            const rootKey = (issue.field || "").split(".")[0];
+            if (rootKey && issue.message && !fieldErrors[rootKey]) {
+              fieldErrors[rootKey] = issue.message;
             }
           }
         }
@@ -327,15 +447,20 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
           );
           if (targetStep >= 0) {
             setStep(targetStep);
-            window.scrollTo({ top: 0, behavior: "smooth" });
           }
+          focusAndHighlightField(errorFieldNames[0]);
         }
 
-        const specificDetails = Object.values(fieldErrors).slice(0, 3).join(". ");
-        const errorMessage = specificDetails
-          ? `Por favor corrige la siguiente información: ${specificDetails}`
-          : result.error ||
-            "No se pudo enviar la solicitud. Por favor revisa que todos los campos requeridos estén completos e intenta de nuevo.";
+        const bulletItems = Object.entries(fieldErrors).map(([key, msg]) => {
+          const friendlyName = FIELD_LABELS_ES[key] || key;
+          return `• ${friendlyName}: ${msg}`;
+        });
+
+        const errorMessage =
+          bulletItems.length > 0
+            ? `Por favor revisa y corrige los siguientes campos señalados en rojo:\n${bulletItems.slice(0, 5).join("\n")}`
+            : result.error ||
+              `No se pudo procesar la solicitud (código ${response.status || 500}). Por favor revisa que todos los campos requeridos estén completos e intenta de nuevo.`;
 
         throw new Error(errorMessage);
       }
@@ -422,12 +547,18 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
         </div>
 
         {submitError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 shadow-sm" role="alert">
-            <div className="flex items-start gap-2.5">
-              <span className="text-base leading-none">⚠️</span>
-              <div>
-                <p className="font-semibold text-red-900">Atención al enviar la solicitud:</p>
-                <p className="mt-0.5 leading-relaxed">{submitError}</p>
+          <div
+            id="submit-error-top"
+            className="rounded-xl border-2 border-red-400 bg-red-50/95 p-4 text-sm text-red-950 shadow-sm"
+            role="alert"
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-xl leading-none">⚠️</span>
+              <div className="flex-1">
+                <p className="font-bold text-red-950 text-base">Revisa la siguiente información requerida:</p>
+                <div className="mt-2 text-sm leading-relaxed text-red-900 whitespace-pre-line font-medium">
+                  {submitError}
+                </div>
               </div>
             </div>
           </div>
@@ -444,8 +575,20 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
         </FormSection>
 
         {submitError && (
-          <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-            {submitError}
+          <div
+            id="submit-error-bottom"
+            className="rounded-xl border-2 border-red-400 bg-red-50/95 p-4 text-sm text-red-950 shadow-sm"
+            role="alert"
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-xl leading-none">⚠️</span>
+              <div className="flex-1">
+                <p className="font-bold text-red-950">Por favor completa o corrige los campos señalados en rojo antes de enviar:</p>
+                <div className="mt-1.5 text-sm leading-relaxed text-red-800 whitespace-pre-line font-medium">
+                  {submitError}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

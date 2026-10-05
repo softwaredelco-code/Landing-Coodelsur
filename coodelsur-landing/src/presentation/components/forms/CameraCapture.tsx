@@ -172,8 +172,15 @@ export function CameraCapture({
   const displayError = error || localError;
 
   return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm font-medium text-coodel-dark">
+    <div
+      id={id}
+      tabIndex={-1}
+      className={cn(
+        "flex flex-col gap-2 rounded-xl transition-all duration-200 outline-none",
+        displayError && "border-2 border-red-500 bg-red-50/50 p-3.5 shadow-sm ring-2 ring-red-200",
+      )}
+    >
+      <p className={cn("text-sm font-medium text-coodel-dark", displayError && "font-semibold text-red-900")}>
         {label}
         {required && <span className="ml-1 text-red-500">*</span>}
       </p>
@@ -240,9 +247,14 @@ export function CameraCapture({
 
       {helperText && !displayError && <p className="text-xs text-gray-500">{helperText}</p>}
       {displayError && (
-        <p className="text-xs text-red-600" role="alert">
-          {displayError}
-        </p>
+        <div
+          id={`${id}-error`}
+          className="flex items-center gap-2 rounded-lg border border-red-300 bg-red-100/90 px-3 py-2 text-xs font-semibold text-red-800"
+          role="alert"
+        >
+          <span className="text-sm">⚠️</span>
+          <span>{displayError}</span>
+        </div>
       )}
 
       {value?.preview && (

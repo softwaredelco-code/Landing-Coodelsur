@@ -1,3 +1,4 @@
+import { calcularDesgloseCuota } from "@/domain/credito/amortizacion";
 import { createLead, extractLeadFromFormBody } from "@/application/lead/create-lead";
 import { sendLeadConfirmationEmail } from "@/infrastructure/email/lead-confirmation";
 import {
@@ -38,6 +39,30 @@ export async function POST(request: Request) {
       tipoRaw === "nanocredito" ? "microcredito_small" : tipoRaw
     ) as TipoCredito;
 
+    const capitalRaw = Number(body.capitalSeleccionado || 0);
+    const cuotasRaw = Number(body.cantidadCuotas || 0);
+    let normalizedBody: Record<string, unknown> = {
+      ...body,
+      tipoCredito: tipoCanonico,
+    };
+
+    if (capitalRaw > 0 && cuotasRaw > 0) {
+      try {
+        const desglose = calcularDesgloseCuota(tipoCanonico, capitalRaw, cuotasRaw);
+        normalizedBody = {
+          ...normalizedBody,
+          valorCuota: desglose.valorCuotaTotal,
+          valorCreditoFinanciado: desglose.valorCreditoFinanciado,
+          estudioCredito: desglose.estudioCredito,
+          cuotaCapitalInteres: desglose.cuotaCapitalInteres,
+          cuotaFianzaMensual: desglose.fianzaMensual,
+          cuotaVidaDeudoresMensual: desglose.vidaDeudoresMensual,
+        };
+      } catch {
+        // En caso de que el tipo no use desglose estándar
+      }
+    }
+
     const formSchema =
       tipoCanonico === "microcredito_small"
         ? nanocreditoSchema
@@ -46,10 +71,7 @@ export async function POST(request: Request) {
           : tipoCanonico === "libranza"
             ? libranzaSchema
             : buildFormSchema(tipoCanonico);
-    const formResult = formSchema.safeParse({
-      ...body,
-      tipoCredito: tipoCanonico,
-    });
+    const formResult = formSchema.safeParse(normalizedBody);
 
     if (!formResult.success) {
       const fieldErrors = formResult.error.flatten().fieldErrors;
@@ -60,7 +82,11 @@ export async function POST(request: Request) {
         {
           error: errorSummary,
           details: fieldErrors,
-          issues: issues.map((i) => ({ field: i.path.join("."), message: i.message })),
+          issues: issues.map((i) => ({
+            field: String(i.path[0] ?? i.path.join(".")),
+            path: i.path.join("."),
+            message: i.message,
+          })),
         },
         { status: 422 },
       );

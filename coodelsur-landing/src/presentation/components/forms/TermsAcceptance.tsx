@@ -43,7 +43,14 @@ export function TermsAcceptance({
   }, [onReadComplete]);
 
   return (
-    <div className="border border-gray-200 bg-white">
+    <div
+      id="aceptaTerminos"
+      tabIndex={-1}
+      className={cn(
+        "border bg-white rounded-xl overflow-hidden transition-all duration-200 outline-none",
+        error ? "border-2 border-red-500 ring-2 ring-red-200 shadow-sm" : "border-gray-200",
+      )}
+    >
       <div className="border-b border-gray-100 bg-coodel-primary px-4 py-3 text-white md:px-5">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-coodel-gold">
           Autorización legal
@@ -135,9 +142,14 @@ export function TermsAcceptance({
         </label>
 
         {error && (
-          <p className="mt-2 text-xs text-red-600" role="alert">
-            {error}
-          </p>
+          <div
+            id="aceptaTerminos-error"
+            className="mt-3 flex items-center gap-2 rounded-lg border border-red-300 bg-red-100/90 px-3 py-2 text-xs font-semibold text-red-800"
+            role="alert"
+          >
+            <span className="text-sm">⚠️</span>
+            <span>{error}</span>
+          </div>
         )}
       </div>
     </div>

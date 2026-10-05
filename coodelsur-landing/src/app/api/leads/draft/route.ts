@@ -142,6 +142,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("[POST /api/leads/draft]", error);
-    return NextResponse.json({ error: "No se pudo guardar el borrador" }, { status: 500 });
+    return NextResponse.json(
+      {
+        saved: false,
+        error: "No se pudo guardar el borrador",
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      { status: 200 },
+    );
   }
 }

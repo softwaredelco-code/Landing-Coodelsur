@@ -381,54 +381,6 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
 
   const { telefono, cedula, nombre, email, tipoCredito } = pickContactFields(input.values);
 
-  if (input.draftId) {
-    const forceFile = process.env.LEAD_STORE === "file";
-    if (!forceFile) {
-      try {
-        const existing = await prisma.lead.findUnique({
-          where: { id: input.draftId },
-          select: { estado: true },
-        });
-        if (existing && existing.estado !== "incompleto") {
-          return null;
-        }
-      } catch (error) {
-        if (!isDbConnectionError(error)) throw error;
-      }
-    } else {
-      const existing = getLeadFromFile(input.draftId);
-      if (existing && existing.estado !== "incompleto") {
-        return null;
-      }
-    }
-  }
-
-  const forceFileCheck = process.env.LEAD_STORE === "file";
-  if (!forceFileCheck) {
-    try {
-      if (await hasCompletedLeadForContact(prisma, cedula, telefono)) {
-        return null;
-      }
-    } catch (error) {
-      if (!isDbConnectionError(error)) throw error;
-    }
-  } else {
-    const hasCompleted = listLeadsFromFile().some((lead) => {
-      if (lead.estado === "incompleto") return false;
-      const phoneDigits = telefono.replace(/\D/g, "");
-      const normalizedCedula = normalizeDocumentNumber(cedula);
-      const sameCedula =
-        normalizedCedula &&
-        normalizedCedula !== "pendiente" &&
-        lead.cedula === normalizedCedula;
-      const samePhone =
-        phoneDigits.length >= 10 &&
-        lead.telefono.replace(/\D/g, "").endsWith(phoneDigits.slice(-10));
-      return sameCedula || samePhone;
-    });
-    if (hasCompleted) return null;
-  }
-
   const utm = input.utm ?? {};
   const datosFormulario = buildDraftDatosFormulario(input.values, input.step);
   const progreso = datosFormulario._progreso;
@@ -453,89 +405,105 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
     utmContent: utm.utmContent ?? null,
   };
 
+  let existingDraftId: string | null = null;
+  const normalizedCedula = normalizeDocumentNumber(cedula);
+
   const forceFile = process.env.LEAD_STORE === "file";
 
   if (!forceFile) {
     try {
-      // Geolocalización fuera de la transacción (fetch externo puede superar 5 s).
-      const geoCandidate = await geolocateByIp(input.ip ?? null);
-
-      const lead = await prisma.$transaction(
-        async (tx) => {
-          const existing = await findDraftToUpdate(tx, input.draftId, cedula, telefono);
-          if (existing && "finalized" in existing) {
-            return null;
-          }
-
-          const existingId = existing?.id ?? null;
-          if (
-            !existingId &&
-            (await hasRecentFinalizedLead(tx, cedula, telefono, tipoCredito))
-          ) {
-            return null;
-          }
-
-          const geoFromIp = existingId ? {} : geoCandidate;
-
-          let finalOrigen = leadData.origen;
-          let mergedDatos = leadData.datosFormulario as Record<string, unknown>;
-
-          if (existingId) {
-            const existingDraft = await tx.lead.findUnique({
-              where: { id: existingId },
-              select: { origen: true, datosFormulario: true },
-            });
-            if (existingDraft?.origen === "witme") {
-              finalOrigen = "witme";
-            }
-            if (
-              existingDraft?.datosFormulario &&
-              typeof existingDraft.datosFormulario === "object" &&
-              !Array.isArray(existingDraft.datosFormulario)
-            ) {
-              mergedDatos = {
-                ...(existingDraft.datosFormulario as Record<string, unknown>),
-                ...mergedDatos,
-              };
-            }
-          }
-
-          const payload = {
-            ...leadData,
-            origen: finalOrigen,
-            ip: input.ip ?? null,
-            ciudad: geoFromIp.ciudad ?? null,
-            pais: geoFromIp.pais ?? null,
-            latitud: geoFromIp.latitud ?? null,
-            longitud: geoFromIp.longitud ?? null,
-            datosFormulario: mergedDatos as Prisma.InputJsonValue,
-          };
-
-          const saved = existingId
-            ? await tx.lead.update({
-                where: { id: existingId },
-                data: payload,
-              })
-            : await tx.lead.create({ data: payload });
-
-          await dedupeIncompleteDrafts(tx, saved.id, cedula, telefono);
-          return saved;
-        },
-        { timeout: 15_000 },
-      );
-
-      if (!lead) {
-        return null;
+      if (input.draftId) {
+        const existingById = await prisma.lead.findUnique({
+          where: { id: input.draftId },
+          select: { id: true, estado: true },
+        });
+        if (existingById?.estado === "incompleto") {
+          existingDraftId = existingById.id;
+        }
       }
 
+      if (!existingDraftId) {
+        const matchFilters = buildIncompleteMatchFilters(cedula, telefono);
+        if (matchFilters.length > 0) {
+          const recentDraft = await prisma.lead.findFirst({
+            where: {
+              estado: "incompleto",
+              tipoCredito,
+              OR: matchFilters,
+            },
+            orderBy: { fechaActualizacion: "desc" },
+            select: { id: true },
+          });
+          if (recentDraft) {
+            existingDraftId = recentDraft.id;
+          }
+        }
+      }
+
+      const geoCandidate = existingDraftId ? {} : await geolocateByIp(input.ip ?? null);
+
+      let finalOrigen = leadData.origen;
+      let mergedDatos = datosFormulario as Record<string, unknown>;
+
+      if (existingDraftId) {
+        const currentData = await prisma.lead.findUnique({
+          where: { id: existingDraftId },
+          select: { origen: true, datosFormulario: true },
+        });
+        if (currentData?.origen === "witme") {
+          finalOrigen = "witme";
+        }
+        if (
+          currentData?.datosFormulario &&
+          typeof currentData.datosFormulario === "object" &&
+          !Array.isArray(currentData.datosFormulario)
+        ) {
+          mergedDatos = {
+            ...(currentData.datosFormulario as Record<string, unknown>),
+            ...mergedDatos,
+          };
+        }
+      }
+
+      const payload = {
+        tipoCredito,
+        nombre,
+        cedula,
+        telefono,
+        email,
+        ...summary,
+        datosFormulario: mergedDatos as Prisma.InputJsonValue,
+        origen: finalOrigen,
+        estado: "incompleto" as const,
+        aceptaTerminos: false,
+        fechaAceptacionTerminos: null,
+        utmSource: utm.utmSource ?? null,
+        utmCampaign: utm.utmCampaign ?? null,
+        utmMedium: utm.utmMedium ?? null,
+        utmTerm: utm.utmTerm ?? null,
+        utmContent: utm.utmContent ?? null,
+        ip: input.ip ?? null,
+        ciudad: geoCandidate.ciudad ?? null,
+        pais: geoCandidate.pais ?? null,
+        latitud: geoCandidate.latitud ?? null,
+        longitud: geoCandidate.longitud ?? null,
+      };
+
+      const saved = existingDraftId
+        ? await prisma.lead.update({
+            where: { id: existingDraftId },
+            data: payload,
+          })
+        : await prisma.lead.create({ data: payload });
+
       return {
-        id: lead.id,
+        id: saved.id,
         porcentajeCompletado: progreso.porcentaje,
         pasoActual: progreso.pasoActual,
         storage: "database",
       };
     } catch (error) {
-      if (!isDbConnectionError(error)) throw error;
+      console.error("[saveDraftLead] database error, falling back to file:", error);
     }
   }
 
