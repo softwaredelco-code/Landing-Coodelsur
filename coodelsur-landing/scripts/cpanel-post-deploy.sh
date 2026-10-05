@@ -14,6 +14,7 @@ echo ">> Post-deploy en: $APP_DIR"
 if [[ -z "$TAR_FILE" ]]; then
   for candidate in \
     "$APP_DIR/cpanel-deploy.tar.gz" \
+    "$HOME/cpanel-deploy.tar.gz" \
     "$HOME/solicitar-credito.coodelsursas.com.co/despliegue/cpanel-deploy.tar.gz" \
     "$HOME/coodelsur-landing/cpanel-deploy.tar.gz"; do
     if [[ -f "$candidate" ]]; then
@@ -24,8 +25,11 @@ if [[ -z "$TAR_FILE" ]]; then
 fi
 
 if [[ -n "$TAR_FILE" && -f "$TAR_FILE" ]]; then
-  echo ">> Extrayendo $TAR_FILE ..."
+  echo ">> Extrayendo $TAR_FILE en $APP_DIR ..."
   tar -xzf "$TAR_FILE" -C "$APP_DIR"
+  echo ">> Extraccion completada con exito."
+else
+  echo ">> AVISO: No se encontro archivo tar de deploy. Verificando archivos existentes..."
 fi
 
 # Corregir estructura si public/public llegó a crearse en algún deploy anterior
@@ -35,10 +39,15 @@ if [[ -d "$APP_DIR/public/public" ]]; then
   rm -rf "$APP_DIR/public/public"
 fi
 
-# Asegurar copia de imágenes en public_html por si el servidor web las busca allí
-if [[ -d "$HOME/public_html" && -d "$APP_DIR/public/images" ]]; then
-  mkdir -p "$HOME/public_html/images"
-  cp -a "$APP_DIR/public/images/." "$HOME/public_html/images/" 2>/dev/null || true
+# Asegurar copia de favicons e imágenes en public_html por si el servidor web los busca allí
+if [[ -d "$HOME/public_html" ]]; then
+  if [[ -d "$APP_DIR/public/images" ]]; then
+    mkdir -p "$HOME/public_html/images"
+    cp -a "$APP_DIR/public/images/." "$HOME/public_html/images/" 2>/dev/null || true
+  fi
+  cp -a "$APP_DIR/public/favicon.ico" "$HOME/public_html/favicon.ico" 2>/dev/null || true
+  cp -a "$APP_DIR/public/favicon.png" "$HOME/public_html/favicon.png" 2>/dev/null || true
+  cp -a "$APP_DIR/public/apple-icon.png" "$HOME/public_html/apple-icon.png" 2>/dev/null || true
 fi
 
 # Quitar enlace simbólico viejo de CloudLinux (no el node_modules del standalone)
@@ -63,7 +72,10 @@ fi
 
 echo ">> node_modules del build standalone OK (sin npm install en el servidor)."
 
-echo ">> Reiniciando app Node.js ..."
+echo ">> Reiniciando app Node.js (Passenger restart.txt + cloudlinux-selector) ..."
+mkdir -p "$APP_DIR/tmp"
+touch "$APP_DIR/tmp/restart.txt"
+
 if command -v cloudlinux-selector >/dev/null 2>&1; then
   cloudlinux-selector restart \
     --json \
