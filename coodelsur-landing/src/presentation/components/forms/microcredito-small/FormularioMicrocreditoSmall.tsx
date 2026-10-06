@@ -359,12 +359,31 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
           : undefined,
       };
 
-      const response = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(90_000),
-      });
+      const sendWithRetry = async (retriesLeft = 1): Promise<Response> => {
+        try {
+          const res = await fetch("/api/leads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(90_000),
+          });
+
+          // Si el servidor retornó 503 (LiteSpeed despertando proceso) y nos queda reintento
+          if ((res.status === 503 || res.status === 504) && retriesLeft > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            return sendWithRetry(retriesLeft - 1);
+          }
+          return res;
+        } catch (fetchErr) {
+          if (retriesLeft > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            return sendWithRetry(retriesLeft - 1);
+          }
+          throw fetchErr;
+        }
+      };
+
+      const response = await sendWithRetry(1);
 
       let result: {
         success?: boolean;
@@ -390,9 +409,9 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
           );
         }
 
-        if (response.status === 503) {
+        if (response.status === 503 || response.status === 504) {
           throw new Error(
-            "El servidor está temporalmente ocupado procesando solicitudes. Tus datos se encuentran seguros; por favor pulsa 'Enviar solicitud' de nuevo en unos segundos.",
+            "El servidor está procesando solicitudes en este momento. Tus datos se encuentran seguros y guardados; por favor presiona 'Enviar solicitud' nuevamente para completar el registro.",
           );
         }
 
@@ -583,7 +602,16 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
             <div className="flex items-start gap-3">
               <span className="text-xl leading-none">⚠️</span>
               <div className="flex-1">
-                <p className="font-bold text-red-950">Por favor completa o corrige los campos señalados en rojo antes de enviar:</p>
+                <p className="font-bold text-red-950">
+                  {submitError.includes("servidor") ||
+                  submitError.includes("conexión") ||
+                  submitError.includes("procesando") ||
+                  submitError.includes("ocupado") ||
+                  submitError.includes("código") ||
+                  submitError.includes("tardó")
+                    ? "Aviso del sistema al enviar la solicitud:"
+                    : "Por favor completa o corrige los campos señalados en rojo antes de enviar:"}
+                </p>
                 <div className="mt-1.5 text-sm leading-relaxed text-red-800 whitespace-pre-line font-medium">
                   {submitError}
                 </div>

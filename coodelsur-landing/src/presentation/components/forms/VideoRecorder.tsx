@@ -127,7 +127,7 @@ export function VideoRecorder({
       stopCamera();
       await new Promise((resolve) => window.setTimeout(resolve, 150));
 
-      const stream = await getVideoStream({ facingMode: "user" });
+      const stream = await getVideoStream({ facingMode: "user", preferHd: false });
 
       if (stream.getVideoTracks().length === 0) {
         stream.getTracks().forEach((track) => track.stop());
@@ -184,7 +184,16 @@ export function VideoRecorder({
     chunksRef.current = [];
 
     const mimeType = pickRecorderMimeType();
-    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    let recorder: MediaRecorder;
+    try {
+      // 600 kbps es óptimo para video de verificación facial de 8 s (< 700 KB)
+      recorder = new MediaRecorder(stream, {
+        ...(mimeType ? { mimeType } : {}),
+        videoBitsPerSecond: 600_000,
+      });
+    } catch {
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    }
     recorderRef.current = recorder;
 
     recorder.ondataavailable = (event) => {

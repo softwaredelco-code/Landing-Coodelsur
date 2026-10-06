@@ -1,6 +1,6 @@
 "use client";
 
-import { readFileAsDataUrl } from "@/infrastructure/media/file-capture";
+import { compressImageFile, readFileAsDataUrl } from "@/infrastructure/media/file-capture";
 import { cn } from "@/shared/utils";
 import { useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
@@ -14,7 +14,7 @@ interface SignaturePadProps {
   helperText?: string;
 }
 
-const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 export function SignaturePad({
   value,
@@ -79,16 +79,23 @@ export function SignaturePad({
     }
 
     if (file.size > MAX_UPLOAD_BYTES) {
-      setLocalError("La imagen no puede superar 2 MB.");
+      setLocalError("La imagen no puede superar 5 MB.");
       return;
     }
 
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      onChange(dataUrl);
+      // Comprimir la imagen de la firma (máx 800px, calidad 0.75) para evitar exceder límites de memoria
+      const compressed = await compressImageFile(file, 800, 0.75);
+      onChange(compressed.dataUrl);
       padRef.current?.clear();
     } catch {
-      setLocalError("No se pudo cargar la imagen de firma.");
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        onChange(dataUrl);
+        padRef.current?.clear();
+      } catch {
+        setLocalError("No se pudo cargar la imagen de firma.");
+      }
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }

@@ -21,7 +21,7 @@ export const UPLOAD_LIMITS = {
 } as const;
 
 /** Tiempo máximo por subida a Storage (evita colgar el envío del formulario). */
-const STORAGE_UPLOAD_TIMEOUT_MS = 15_000;
+const STORAGE_UPLOAD_TIMEOUT_MS = 10_000;
 
 function shouldSkipRemoteUpload(): boolean {
   return process.env.LEAD_ATTACHMENTS_INLINE === "true";
@@ -254,14 +254,18 @@ async function persistAttachment(
     };
   }
 
-  // Sin Storage o upload fallido: conservar preview para revisión en admin
+  // Sin Storage o upload fallido: conservar preview para archivos livianos (< 1MB)
+  // Para archivos mayores a 1MB (videos sin Storage), evitar colapsar la columna JSON de PostgreSQL
+  const isTooHeavyForInline = size > 1_000_000;
   return {
     fileName,
     mimeType,
     size,
     uploaded: false,
-    preview: dataUrl.startsWith("data:") ? dataUrl : undefined,
-    note: "No se pudo subir a Storage; disponible en preview",
+    preview: !isTooHeavyForInline && dataUrl.startsWith("data:") ? dataUrl : undefined,
+    note: isTooHeavyForInline
+      ? "Archivo recibido por el cliente; omitido del JSON local para proteger la base de datos"
+      : "No se pudo subir a Storage; disponible en preview",
   };
 }
 
