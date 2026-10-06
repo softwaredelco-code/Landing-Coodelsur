@@ -225,22 +225,28 @@ export async function getVideoStream(options?: {
   }
 
   const { facingMode, preferHd = true } = options ?? {};
-  const hd = preferHd ? { width: { ideal: 1280 }, height: { ideal: 720 } } : {};
+  const videoResolution = preferHd
+    ? { width: { ideal: 1280 }, height: { ideal: 720 } }
+    : {
+        width: { ideal: 480, max: 640 },
+        height: { ideal: 480, max: 640 },
+        frameRate: { ideal: 15, max: 24 },
+      };
   const mobile = isMobileDevice();
   const attempts: MediaStreamConstraints[] = [];
 
   if (mobile) {
     const effectiveFacing = facingMode ?? "environment";
     attempts.push({
-      video: { facingMode: { ideal: effectiveFacing }, ...hd },
+      video: { facingMode: { ideal: effectiveFacing }, ...videoResolution },
       audio: false,
     });
-    attempts.push({ video: { ...hd }, audio: false });
+    attempts.push({ video: { ...videoResolution }, audio: false });
     attempts.push({ video: true, audio: false });
   } else {
     // En PC: la restricción más simple primero evita cuelgues del diálogo de Chrome.
     attempts.push({ video: true, audio: false });
-    attempts.push({ video: { ...hd }, audio: false });
+    attempts.push({ video: { ...videoResolution }, audio: false });
   }
 
   let lastError: unknown;

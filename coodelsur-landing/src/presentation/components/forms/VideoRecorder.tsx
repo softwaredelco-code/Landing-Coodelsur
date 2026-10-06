@@ -24,7 +24,7 @@ interface VideoRecorderProps {
   maxBytes?: number;
 }
 
-const DEFAULT_MAX_BYTES = 15 * 1024 * 1024;
+const DEFAULT_MAX_BYTES = 3.5 * 1024 * 1024;
 
 export function VideoRecorder({
   id,
@@ -186,10 +186,10 @@ export function VideoRecorder({
     const mimeType = pickRecorderMimeType();
     let recorder: MediaRecorder;
     try {
-      // 600 kbps es óptimo para video de verificación facial de 8 s (< 700 KB)
+      // 350 kbps es óptimo para video de verificación facial de 8 s (< 400 KB)
       recorder = new MediaRecorder(stream, {
         ...(mimeType ? { mimeType } : {}),
-        videoBitsPerSecond: 600_000,
+        videoBitsPerSecond: 350_000,
       });
     } catch {
       recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
@@ -237,7 +237,10 @@ export function VideoRecorder({
         return;
       }
       if (file.size > maxBytes) {
-        setLocalError(`El archivo no puede superar ${Math.round(maxBytes / (1024 * 1024))} MB`);
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        setLocalError(
+          `El video seleccionado es muy pesado (${sizeMb} MB). Para garantizar un envío inmediato, por favor graba un video corto de ${durationSeconds} s con la cámara o selecciona un archivo menor a 3.5 MB.`,
+        );
         onChange(undefined);
         return;
       }

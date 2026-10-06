@@ -90,9 +90,15 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
     hasGeoFromClient ? Promise.resolve({} as GeoLocation) : geolocateByIp(input.ip ?? null),
     withTimeout(
       processFileFields(input.datosFormulario),
-      45_000,
+      8_000,
       "Tiempo agotado al procesar los archivos adjuntos",
-    ),
+    ).catch((error) => {
+      console.warn(
+        "[createLead] processFileFields demoró o falló; procediendo con datos originales sin bloquear:",
+        error instanceof Error ? error.message : error,
+      );
+      return input.datosFormulario;
+    }),
   ]);
 
   const geo = {
@@ -189,7 +195,7 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
               longitud: geo.longitud ?? null,
             },
           }),
-          20_000,
+          10_000,
           "Tiempo agotado al guardar la solicitud en base de datos",
         );
 
@@ -233,7 +239,7 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
             longitud: geo.longitud ?? null,
           },
         }),
-        20_000,
+        10_000,
         "Tiempo agotado al guardar la solicitud en base de datos",
       );
 
