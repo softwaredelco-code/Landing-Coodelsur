@@ -80,7 +80,7 @@ export async function GET(request: Request) {
 
     const leadsQuery = prisma.lead.findMany({
       where,
-      orderBy: { fechaCreacion: "desc" },
+      orderBy: [{ fechaActualizacion: "desc" }, { fechaCreacion: "desc" }],
       take,
       skip,
       select: {
@@ -95,6 +95,7 @@ export async function GET(request: Request) {
         aceptaTerminos: true,
         ciudad: true,
         fechaCreacion: true,
+        fechaActualizacion: true,
         capitalSolicitado: true,
         progresoFormulario: true,
         pasoActualFormulario: true,

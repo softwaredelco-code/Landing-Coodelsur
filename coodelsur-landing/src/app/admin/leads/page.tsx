@@ -21,6 +21,7 @@ interface LeadRow {
   aceptaTerminos: boolean;
   ciudad: string | null;
   fechaCreacion: string;
+  fechaActualizacion?: string;
   capitalSolicitado: number | null;
   progresoFormulario: number | null;
   pasoActualFormulario: string | null;
@@ -93,13 +94,16 @@ export default function AdminLeadsPage() {
   const [appliedOrigen, setAppliedOrigen] = useState("");
   const [estadoCounts, setEstadoCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState<"selected" | "report" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    else setRefreshing(true);
     setError(null);
     const params = new URLSearchParams();
     params.set("take", String(PAGE_SIZE));
@@ -107,31 +111,46 @@ export default function AdminLeadsPage() {
     if (appliedQ) params.set("q", appliedQ);
     if (estado) params.set("estado", estado);
     if (appliedOrigen) params.set("origen", appliedOrigen);
-    const res = await fetch(`/api/admin/leads?${params.toString()}`, { cache: "no-store" });
-    if (res.status === 401) {
+    try {
+      const res = await fetch(`/api/admin/leads?${params.toString()}`, { cache: "no-store" });
+      if (res.status === 401) {
+        setLoading(false);
+        setRefreshing(false);
+        router.replace("/admin");
+        return;
+      }
+      if (!res.ok) {
+        setError("No se pudieron cargar las solicitudes");
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+      const data = (await res.json()) as {
+        leads: LeadRow[];
+        total: number;
+        estadoCounts?: Record<string, number>;
+      };
+      setLeads(data.leads);
+      setTotal(data.total);
+      setEstadoCounts(data.estadoCounts ?? {});
+      setLastRefreshedAt(new Date());
+    } catch {
+      setError("Error de conexión al cargar solicitudes");
+    } finally {
       setLoading(false);
-      router.replace("/admin");
-      return;
+      setRefreshing(false);
     }
-    if (!res.ok) {
-      setError("No se pudieron cargar las solicitudes");
-      setLoading(false);
-      return;
-    }
-    const data = (await res.json()) as {
-      leads: LeadRow[];
-      total: number;
-      estadoCounts?: Record<string, number>;
-    };
-    setLeads(data.leads);
-    setTotal(data.total);
-    setEstadoCounts(data.estadoCounts ?? {});
-    setSelectedIds(new Set());
-    setLoading(false);
   }, [appliedQ, appliedOrigen, estado, page, router]);
 
   useEffect(() => {
-    void load();
+    void load(true);
+    // Polling en tiempo real cada 12 segundos para mostrar solicitudes de inmediato sin recargar
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void load(false);
+      }
+    }, 12_000);
+    return () => clearInterval(interval);
   }, [load]);
 
   const applyFilters = () => {
@@ -306,7 +325,18 @@ export default function AdminLeadsPage() {
             </span>
           )}
         </p>
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Button
+            type="button"
+            variant="outline"
+            loading={refreshing}
+            onClick={() => void load(false)}
+            title="Actualizar lista de solicitudes en tiempo real"
+            className="flex items-center gap-1.5"
+          >
+            <span>🔄</span>
+            <span>Actualizar</span>
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -373,13 +403,13 @@ export default function AdminLeadsPage() {
                       />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-gray-500">
-                      {new Date(lead.fechaCreacion).toLocaleDateString("es-CO", {
+                      {new Date(lead.fechaActualizacion ?? lead.fechaCreacion).toLocaleDateString("es-CO", {
                         day: "2-digit",
                         month: "short",
                         year: "numeric",
                       })}
                       <span className="mt-0.5 block text-xs text-gray-400">
-                        {new Date(lead.fechaCreacion).toLocaleTimeString("es-CO", {
+                        {new Date(lead.fechaActualizacion ?? lead.fechaCreacion).toLocaleTimeString("es-CO", {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
