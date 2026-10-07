@@ -114,21 +114,21 @@ export function SeccionDatosCredito() {
       <Controller
         name="cantidadCuotas"
         control={control}
-        render={({ field }) => (
+        render={({ field, fieldState }) => (
           <Select
             label="Cantidad de cuotas"
             options={opcionesCuotas}
             placeholder="Seleccionar..."
             required
             name={field.name}
-            value={field.value != null ? String(field.value) : ""}
+            value={field.value != null && Number(field.value) > 0 ? String(field.value) : ""}
             onChange={(event) => {
               const next = Number(event.target.value);
-              field.onChange(Number.isFinite(next) ? next : event.target.value);
+              field.onChange(Number.isFinite(next) && next > 0 ? next : "");
             }}
             onBlur={field.onBlur}
             ref={field.ref}
-            error={errors.cantidadCuotas?.message}
+            error={fieldState.error?.message || errors.cantidadCuotas?.message}
           />
         )}
       />
@@ -137,7 +137,7 @@ export function SeccionDatosCredito() {
           Valor de cuota mensual <span className="text-red-500">*</span>
         </label>
         <p className="mt-1 text-lg font-semibold text-coodel-primary">
-          {formatCOP(desglose?.valorCuotaTotal ?? Number(watch("valorCuota") || 0))}
+          {cuotas > 0 && desglose ? formatCOP(desglose.valorCuotaTotal) : "Selecciona el plazo"}
         </p>
         <p className="mt-1 text-xs text-gray-500">
           Calculado con tasa del {(parametros.tasaMensual * 100).toFixed(1).replace(".", ",")} %

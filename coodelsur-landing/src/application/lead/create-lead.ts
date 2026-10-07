@@ -163,10 +163,24 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
             ? (existingLead.datosFormulario as Record<string, unknown>)
             : {};
 
-        const mergedDatos = {
+        const mergedDatos: Record<string, unknown> = {
           ...existingDatos,
           ...processedData,
         };
+
+        // Si el borrador ya tenía los archivos completos y el payload final envió
+        // una referencia liviana ("attached-in-draft") para evitar timeouts 503,
+        // preservamos el archivo original del borrador.
+        for (const fileField of ["videoVerificacion", "cedulaFrontal", "cedulaReverso", "firma"]) {
+          const existingFile = existingDatos[fileField] as Record<string, unknown> | undefined;
+          const newFile = processedData[fileField] as Record<string, unknown> | undefined;
+          if (existingFile && newFile) {
+            const newPreview = typeof newFile.preview === "string" ? newFile.preview : "";
+            if (newPreview === "attached-in-draft" || (!newPreview.startsWith("data:") && !newFile.url)) {
+              mergedDatos[fileField] = existingFile;
+            }
+          }
+        }
 
         const lead = await withTimeout(
           prisma.lead.update({

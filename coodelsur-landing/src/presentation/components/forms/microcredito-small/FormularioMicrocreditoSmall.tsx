@@ -247,12 +247,42 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
     }
 
     if (!valid || crossFieldErrors.length > 0) {
+      const formErrors = methods.formState.errors as Record<string, any>;
+      const fieldsWithErrors = fields.filter((f) => {
+        const root = String(f).split(".")[0];
+        return Boolean(formErrors[root] || formErrors[String(f)]);
+      });
+
+      const firstErrorField = String(fieldsWithErrors[0] || (crossFieldErrors[0]?.path as string) || fields[0]);
+      focusAndHighlightField(firstErrorField);
+
+      const bulletItems = fieldsWithErrors.map((key) => {
+        const root = String(key).split(".")[0];
+        const errObj = formErrors[root] || formErrors[String(key)];
+        const msg =
+          (errObj && typeof errObj.message === "string" && errObj.message) ||
+          "Por favor completa o selecciona este campo";
+        const friendlyName = FIELD_LABELS_ES[String(root)] || String(key);
+        return `• ${friendlyName}: ${msg}`;
+      });
+
       if (crossFieldErrors.length > 0) {
-        await trigger(crossFieldErrors[0].path, { shouldFocus: true });
+        for (const cErr of crossFieldErrors) {
+          const friendlyName = FIELD_LABELS_ES[String(cErr.path)] || String(cErr.path);
+          bulletItems.push(`• ${friendlyName}: ${cErr.message}`);
+        }
       }
+
+      const summaryText =
+        bulletItems.length > 0
+          ? `Por favor completa o corrige los siguientes campos señalados en rojo para continuar:\n${bulletItems.slice(0, 5).join("\n")}`
+          : "Hay campos obligatorios incompletos en este paso. Revisa los campos resaltados en rojo.";
+
+      setSubmitError(summaryText);
       return;
     }
 
+    setSubmitError(null);
     const nextStep = Math.min(step + 1, totalSteps - 1);
     setStep(nextStep);
     trackEvent("form_step", {
@@ -350,8 +380,27 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
 
       const utm = deserializeUtm(getUtmFromCookie() ?? undefined) ?? undefined;
 
+      // Optimizar payload para garantizar envío inmediato sin saturar buffer ni provocar 503 de LiteSpeed/Passenger
+      const cleanData: any = { ...synchedData };
+      if (
+        cleanData.videoVerificacion &&
+        typeof cleanData.videoVerificacion === "object" &&
+        "preview" in cleanData.videoVerificacion
+      ) {
+        const previewStr = String(cleanData.videoVerificacion.preview ?? "");
+        // Si el borrador ya está en el servidor o el base64 excede 600 KB, enviamos referencia liviana
+        if (draftLeadId || previewStr.length > 600_000) {
+          cleanData.videoVerificacion = {
+            fileName: cleanData.videoVerificacion.fileName || "videoVerificacion.mp4",
+            mimeType: cleanData.videoVerificacion.mimeType || "video/mp4",
+            size: cleanData.videoVerificacion.size || 0,
+            preview: draftLeadId ? "attached-in-draft" : previewStr.slice(0, 100),
+          };
+        }
+      }
+
       const payload = {
-        ...synchedData,
+        ...cleanData,
         utm,
         draftLeadId: draftLeadId ?? undefined,
         geoCliente: data.geolocalizacion
@@ -359,31 +408,31 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
           : undefined,
       };
 
-      const sendWithRetry = async (retriesLeft = 1): Promise<Response> => {
+      const sendWithRetry = async (retriesLeft = 2): Promise<Response> => {
         try {
           const res = await fetch("/api/leads", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(90_000),
+            signal: AbortSignal.timeout(60_000),
           });
 
-          // Si el servidor retornó 503 (LiteSpeed despertando proceso) y nos queda reintento
+          // Si el servidor retornó 503/504 (proceso despertando o reinicio de worker), reintentar automáticamente
           if ((res.status === 503 || res.status === 504) && retriesLeft > 0) {
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             return sendWithRetry(retriesLeft - 1);
           }
           return res;
         } catch (fetchErr) {
           if (retriesLeft > 0) {
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             return sendWithRetry(retriesLeft - 1);
           }
           throw fetchErr;
         }
       };
 
-      const response = await sendWithRetry(1);
+      const response = await sendWithRetry(2);
 
       let result: {
         success?: boolean;
@@ -610,7 +659,9 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
                   submitError.includes("código") ||
                   submitError.includes("tardó")
                     ? "Aviso del sistema al enviar la solicitud:"
-                    : "Por favor completa o corrige los campos señalados en rojo antes de enviar:"}
+                    : step < totalSteps - 1
+                      ? "Por favor completa o corrige los campos señalados en rojo para continuar:"
+                      : "Por favor completa o corrige los campos señalados en rojo antes de enviar:"}
                 </p>
                 <div className="mt-1.5 text-sm leading-relaxed text-red-800 whitespace-pre-line font-medium">
                   {submitError}

@@ -49,6 +49,32 @@ const STEP_COMPONENTS = [
 
 const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
+function focusAndHighlightField(fieldName?: string) {
+  if (!fieldName || typeof document === "undefined") return;
+  const root = fieldName.split(".")[0];
+
+  setTimeout(() => {
+    const el =
+      document.getElementById(root) ||
+      document.getElementById(`${root}-container`) ||
+      document.getElementById(`${root}-upload`) ||
+      document.getElementById(`${root}-file`) ||
+      document.querySelector(`[name="${root}"]`) ||
+      document.getElementById(`${root}-error`);
+
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      if ("focus" in el && typeof (el as HTMLElement).focus === "function") {
+        (el as HTMLElement).focus();
+      }
+      el.classList.add("ring-4", "ring-red-400", "ring-offset-2", "transition-all");
+      setTimeout(() => {
+        el.classList.remove("ring-4", "ring-red-400", "ring-offset-2");
+      }, 4000);
+    }
+  }, 120);
+}
+
 export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
   const [submitted, setSubmitted] = useState(false);
   const [resumen, setResumen] = useState<LibranzaFormValues | null>(null);
@@ -121,12 +147,40 @@ export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
     }
 
     if (!valid || crossFieldErrors.length > 0) {
+      const formErrors = methods.formState.errors as Record<string, any>;
+      const fieldsWithErrors = fields.filter((f) => {
+        const root = String(f).split(".")[0];
+        return Boolean(formErrors[root] || formErrors[String(f)]);
+      });
+
+      const firstErrorField = String(fieldsWithErrors[0] || (crossFieldErrors[0]?.path as string) || fields[0]);
+      focusAndHighlightField(firstErrorField);
+
+      const bulletItems = fieldsWithErrors.map((key) => {
+        const root = String(key).split(".")[0];
+        const errObj = formErrors[root] || formErrors[String(key)];
+        const msg =
+          (errObj && typeof errObj.message === "string" && errObj.message) ||
+          "Por favor completa o selecciona este campo";
+        return `• ${String(root)}: ${msg}`;
+      });
+
       if (crossFieldErrors.length > 0) {
-        await trigger(crossFieldErrors[0].path, { shouldFocus: true });
+        for (const cErr of crossFieldErrors) {
+          bulletItems.push(`• ${String(cErr.path)}: ${cErr.message}`);
+        }
       }
+
+      const summaryText =
+        bulletItems.length > 0
+          ? `Por favor completa o corrige los siguientes campos señalados en rojo para continuar:\n${bulletItems.slice(0, 5).join("\n")}`
+          : "Hay campos obligatorios incompletos en este paso. Revisa los campos resaltados en rojo.";
+
+      setSubmitError(summaryText);
       return;
     }
 
+    setSubmitError(null);
     const nextStep = Math.min(step + 1, totalSteps - 1);
     setStep(nextStep);
     trackEvent("form_step", {
@@ -191,8 +245,25 @@ export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
           ? sessionStorage.getItem("coodelsur_server_draft_id")
           : null;
 
+      const cleanData: any = { ...data };
+      if (
+        cleanData.videoVerificacion &&
+        typeof cleanData.videoVerificacion === "object" &&
+        "preview" in cleanData.videoVerificacion
+      ) {
+        const previewStr = String(cleanData.videoVerificacion.preview ?? "");
+        if (previewStr.length > 500000 || draftLeadId) {
+          cleanData.videoVerificacion = {
+            fileName: cleanData.videoVerificacion.fileName || "videoVerificacion.mp4",
+            mimeType: cleanData.videoVerificacion.mimeType || "video/mp4",
+            size: cleanData.videoVerificacion.size || 0,
+            preview: draftLeadId ? "attached-in-draft" : previewStr.slice(0, 100),
+          };
+        }
+      }
+
       const payload = {
-        ...data,
+        ...cleanData,
         utm,
         draftLeadId: draftLeadId ?? undefined,
         geoCliente: data.geolocalizacion
@@ -376,8 +447,29 @@ export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
         </FormSection>
 
         {submitError && (
-          <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-            {submitError}
+          <div
+            id="submit-error-bottom"
+            className="rounded-xl border-2 border-red-400 bg-red-50/95 p-4 text-sm text-red-950 shadow-sm"
+            role="alert"
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-xl leading-none">⚠️</span>
+              <div className="flex-1">
+                <p className="font-bold text-red-950">
+                  {submitError.includes("servidor") ||
+                  submitError.includes("conexión") ||
+                  submitError.includes("procesando") ||
+                  submitError.includes("ocupado")
+                    ? "Aviso del sistema al enviar la solicitud:"
+                    : step < totalSteps - 1
+                      ? "Por favor completa o corrige los campos señalados en rojo para continuar:"
+                      : "Por favor completa o corrige los campos señalados en rojo antes de enviar:"}
+                </p>
+                <div className="mt-1.5 text-sm leading-relaxed text-red-800 whitespace-pre-line font-medium">
+                  {submitError}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

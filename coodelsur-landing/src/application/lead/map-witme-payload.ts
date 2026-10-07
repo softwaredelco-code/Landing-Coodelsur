@@ -182,11 +182,23 @@ export function mapWitmePayload(raw: Record<string, unknown>): MappedWitmeLead |
     }
   }
 
+  const tipoCredito = normalizeTipoCreditoFromWitme(
+    readString(raw, "tipo_credito", "tipoCredito"),
+  );
+
   const datosFormulario = mergeFormData(...nestedSources, passthrough, {
-    tipoCredito: normalizeTipoCreditoFromWitme(
-      readString(raw, "tipo_credito", "tipoCredito"),
-    ),
+    tipoCredito,
   });
+
+  if (tipoCredito === "microcredito_small") {
+    const rawCuotas = datosFormulario.cantidadCuotas;
+    const parsedCuotas = typeof rawCuotas === "number" ? rawCuotas : Number(rawCuotas);
+    if (!Number.isFinite(parsedCuotas) || parsedCuotas <= 0) {
+      datosFormulario.cantidadCuotas = 2;
+    } else {
+      datosFormulario.cantidadCuotas = parsedCuotas;
+    }
+  }
 
   datosFormulario.fuente = "witme_webhook";
   datosFormulario.witmeLeadId =

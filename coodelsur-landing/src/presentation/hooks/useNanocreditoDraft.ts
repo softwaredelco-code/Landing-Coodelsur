@@ -37,11 +37,13 @@ function applyInitialMontoToValues(
   values: NanocreditoFormValues,
   initialMonto: number,
 ): NanocreditoFormValues {
-  const plazo = Number(values.cantidadCuotas || 2);
+  const cuotasRaw = Number(values.cantidadCuotas);
+  const plazo = Number.isFinite(cuotasRaw) && cuotasRaw > 0 ? cuotasRaw : 2;
   const desglose = calcularDesgloseCuota("microcredito_small", initialMonto, plazo);
   return {
     ...values,
     capitalSeleccionado: initialMonto,
+    cantidadCuotas: plazo,
     valorCuota: desglose.valorCuotaTotal,
     valorCreditoFinanciado: desglose.valorCreditoFinanciado,
     estudioCredito: desglose.estudioCredito,
@@ -122,6 +124,8 @@ export function useNanocreditoDraft({
         searchParams.get("plazo");
       if (cuotasRaw && !Number.isNaN(Number(cuotasRaw)) && Number(cuotasRaw) > 0) {
         urlValues.cantidadCuotas = Number(cuotasRaw);
+      } else if (urlValues.capitalSeleccionado) {
+        urlValues.cantidadCuotas = 2;
       }
 
       const tipoDoc =
