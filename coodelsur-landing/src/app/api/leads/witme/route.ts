@@ -80,8 +80,15 @@ function buildWitmeRedirectUrl(
 
   const cuotas = mapped.datosFormulario.cantidadCuotas;
   if (cuotas && !Number.isNaN(Number(cuotas)) && Number(cuotas) > 0) {
-    params.set("cuotas", String(cuotas));
-    params.set("cantidadCuotas", String(cuotas));
+    let cuotasVal = Number(cuotas);
+    if (tipoCredito === "microcredito_small" && (cuotasVal < 1 || cuotasVal > 4)) {
+      cuotasVal = 2;
+    }
+    params.set("cuotas", String(cuotasVal));
+    params.set("cantidadCuotas", String(cuotasVal));
+  } else if (tipoCredito === "microcredito_small") {
+    params.set("cuotas", "2");
+    params.set("cantidadCuotas", "2");
   }
 
   // Atribución de campaña para asegurar origen Witme
@@ -115,8 +122,23 @@ export async function POST(request: Request) {
 
     const ip = getClientIp(request);
 
-    // Calcular avance inicial del formulario con los campos que envió Witme
-    mapped.datosFormulario._progreso = calcularProgresoFormulario(mapped.datosFormulario, 0);
+    // Calcular avance del formulario con los campos enviados por Witme
+    const progreso = calcularProgresoFormulario(mapped.datosFormulario, 0);
+    mapped.datosFormulario._progreso = progreso;
+
+    // Detectar si es un lead completo o un borrador inicial para redirección
+    const rawEstado = String(rawBody.estado ?? "").toLowerCase();
+    const esCompleto =
+      rawEstado === "completo" ||
+      rawEstado === "recibido" ||
+      progreso.porcentaje >= 65 ||
+      Boolean(
+        mapped.datosFormulario.cedulaFrontal ||
+        mapped.datosFormulario.cedula_frontal ||
+        mapped.datosFormulario.firma
+      );
+
+    const estadoFinal = esCompleto ? "completo" : "incompleto";
 
     const lead = await createLead({
       tipoCredito: mapped.tipoCredito,
@@ -126,7 +148,7 @@ export async function POST(request: Request) {
       email: mapped.email,
       datosFormulario: mapped.datosFormulario,
       origen: "witme",
-      estado: "incompleto",
+      estado: estadoFinal,
       utm: mapped.utm,
       ip,
       aceptaTerminos: mapped.aceptaTerminos,
@@ -141,14 +163,15 @@ export async function POST(request: Request) {
         id: lead.id,
         leadId: lead.id,
         draftLeadId: lead.id,
-        estado: "incompleto",
+        estado: estadoFinal,
         origen: "witme",
         redirect_url: redirectUrl,
         redirectUrl: redirectUrl,
         url: redirectUrl,
         redirect: redirectUrl,
-        message:
-          "Lead registrado como incompleto. Redirigir al cliente a 'redirect_url' para completar los campos faltantes.",
+        message: esCompleto
+          ? "Lead registrado con éxito en estado completo para revisión administrativa."
+          : "Lead registrado como incompleto. Redirigir al cliente a 'redirect_url' para completar los campos faltantes.",
         storage: lead.storage ?? "database",
       },
       { status: 201 },

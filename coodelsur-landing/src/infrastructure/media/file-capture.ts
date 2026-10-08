@@ -11,8 +11,8 @@ export function readFileAsDataUrl(file: File): Promise<string> {
 
 export async function compressImageFile(
   file: File,
-  maxDimension = 1200,
-  quality = 0.75,
+  maxDimension = 960,
+  quality = 0.65,
 ): Promise<{ dataUrl: string; size: number }> {
   if (typeof window === "undefined" || !file.type.startsWith("image/")) {
     const dataUrl = await readFileAsDataUrl(file);
@@ -110,7 +110,7 @@ export async function captureVideoFrame(
   const canvas = document.createElement("canvas");
   let width = video.videoWidth;
   let height = video.videoHeight;
-  const maxDim = 1200;
+  const maxDim = 960;
   if (width > maxDim || height > maxDim) {
     if (width > height) {
       height = Math.round((height * maxDim) / width);
@@ -131,7 +131,7 @@ export async function captureVideoFrame(
   context.drawImage(video, 0, 0, width, height);
 
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/jpeg", 0.75);
+    canvas.toBlob(resolve, "image/jpeg", 0.65);
   });
 
   if (!blob) throw new Error("No se pudo generar la foto");

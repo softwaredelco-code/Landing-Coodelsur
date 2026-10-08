@@ -72,6 +72,25 @@ fi
 
 echo ">> node_modules del build standalone OK (sin npm install en el servidor)."
 
+# Configurar .htaccess con redirección HTTPS 308 (preserva POST method/body) y aumentar límites
+for ht_dir in "$APP_DIR" "$HOME/solicitar-credito.coodelsursas.com.co" "$HOME/public_html"; do
+  if [[ -d "$ht_dir" ]]; then
+    if [[ ! -f "$ht_dir/.htaccess" ]] || ! grep -q "RewriteRule ^ https:" "$ht_dir/.htaccess"; then
+      cat << 'EOF' >> "$ht_dir/.htaccess"
+
+# Coodelsur: Forzar HTTPS preservando POST (308) y aumentar buffer
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=308]
+</IfModule>
+LimitRequestBody 20971520
+EOF
+      echo ">> Reglas de HTTPS y LimitRequestBody agregadas en $ht_dir/.htaccess"
+    fi
+  fi
+done
+
 echo ">> Reiniciando app Node.js (Passenger restart.txt + cloudlinux-selector) ..."
 mkdir -p "$APP_DIR/tmp"
 touch "$APP_DIR/tmp/restart.txt"
