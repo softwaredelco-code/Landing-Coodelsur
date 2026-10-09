@@ -36,6 +36,16 @@ interface CreateLeadInput extends Omit<LeadPayload, "ip"> {
   fechaAceptacionTerminos?: string | null;
   estado?: LeadEstado;
   draftLeadId?: string | null;
+  /** Si es true, falla en vez de guardar la solicitud sin un video de verificación válido. */
+  exigirVideo?: boolean;
+}
+
+/** Un video es válido si quedó en Storage (url) o inline como data URL. */
+function tieneVideoValido(datos: Record<string, unknown>): boolean {
+  const video = datos.videoVerificacion as Record<string, unknown> | undefined;
+  if (!video || typeof video !== "object") return false;
+  if (typeof video.url === "string" && video.url.startsWith("http")) return true;
+  return typeof video.preview === "string" && video.preview.startsWith("data:") && video.preview.length > 1000;
 }
 
 type LeadResult = {
@@ -90,7 +100,7 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
     hasGeoFromClient ? Promise.resolve({} as GeoLocation) : geolocateByIp(input.ip ?? null),
     withTimeout(
       processFileFields(input.datosFormulario),
-      8_000,
+      25_000,
       "Tiempo agotado al procesar los archivos adjuntos",
     ).catch((error) => {
       console.warn(
@@ -100,6 +110,12 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResult> {
       return input.datosFormulario;
     }),
   ]);
+
+  if (input.exigirVideo && !tieneVideoValido(processedData)) {
+    throw new Error(
+      "No se pudo guardar el video de verificación. Por favor graba o adjunta el video nuevamente y presiona 'Enviar solicitud'.",
+    );
+  }
 
   const geo = {
     ciudad: geoFromIp.ciudad,

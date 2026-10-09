@@ -167,7 +167,7 @@ export async function POST(request: Request) {
         ? body.draftLeadId.trim()
         : null;
 
-    const lead = await createLead({ ...leadData, ip, draftLeadId });
+    const lead = await createLead({ ...leadData, ip, draftLeadId, exigirVideo: true });
 
     void sendLeadConfirmationEmail({
       to: leadData.email ?? "",

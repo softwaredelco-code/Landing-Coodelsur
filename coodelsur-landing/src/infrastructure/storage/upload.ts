@@ -21,7 +21,7 @@ export const UPLOAD_LIMITS = {
 } as const;
 
 /** Tiempo máximo por subida a Storage (evita colgar el envío del formulario). */
-const STORAGE_UPLOAD_TIMEOUT_MS = 5_000;
+const STORAGE_UPLOAD_TIMEOUT_MS = 20_000;
 
 function shouldSkipRemoteUpload(): boolean {
   return process.env.LEAD_ATTACHMENTS_INLINE === "true";

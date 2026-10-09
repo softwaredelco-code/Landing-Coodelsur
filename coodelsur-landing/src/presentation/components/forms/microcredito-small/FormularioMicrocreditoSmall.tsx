@@ -380,24 +380,9 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
 
       const utm = deserializeUtm(getUtmFromCookie() ?? undefined) ?? undefined;
 
-      // Optimizar payload para garantizar envío inmediato sin saturar buffer ni provocar 503 de LiteSpeed/Passenger
+      // El video real siempre viaja en el envío final: el borrador del servidor solo
+      // conserva metadatos, por lo que nunca se debe sustituir por una referencia liviana.
       const cleanData: any = { ...synchedData };
-      if (
-        cleanData.videoVerificacion &&
-        typeof cleanData.videoVerificacion === "object" &&
-        "preview" in cleanData.videoVerificacion
-      ) {
-        const previewStr = String(cleanData.videoVerificacion.preview ?? "");
-        // Si el borrador ya está en el servidor o el base64 excede 600 KB, enviamos referencia liviana
-        if (draftLeadId || previewStr.length > 600_000) {
-          cleanData.videoVerificacion = {
-            fileName: cleanData.videoVerificacion.fileName || "videoVerificacion.mp4",
-            mimeType: cleanData.videoVerificacion.mimeType || "video/mp4",
-            size: cleanData.videoVerificacion.size || 0,
-            preview: draftLeadId ? "attached-in-draft" : previewStr.slice(0, 100),
-          };
-        }
-      }
 
       const payload = {
         ...cleanData,

@@ -245,22 +245,9 @@ export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
           ? sessionStorage.getItem("coodelsur_server_draft_id")
           : null;
 
+      // El video real siempre viaja en el envío final: el borrador del servidor solo
+      // conserva metadatos, por lo que nunca se debe sustituir por una referencia liviana.
       const cleanData: any = { ...data };
-      if (
-        cleanData.videoVerificacion &&
-        typeof cleanData.videoVerificacion === "object" &&
-        "preview" in cleanData.videoVerificacion
-      ) {
-        const previewStr = String(cleanData.videoVerificacion.preview ?? "");
-        if (previewStr.length > 500000 || draftLeadId) {
-          cleanData.videoVerificacion = {
-            fileName: cleanData.videoVerificacion.fileName || "videoVerificacion.mp4",
-            mimeType: cleanData.videoVerificacion.mimeType || "video/mp4",
-            size: cleanData.videoVerificacion.size || 0,
-            preview: draftLeadId ? "attached-in-draft" : previewStr.slice(0, 100),
-          };
-        }
-      }
 
       const payload = {
         ...cleanData,
