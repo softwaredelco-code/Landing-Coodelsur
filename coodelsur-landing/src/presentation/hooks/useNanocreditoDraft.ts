@@ -22,6 +22,19 @@ import type { UseFormGetValues, UseFormReset, UseFormWatch } from "react-hook-fo
 
 const SAVE_DEBOUNCE_MS = 700;
 
+/** Campos de archivo/firma que el borrador del servidor solo guarda como metadatos o marcador. */
+const FILE_FIELD_KEYS = new Set(["cedulaFrontal", "cedulaReverso", "videoVerificacion", "firma"]);
+
+/** Un archivo es utilizable solo si trae contenido real (data URL o URL), no solo metadatos. */
+function isUsableFileValue(val: unknown): boolean {
+  if (typeof val === "string") return val.startsWith("data:") || val.startsWith("http");
+  if (val && typeof val === "object") {
+    const preview = (val as { preview?: unknown }).preview;
+    return typeof preview === "string" && (preview.startsWith("data:") || preview.startsWith("http"));
+  }
+  return false;
+}
+
 interface UseNanocreditoDraftOptions {
   watch: UseFormWatch<NanocreditoFormValues>;
   getValues: UseFormGetValues<NanocreditoFormValues>;
@@ -187,6 +200,10 @@ export function useNanocreditoDraft({
               const updated = { ...currentVals };
 
               for (const [key, val] of Object.entries(serverValues)) {
+                // El borrador del servidor guarda archivos solo como metadatos (draftOnly) y la firma
+                // como texto marcador: nunca deben hidratarse como si el archivo ya estuviera cargado.
+                if (FILE_FIELD_KEYS.has(key) && !isUsableFileValue(val)) continue;
+
                 if (
                   val !== undefined &&
                   val !== null &&

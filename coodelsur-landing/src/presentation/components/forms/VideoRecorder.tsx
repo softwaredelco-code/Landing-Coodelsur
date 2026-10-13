@@ -268,6 +268,13 @@ export function VideoRecorder({
   };
 
   const displayError = error || localError;
+  const hasValue = Boolean(value?.preview);
+
+  // Un valor sin contenido (solo metadatos de un borrador) no es un video: se descarta para que
+  // el formulario y la pantalla coincidan y la persona pueda grabar o subir uno nuevo.
+  useEffect(() => {
+    if (value && !value.preview) onChange(undefined);
+  }, [value, onChange]);
   const isLive = mode === "preview" || mode === "recording";
 
   return (
@@ -302,7 +309,7 @@ export function VideoRecorder({
         onChange={handleFile}
       />
 
-      {!value && !isLive && (
+      {!hasValue && !isLive && (
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
@@ -323,7 +330,7 @@ export function VideoRecorder({
         </div>
       )}
 
-      {isLive && !value && (
+      {isLive && !hasValue && (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-black">
           <video
             ref={videoRef}
@@ -390,7 +397,7 @@ export function VideoRecorder({
         </div>
       )}
 
-      {value && (
+      {hasValue && (
         <div className="flex flex-wrap gap-3">
           <button
             type="button"

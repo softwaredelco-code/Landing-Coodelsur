@@ -170,6 +170,12 @@ export function CameraCapture({
   };
 
   const displayError = error || localError;
+  const hasValue = Boolean(value?.preview);
+
+  // Un valor sin contenido (solo metadatos de un borrador) no es una foto: se descarta.
+  useEffect(() => {
+    if (value && !value.preview) onChange(undefined);
+  }, [value, onChange]);
 
   return (
     <div
@@ -195,7 +201,7 @@ export function CameraCapture({
         onChange={handleFile}
       />
 
-      {!value && mode !== "camera" && (
+      {!hasValue && mode !== "camera" && (
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
@@ -216,7 +222,7 @@ export function CameraCapture({
         </div>
       )}
 
-      {mode === "camera" && !value && (
+      {mode === "camera" && !hasValue && (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-black">
           <video
             ref={videoRef}
@@ -265,7 +271,7 @@ export function CameraCapture({
         </div>
       )}
 
-      {value && (
+      {hasValue && (
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
