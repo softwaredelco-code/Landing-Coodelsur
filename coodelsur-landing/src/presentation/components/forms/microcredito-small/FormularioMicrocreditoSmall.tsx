@@ -38,7 +38,7 @@ import { deserializeUtm, resolveOrigenFromAttribution } from "@/presentation/tra
 import { getUtmFromCookie } from "@/presentation/tracking/TrackingProvider";
 import { trackEvent } from "@/presentation/tracking/analytics";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FormProvider, useForm, type FieldErrors, type Path } from "react-hook-form";
 
 const STEP_COMPONENTS = [
@@ -146,6 +146,8 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
   const [leadId, setLeadId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  /** Instante en que se avanzó de paso; protege contra toques dobles sobre el botón que cambia a 'Enviar'. */
+  const stepEnteredAtRef = useRef(0);
 
   const defaultValues = useMemo(() => {
     const base = {
@@ -285,6 +287,7 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
     setSubmitError(null);
     const nextStep = Math.min(step + 1, totalSteps - 1);
     setStep(nextStep);
+    stepEnteredAtRef.current = Date.now();
     trackEvent("form_step", {
       step_number: nextStep + 1,
       step_name: NANOCREDITO_STEPS[nextStep]?.id ?? "unknown",
@@ -568,7 +571,18 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
 
   return (
     <FormProvider {...methods}>
-      <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate className="flex flex-col gap-5">
+      <form
+        onSubmit={(event) => {
+          // Un submit justo después de entrar al último paso es un toque accidental, no un envío real.
+          if (step === totalSteps - 1 && Date.now() - stepEnteredAtRef.current < 1500) {
+            event.preventDefault();
+            return;
+          }
+          return handleSubmit(onSubmit, onInvalid)(event);
+        }}
+        noValidate
+        className="flex flex-col gap-5"
+      >
         <input type="hidden" {...methods.register("tipoCredito")} />
 
         {draftMessage && (
@@ -669,11 +683,11 @@ function FormularioMicrocreditoSmallInner({ config, initialMonto }: CreditoFormP
             </Button>
           )}
           {step < totalSteps - 1 ? (
-            <Button type="button" onClick={goNext} className="flex-1 md:flex-none">
+            <Button key="btn-continuar" type="button" onClick={goNext} className="flex-1 md:flex-none">
               Continuar
             </Button>
           ) : (
-            <Button type="submit" size="lg" className="flex-1 md:flex-none" loading={submitting}>
+            <Button key="btn-enviar" type="submit" size="lg" className="flex-1 md:flex-none" loading={submitting}>
               {submitting ? "Enviando…" : "Enviar solicitud"}
             </Button>
           )}
