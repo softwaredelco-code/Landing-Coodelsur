@@ -50,34 +50,85 @@ function ProgressCell({ value, paso }: { value: number | null; paso: string | nu
   );
 }
 
-async function downloadExcelExport(url: string, fallbackFilename: string) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (res.status === 401) {
-    return "unauthorized" as const;
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    let errorMsg = "No se pudo generar el Excel";
-    try {
-      const data = JSON.parse(text) as { error?: string };
-      if (data?.error) errorMsg = data.error;
-    } catch {
-      if (text && text.length < 150) errorMsg = text;
-    }
-    return errorMsg;
-  }
-
-  const disposition = res.headers.get("Content-Disposition") ?? "";
-  const match = disposition.match(/filename="([^"]+)"/);
-  const filename = match?.[1] ?? fallbackFilename;
-  const blob = await res.blob();
+function triggerBlobDownload(blob: Blob, filename: string) {
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
   anchor.download = filename;
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(objectUrl);
-  return null;
+  document.body.removeChild(anchor);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+}
+
+async function downloadExcelExport(url: string, fallbackFilename: string) {
+  // 1. Intentar exportación rápida vía JSON + construcción en cliente
+  // Esto previene al 100% el error 503 por timeout de LiteSpeed en cPanel
+  try {
+    const jsonUrl = url.includes("?") ? `${url}&format=json` : `${url}?format=json`;
+    const res = await fetch(jsonUrl, { cache: "no-store" });
+
+    if (res.status === 401) {
+      return "unauthorized" as const;
+    }
+
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.leads) && data.leads.length > 0) {
+        const { buildLeadsExcelBuffer } = await import("@/application/lead/export-leads-excel");
+        const filename = typeof data.filename === "string" && data.filename ? data.filename : fallbackFilename;
+        const excelBuffer = buildLeadsExcelBuffer(data.leads);
+        const blob = new Blob([excelBuffer as unknown as BlobPart], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        triggerBlobDownload(blob, filename);
+        return null;
+      }
+    }
+  } catch (clientErr) {
+    console.warn("[downloadExcelExport] Fallback a descarga binaria directa:", clientErr);
+  }
+
+  // 2. Fallback a descarga binaria directa con reintento ante 503
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (res.status === 401) {
+        return "unauthorized" as const;
+      }
+
+      if (res.status === 503 && attempt === 1) {
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        let errorMsg = "No se pudo generar el Excel";
+        try {
+          const data = JSON.parse(text) as { error?: string };
+          if (data?.error) errorMsg = data.error;
+        } catch {
+          if (text && text.length < 150 && !text.includes("<html")) errorMsg = text;
+        }
+        return errorMsg;
+      }
+
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? fallbackFilename;
+      const blob = await res.blob();
+      triggerBlobDownload(blob, filename);
+      return null;
+    } catch {
+      if (attempt === 2) {
+        return "Error de red al descargar el archivo Excel. Inténtalo de nuevo.";
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+
+  return "No se pudo descargar el archivo Excel. Inténtalo de nuevo.";
 }
 
 const PAGE_SIZE = 50;

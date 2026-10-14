@@ -72,10 +72,11 @@ fi
 
 echo ">> node_modules del build standalone OK (sin npm install en el servidor)."
 
-# Configurar .htaccess con redirección HTTPS 308 (preserva POST method/body) y aumentar límites
+# Configurar .htaccess con redirección HTTPS 308 (preserva POST method/body), LiteSpeed no-timeout y límites
 for ht_dir in "$APP_DIR" "$HOME/solicitar-credito.coodelsursas.com.co" "$HOME/public_html"; do
   if [[ -d "$ht_dir" ]]; then
-    if [[ ! -f "$ht_dir/.htaccess" ]] || ! grep -q "RewriteRule ^ https:" "$ht_dir/.htaccess"; then
+    touch "$ht_dir/.htaccess"
+    if ! grep -q "RewriteRule ^ https:" "$ht_dir/.htaccess"; then
       cat << 'EOF' >> "$ht_dir/.htaccess"
 
 # Coodelsur: Forzar HTTPS preservando POST (308) y aumentar buffer
@@ -87,6 +88,23 @@ for ht_dir in "$APP_DIR" "$HOME/solicitar-credito.coodelsursas.com.co" "$HOME/pu
 LimitRequestBody 20971520
 EOF
       echo ">> Reglas de HTTPS y LimitRequestBody agregadas en $ht_dir/.htaccess"
+    fi
+
+    if ! grep -q "noconntimeout" "$ht_dir/.htaccess"; then
+      cat << 'EOF' >> "$ht_dir/.htaccess"
+
+# Coodelsur: Prevenir timeouts 503 en LiteSpeed para exportaciones y peticiones pesadas
+<IfModule Litespeed>
+  RewriteEngine On
+  RewriteRule .* - [E=noconntimeout:1]
+  RewriteRule .* - [E=noabort:1]
+</IfModule>
+<IfModule mod_env.c>
+  SetEnv noabort 1
+  SetEnv noconntimeout 1
+</IfModule>
+EOF
+      echo ">> Reglas LiteSpeed noconntimeout agregadas en $ht_dir/.htaccess"
     fi
   fi
 done

@@ -625,6 +625,7 @@ const KNOWN_DATA_KEYS = new Set([
   "utmCampaign", "utmSource", "utmMedium", "utmTerm", "utmContent",
   "latitud", "longitud", "pais",
   "_progreso", "pasoActualFormulario", "draftLeadId", "id", "storage",
+  "fuente", "witmeLeadId",
 ]);
 
 /** Detecta cualquier campo adicional presente en los leads para agregarlo al final del Excel. */
@@ -676,7 +677,7 @@ function applyHeaderStyle(worksheet: XLSX.WorkSheet, columnCount: number) {
 }
 
 /** Construye el buffer `.xlsx` con todos los campos del formulario. */
-export function buildLeadsExcelBuffer(leads: LeadExportRecord[]): Buffer {
+export function buildLeadsExcelBuffer(leads: LeadExportRecord[]): Uint8Array {
   const extraColumns = collectExtraColumns(leads);
   const allColumns = [...BASE_COLUMNS, ...extraColumns];
 
@@ -704,7 +705,8 @@ export function buildLeadsExcelBuffer(leads: LeadExportRecord[]): Buffer {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Solicitudes Coodelsur");
 
-  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  const raw = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+  return new Uint8Array(raw);
 }
 
 export function buildExportFilename(scope: "selected" | "report"): string {

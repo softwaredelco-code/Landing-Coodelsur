@@ -7,12 +7,17 @@ import { fetchLeadsForExport } from "@/application/lead/fetch-leads-for-export";
 import type { LeadEstado } from "@prisma/client";
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 /**
- * Exporta solicitudes a Excel (.xlsx).
+ * Exporta solicitudes a Excel (.xlsx) o JSON para generación en cliente.
  *
  * Query params:
+ * - `format` — "json" para obtener payload estructurado rápido, omitir para .xlsx directo
  * - `ids` — UUIDs separados por coma (exportación de filas seleccionadas)
- * - `q`, `estado`, `tipoCredito` — mismos filtros del listado (informe general)
+ * - `q`, `estado`, `tipoCredito`, `origen` — filtros del listado (informe general)
  */
 export async function GET(request: Request) {
   if (!isAdminRequest(request)) {
@@ -21,6 +26,7 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
+    const format = searchParams.get("format")?.trim()?.toLowerCase();
     const idsParam = searchParams.get("ids")?.trim();
     const ids = idsParam
       ? idsParam
@@ -48,9 +54,18 @@ export async function GET(request: Request) {
       );
     }
 
-    const buffer = buildLeadsExcelBuffer(leads);
     const scope = ids?.length ? "selected" : "report";
     const filename = buildExportFilename(scope);
+
+    if (format === "json") {
+      return NextResponse.json({
+        leads,
+        filename,
+        total: leads.length,
+      });
+    }
+
+    const buffer = buildLeadsExcelBuffer(leads);
 
     return new Response(new Uint8Array(buffer), {
       status: 200,
