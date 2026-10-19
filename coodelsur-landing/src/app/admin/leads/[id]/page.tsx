@@ -26,6 +26,11 @@ export default function AdminLeadDetailPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
+  const [triggeringPostback, setTriggeringPostback] = useState(false);
+  const [postbackNotice, setPostbackNotice] = useState<{
+    type: "success" | "error" | "info";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -76,6 +81,55 @@ export default function AdminLeadDetailPage() {
     setSaving(false);
     if (res.ok) {
       setLead({ ...lead, estado });
+      if (estado === "desembolsado") {
+        setTimeout(() => {
+          fetch(`/api/admin/leads/${lead.id}`, { cache: "no-store" })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d?.lead) setLead(d.lead);
+            })
+            .catch(() => {});
+        }, 2000);
+      }
+    }
+  };
+
+  const handleTriggerPostback = async () => {
+    if (!lead) return;
+    setTriggeringPostback(true);
+    setPostbackNotice(null);
+    try {
+      const res = await fetch(`/api/admin/leads/${lead.id}/postback-witme`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Error al disparar postback");
+      }
+      setLead((prev) => (prev ? { ...prev, witmePostback: data.result } : prev));
+      if (data.result?.status === "success") {
+        setPostbackNotice({
+          type: "success",
+          text: `Postback enviado con éxito a Witme (HTTP ${data.result.httpStatus}).`,
+        });
+      } else if (data.result?.status === "pending_url") {
+        setPostbackNotice({
+          type: "info",
+          text: "Falta configurar la URL del postback en las variables de entorno del servidor.",
+        });
+      } else {
+        setPostbackNotice({
+          type: "error",
+          text: `Error de Witme: ${data.result?.error || data.result?.httpStatus || "Desconocido"}`,
+        });
+      }
+    } catch (err) {
+      setPostbackNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Error al conectar con el servidor.",
+      });
+    } finally {
+      setTriggeringPostback(false);
     }
   };
 
@@ -316,6 +370,112 @@ export default function AdminLeadDetailPage() {
               ]}
             />
           </section>
+
+          {Boolean(
+            lead.witmeLeadId ||
+              lead.origen === "witme" ||
+              lead.utmSource?.toLowerCase().includes("witme"),
+          ) && (
+            <section className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/60 to-purple-50/40 p-5 shadow-sm md:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white shadow-sm">
+                    W
+                  </span>
+                  <div>
+                    <h2 className="text-base font-bold text-indigo-950">Seguimiento Witme & Postback</h2>
+                    <p className="text-xs text-indigo-700">Monitoreo de conversiones por payout fijo</p>
+                  </div>
+                </div>
+                {lead.estado === "desembolsado" && lead.witmeLeadId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    loading={triggeringPostback}
+                    disabled={triggeringPostback}
+                    onClick={() => void handleTriggerPostback()}
+                    className="border-indigo-300 text-indigo-800 hover:bg-indigo-100/60 text-xs font-medium"
+                  >
+                    {lead.witmePostback?.status === "success" ? "Reenviar Postback" : "Disparar Postback"}
+                  </Button>
+                )}
+              </div>
+
+              {postbackNotice && (
+                <div
+                  className={`mt-3 rounded-lg p-3 text-xs font-medium ${
+                    postbackNotice.type === "success"
+                      ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                      : postbackNotice.type === "info"
+                        ? "bg-amber-100 text-amber-800 border border-amber-200"
+                        : "bg-rose-100 text-rose-800 border border-rose-200"
+                  }`}
+                >
+                  {postbackNotice.text}
+                </div>
+              )}
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg bg-white/90 p-3 border border-indigo-100 shadow-xs">
+                  <span className="block text-xs font-medium text-gray-500">ID Witme (witme_id)</span>
+                  <span className="mt-1 block font-mono text-xs font-semibold text-gray-900 break-all">
+                    {lead.witmeLeadId ?? "No disponible en payload"}
+                  </span>
+                </div>
+
+                <div className="rounded-lg bg-white/90 p-3 border border-indigo-100 shadow-xs">
+                  <span className="block text-xs font-medium text-gray-500">Producto postback</span>
+                  <span className="mt-1 block text-xs font-semibold text-indigo-900">
+                    {lead.tipoCredito.includes("small") || lead.tipoCredito.includes("nano")
+                      ? "Nanocrédito (microcredito_small)"
+                      : "Microcrédito (libranza / urbano)"}
+                  </span>
+                </div>
+
+                <div className="sm:col-span-2 rounded-lg bg-white/90 p-3 border border-indigo-100 shadow-xs">
+                  <span className="block text-xs font-medium text-gray-500">Estado del postback</span>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    {lead.witmePostback?.status === "success" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                        Enviado con éxito (HTTP {lead.witmePostback.httpStatus})
+                      </span>
+                    ) : lead.witmePostback?.status === "pending_url" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                        <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                        Pendiente configurar URL en servidor (.env)
+                      </span>
+                    ) : lead.witmePostback?.status === "error" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800">
+                        <span className="h-2 w-2 rounded-full bg-rose-500"></span>
+                        Error: {lead.witmePostback.error}
+                      </span>
+                    ) : lead.estado === "desembolsado" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+                        <span className="h-2 w-2 rounded-full bg-blue-500"></span>
+                        Listo para enviar postback
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                        Se enviará automáticamente cuando el estado sea &quot;Desembolsado&quot;
+                      </span>
+                    )}
+                    {lead.witmePostback?.triggeredAt && (
+                      <span className="text-[11px] text-gray-400">
+                        {new Date(lead.witmePostback.triggeredAt).toLocaleString("es-CO")} · {lead.witmePostback.attempts} intento/s
+                      </span>
+                    )}
+                  </div>
+                  {lead.witmePostback?.url && (
+                    <p className="mt-2 text-[11px] text-gray-500 break-all font-mono">
+                      URL llamada: {lead.witmePostback.url}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
 
           {lead.secciones.map((section) => (
             <section

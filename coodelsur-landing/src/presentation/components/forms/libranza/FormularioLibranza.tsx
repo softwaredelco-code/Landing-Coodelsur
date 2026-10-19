@@ -251,10 +251,16 @@ export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
       // El video real siempre viaja en el envío final: el borrador del servidor solo
       // conserva metadatos, por lo que nunca se debe sustituir por una referencia liviana.
       const cleanData: any = { ...data };
+      const storedWitmeId =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem("coodelsur_witme_id") || undefined
+          : undefined;
 
       const payload = {
         ...cleanData,
         utm,
+        witme_id: storedWitmeId,
+        witmeLeadId: storedWitmeId,
         draftLeadId: draftLeadId ?? undefined,
         geoCliente: data.geolocalizacion
           ? { lat: data.geolocalizacion.lat, lng: data.geolocalizacion.lng }

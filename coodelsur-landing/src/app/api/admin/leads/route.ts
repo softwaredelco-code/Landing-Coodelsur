@@ -9,6 +9,7 @@ import {
 } from "@/infrastructure/persistence/file-store";
 import { mapLeadListRow } from "@/domain/lead/lead-summary";
 import { parseMonthRange } from "@/application/lead/fetch-leads-for-export";
+import { triggerWitmePostbackForLead } from "@/application/tracking/witme-postback";
 import type { LeadEstado } from "@prisma/client";
 
 function requireAdmin(request: Request): boolean {
@@ -188,21 +189,42 @@ export async function PATCH(request: Request) {
   }
 
   try {
+    const previousLead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { estado: true },
+    });
+
     const lead = await prisma.lead.update({
       where: { id: leadId },
       data: { estado: leadEstado as any },
     });
     cachedEstadoCounts = null;
+
+    if (leadEstado === "desembolsado" && previousLead?.estado !== "desembolsado") {
+      void triggerWitmePostbackForLead(leadId).catch((err) => {
+        console.error(`[PATCH /api/admin/leads] Error en postback witme (${leadId}):`, err);
+      });
+    }
+
     return NextResponse.json({ success: true, lead, source: "database" });
   } catch (error) {
     if (isDbConnectionError(error) || getLeadFromFile(leadId)) {
+      const prevFileLead = getLeadFromFile(leadId);
       const lead = updateLeadEstadoInFile(leadId, leadEstado);
       if (!lead) {
         return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
       }
       cachedEstadoCounts = null;
+
+      if (leadEstado === "desembolsado" && prevFileLead?.estado !== "desembolsado") {
+        void triggerWitmePostbackForLead(leadId).catch((err) => {
+          console.error(`[PATCH /api/admin/leads] Error en postback witme file (${leadId}):`, err);
+        });
+      }
+
       return NextResponse.json({ success: true, lead, source: "file" });
     }
     throw error;
   }
 }
+

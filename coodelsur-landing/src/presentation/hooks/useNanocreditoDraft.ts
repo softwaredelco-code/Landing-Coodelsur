@@ -107,6 +107,16 @@ export function useNanocreditoDraft({
       sessionStorage.setItem("coodelsur_server_draft_id", urlDraftId);
     }
 
+    const urlWitmeId =
+      searchParams?.get("witme_id") ||
+      searchParams?.get("witmeId") ||
+      searchParams?.get("click_id") ||
+      searchParams?.get("id_externo");
+
+    if (urlWitmeId?.trim() && typeof window !== "undefined") {
+      sessionStorage.setItem("coodelsur_witme_id", urlWitmeId.trim());
+    }
+
     const urlValues: Partial<NanocreditoFormValues> = {};
     if (searchParams) {
       const nombre = searchParams.get("nombre") || searchParams.get("name");

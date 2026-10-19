@@ -15,6 +15,8 @@ import {
   extractProgresoFormulario,
 } from "@/domain/lead/lead-summary";
 
+import { extractWitmeId, type PostbackResult } from "@/application/tracking/witme-postback";
+
 export interface AdminLeadDomicilio {
   departamento: string | null;
   municipio: string | null;
@@ -58,6 +60,8 @@ export interface AdminLeadDetail {
   geoFormulario: AdminLeadGeoPoint | null;
   secciones: AdminLeadSection[];
   adjuntos: AdminAttachment[];
+  witmeLeadId: string | null;
+  witmePostback: PostbackResult | null;
 }
 
 interface LeadDetailSource {
@@ -189,6 +193,8 @@ export function mapLeadToAdminDetail(
     geoFormulario: extractGeoFormulario(datos),
     secciones,
     adjuntos: adjuntos ?? buildAdminAttachments(lead.id, datos),
+    witmeLeadId: extractWitmeId(datos),
+    witmePostback: (datos.witmePostback as PostbackResult) ?? null,
   };
 }
 
