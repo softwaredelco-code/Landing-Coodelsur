@@ -8,6 +8,7 @@ import {
   updateLeadEstadoInFile,
 } from "@/infrastructure/persistence/file-store";
 import { mapLeadListRow } from "@/domain/lead/lead-summary";
+import { parseMonthRange } from "@/application/lead/fetch-leads-for-export";
 import type { LeadEstado } from "@prisma/client";
 
 function requireAdmin(request: Request): boolean {
@@ -32,6 +33,8 @@ export async function GET(request: Request) {
   const tipo = searchParams.get("tipoCredito");
   const origen = searchParams.get("origen")?.trim();
   const q = searchParams.get("q")?.trim()?.toLowerCase();
+  const mes = searchParams.get("mes")?.trim() || null;
+  const fechaCreacionRange = parseMonthRange(mes);
 
   try {
     const estadoFilter = estado
@@ -44,12 +47,13 @@ export async function GET(request: Request) {
             : (estado as any)
       : undefined;
 
-    const hasFilters = Boolean(estadoFilter || tipo || origen || q);
+    const hasFilters = Boolean(estadoFilter || tipo || origen || q || fechaCreacionRange);
 
     const where = {
       ...(estadoFilter ? { estado: estadoFilter } : {}),
       ...(tipo ? { tipoCredito: tipo } : {}),
       ...(origen ? { origen } : {}),
+      ...(fechaCreacionRange ? { fechaCreacion: fechaCreacionRange } : {}),
       ...(q
         ? {
             OR: [
@@ -139,6 +143,12 @@ export async function GET(request: Request) {
     if (estado) leads = leads.filter((l) => l.estado === estado);
     if (tipo) leads = leads.filter((l) => l.tipoCredito === tipo);
     if (origen) leads = leads.filter((l) => l.origen === origen);
+    if (fechaCreacionRange) {
+      leads = leads.filter((l) => {
+        const d = new Date(l.fechaCreacion);
+        return d >= fechaCreacionRange.gte && d < fechaCreacionRange.lt;
+      });
+    }
     if (q) {
       leads = leads.filter(
         (l) =>

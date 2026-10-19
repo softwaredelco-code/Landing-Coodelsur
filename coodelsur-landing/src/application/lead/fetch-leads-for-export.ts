@@ -15,6 +15,24 @@ export interface FetchLeadsForExportOptions {
   tipoCredito?: string | null;
   origen?: string | null;
   q?: string | null;
+  mes?: string | null;
+}
+
+export function parseMonthRange(mes?: string | null): { gte: Date; lt: Date } | undefined {
+  if (!mes || !/^\d{4}-\d{2}$/.test(mes)) return undefined;
+  const [yearStr, monthStr] = mes.split("-");
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  if (month < 1 || month > 12) return undefined;
+
+  // Colombia timezone: UTC-5
+  // Inicio del mes en Colombia: año-mes-01 00:00:00 -> en UTC es +5 horas
+  const start = new Date(Date.UTC(year, month - 1, 1, 5, 0, 0, 0));
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const end = new Date(Date.UTC(nextYear, nextMonth - 1, 1, 5, 0, 0, 0));
+
+  return { gte: start, lt: end };
 }
 
 const EXPORT_SELECT = {
@@ -48,6 +66,7 @@ const EXPORT_SELECT = {
 
 function buildWhere(options: FetchLeadsForExportOptions) {
   const q = options.q?.trim()?.toLowerCase();
+  const fechaRange = parseMonthRange(options.mes);
   const estadoFilter = options.estado
     ? options.estado === "completo"
       ? { in: ["completo", "recibido"] as any }
@@ -63,6 +82,7 @@ function buildWhere(options: FetchLeadsForExportOptions) {
     ...(estadoFilter ? { estado: estadoFilter } : {}),
     ...(options.tipoCredito ? { tipoCredito: options.tipoCredito } : {}),
     ...(options.origen ? { origen: options.origen } : {}),
+    ...(fechaRange ? { fechaCreacion: fechaRange } : {}),
     ...(q
       ? {
           OR: [
@@ -95,6 +115,15 @@ function filterFileLeads(
   }
   if (options.origen) {
     filtered = filtered.filter((lead) => lead.origen === options.origen);
+  }
+  if (options.mes) {
+    const range = parseMonthRange(options.mes);
+    if (range) {
+      filtered = filtered.filter((lead) => {
+        const d = new Date(lead.fechaCreacion);
+        return d >= range.gte && d < range.lt;
+      });
+    }
   }
   if (q) {
     filtered = filtered.filter(

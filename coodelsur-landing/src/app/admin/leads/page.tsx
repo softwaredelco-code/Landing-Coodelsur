@@ -131,10 +131,36 @@ async function downloadExcelExport(url: string, fallbackFilename: string) {
   return "No se pudo descargar el archivo Excel. Inténtalo de nuevo.";
 }
 
+const MONTH_NAMES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+];
+
+function getRecentMonths(count = 14): Array<{ value: string; label: string }> {
+  const result: Array<{ value: string; label: string }> = [];
+  const now = new Date();
+  const colDate = new Date(now.getTime() - 5 * 3600 * 1000);
+  let year = colDate.getUTCFullYear();
+  let month = colDate.getUTCMonth(); // 0-11
+
+  for (let i = 0; i < count; i++) {
+    const val = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const label = `${MONTH_NAMES[month]} ${year}`;
+    result.push({ value: val, label });
+    month -= 1;
+    if (month < 0) {
+      month = 11;
+      year -= 1;
+    }
+  }
+  return result;
+}
+
 const PAGE_SIZE = 50;
 
 export default function AdminLeadsPage() {
   const router = useRouter();
+  const monthOptions = useMemo(() => getRecentMonths(14), []);
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -143,14 +169,23 @@ export default function AdminLeadsPage() {
   const [estado, setEstado] = useState("");
   const [origen, setOrigen] = useState("");
   const [appliedOrigen, setAppliedOrigen] = useState("");
+  const [mes, setMes] = useState("");
+  const [appliedMes, setAppliedMes] = useState("");
   const [estadoCounts, setEstadoCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedAllInScope, setSelectedAllInScope] = useState(false);
   const [exporting, setExporting] = useState<"selected" | "report" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const activeMonthLabel = useMemo(() => {
+    if (!appliedMes) return null;
+    const found = monthOptions.find((m) => m.value === appliedMes);
+    return found ? found.label : appliedMes;
+  }, [appliedMes, monthOptions]);
 
   const load = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -162,6 +197,7 @@ export default function AdminLeadsPage() {
     if (appliedQ) params.set("q", appliedQ);
     if (estado) params.set("estado", estado);
     if (appliedOrigen) params.set("origen", appliedOrigen);
+    if (appliedMes) params.set("mes", appliedMes);
     try {
       const res = await fetch(`/api/admin/leads?${params.toString()}`, { cache: "no-store" });
       if (res.status === 401) {
@@ -191,7 +227,7 @@ export default function AdminLeadsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [appliedQ, appliedOrigen, estado, page, router]);
+  }, [appliedQ, appliedOrigen, estado, appliedMes, page, router]);
 
   useEffect(() => {
     void load(true);
@@ -208,7 +244,25 @@ export default function AdminLeadsPage() {
     setPage(1);
     setAppliedQ(q.trim());
     setAppliedOrigen(origen);
+    setAppliedMes(mes);
+    setSelectedIds(new Set());
+    setSelectedAllInScope(false);
   };
+
+  const clearFilters = () => {
+    setQ("");
+    setAppliedQ("");
+    setEstado("");
+    setOrigen("");
+    setAppliedOrigen("");
+    setMes("");
+    setAppliedMes("");
+    setPage(1);
+    setSelectedIds(new Set());
+    setSelectedAllInScope(false);
+  };
+
+  const hasActiveFilters = Boolean(appliedQ || estado || appliedOrigen || appliedMes);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -232,14 +286,16 @@ export default function AdminLeadsPage() {
   );
 
   const toggleSelectAllVisible = () => {
-    if (allVisibleSelected) {
+    if (allVisibleSelected || selectedAllInScope) {
       setSelectedIds(new Set());
+      setSelectedAllInScope(false);
       return;
     }
     setSelectedIds(new Set(leads.map((lead) => lead.id)));
   };
 
   const toggleSelectOne = (id: string) => {
+    setSelectedAllInScope(false);
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -250,12 +306,13 @@ export default function AdminLeadsPage() {
 
   const buildExportUrl = (scope: "selected" | "report") => {
     const params = new URLSearchParams();
-    if (scope === "selected") {
+    if (scope === "selected" && !selectedAllInScope) {
       params.set("ids", Array.from(selectedIds).join(","));
     } else {
       if (appliedQ) params.set("q", appliedQ);
       if (estado) params.set("estado", estado);
       if (appliedOrigen) params.set("origen", appliedOrigen);
+      if (appliedMes) params.set("mes", appliedMes);
     }
     return `/api/admin/leads/export?${params.toString()}`;
   };
@@ -263,10 +320,13 @@ export default function AdminLeadsPage() {
   const handleExport = async (scope: "selected" | "report") => {
     setExportError(null);
     setExporting(scope);
+    const isFullScope = scope === "report" || selectedAllInScope;
     const fallback =
-      scope === "selected"
+      !isFullScope
         ? "solicitudes-coodelsur-seleccionadas.xlsx"
-        : "solicitudes-coodelsur-informe-general.xlsx";
+        : appliedMes
+          ? `solicitudes-coodelsur-mes-${appliedMes}.xlsx`
+          : "solicitudes-coodelsur-informe-completo.xlsx";
     const result = await downloadExcelExport(buildExportUrl(scope), fallback);
     setExporting(null);
 
@@ -285,7 +345,10 @@ export default function AdminLeadsPage() {
       subtitle="Gestiona, revisa y exporta las solicitudes recibidas."
     >
       <div className="mb-6 grid gap-4 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
-        <StatCard label="Total (filtro)" value={String(total)} />
+        <StatCard
+          label={activeMonthLabel ? `Total (${activeMonthLabel})` : "Total (filtro)"}
+          value={String(total)}
+        />
         <StatCard label="Completas" value={String(completasTotal)} tone="green" />
         <StatCard
           label="Por Contactar"
@@ -320,7 +383,31 @@ export default function AdminLeadsPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:border-coodel-primary focus:outline-none focus:ring-1 focus:ring-coodel-primary"
             />
           </div>
-          <div className="w-full lg:w-52">
+          <div className="w-full lg:w-48">
+            <label htmlFor="admin-mes" className="mb-1 block text-xs font-medium text-gray-500">
+              Mes / Período
+            </label>
+            <select
+              id="admin-mes"
+              value={mes}
+              onChange={(e) => {
+                setPage(1);
+                setMes(e.target.value);
+                setAppliedMes(e.target.value);
+                setSelectedIds(new Set());
+                setSelectedAllInScope(false);
+              }}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm"
+            >
+              <option value="">Todos los meses</option>
+              {monthOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="w-full lg:w-44">
             <label htmlFor="admin-estado" className="mb-1 block text-xs font-medium text-gray-500">
               Estado
             </label>
@@ -330,6 +417,8 @@ export default function AdminLeadsPage() {
               onChange={(e) => {
                 setPage(1);
                 setEstado(e.target.value);
+                setSelectedIds(new Set());
+                setSelectedAllInScope(false);
               }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm"
             >
@@ -344,7 +433,7 @@ export default function AdminLeadsPage() {
               <option value="incompleto">Incompleta</option>
             </select>
           </div>
-          <div className="w-full lg:w-52">
+          <div className="w-full lg:w-44">
             <label htmlFor="admin-origen" className="mb-1 block text-xs font-medium text-gray-500">
               Origen
             </label>
@@ -361,18 +450,30 @@ export default function AdminLeadsPage() {
               ))}
             </select>
           </div>
-          <Button type="button" onClick={applyFilters}>
-            Aplicar filtros
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" onClick={applyFilters}>
+              Aplicar filtros
+            </Button>
+            {hasActiveFilters && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={clearFilters}
+                title="Limpiar todos los filtros aplicados"
+              >
+                Limpiar
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-gray-500">
-          {total} solicitud(es) en total
-          {selectedIds.size > 0 && (
+          {total} solicitud(es) {activeMonthLabel ? `en ${activeMonthLabel}` : "en total"}
+          {(selectedAllInScope || selectedIds.size > 0) && (
             <span className="ml-2 font-medium text-coodel-primary">
-              · {selectedIds.size} seleccionada(s)
+              · {selectedAllInScope ? `${total} seleccionada(s)` : `${selectedIds.size} seleccionada(s)`}
             </span>
           )}
         </p>
@@ -392,18 +493,24 @@ export default function AdminLeadsPage() {
             type="button"
             variant="outline"
             loading={exporting === "selected"}
-            disabled={selectedIds.size === 0 || exporting !== null}
+            disabled={(!selectedAllInScope && selectedIds.size === 0) || exporting !== null}
             onClick={() => void handleExport("selected")}
+            title="Descargar en Excel solo las solicitudes marcadas"
           >
-            Exportar seleccionadas
+            {selectedAllInScope
+              ? `Exportar seleccionadas (${total})`
+              : `Exportar seleccionadas (${selectedIds.size})`}
           </Button>
           <Button
             type="button"
             loading={exporting === "report"}
             disabled={exporting !== null || total === 0}
             onClick={() => void handleExport("report")}
+            title="Descargar todas las solicitudes del listado o del mes filtrado"
           >
-            Exportar informe
+            {activeMonthLabel
+              ? `Exportar mes ${activeMonthLabel} (${total})`
+              : `Exportar todas (${total} solicitudes)`}
           </Button>
         </div>
       </div>
@@ -419,6 +526,37 @@ export default function AdminLeadsPage() {
 
       {!loading && !error && (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          {allVisibleSelected && total > leads.length && !selectedAllInScope && (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-center text-xs text-amber-900 flex flex-wrap items-center justify-center gap-2">
+              <span>
+                Has seleccionado las <strong>{leads.length}</strong> solicitudes de esta página.
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedAllInScope(true)}
+                className="font-bold underline text-coodel-primary hover:text-coodel-primary-light"
+              >
+                Seleccionar todas las {total} solicitudes en total {activeMonthLabel ? `de ${activeMonthLabel}` : ""}
+              </button>
+            </div>
+          )}
+          {selectedAllInScope && (
+            <div className="border-b border-green-200 bg-green-50 px-4 py-2.5 text-center text-xs text-green-900 flex flex-wrap items-center justify-center gap-2">
+              <span>
+                ✓ Están seleccionadas <strong>todas las {total} solicitudes</strong> {activeMonthLabel ? `de ${activeMonthLabel}` : "en total"}.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedAllInScope(false);
+                  setSelectedIds(new Set());
+                }}
+                className="font-bold underline text-red-600 hover:text-red-800 ml-2"
+              >
+                Desmarcar todas
+              </button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-gray-200 bg-coodel-surface text-xs uppercase tracking-wide text-gray-500">

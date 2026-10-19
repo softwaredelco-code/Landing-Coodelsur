@@ -38,6 +38,7 @@ export async function GET(request: Request) {
     const tipoCredito = searchParams.get("tipoCredito")?.trim() || null;
     const origen = searchParams.get("origen")?.trim() || null;
     const q = searchParams.get("q")?.trim() || null;
+    const mes = searchParams.get("mes")?.trim() || null;
 
     const leads = await fetchLeadsForExport({
       ids,
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
       tipoCredito,
       origen,
       q,
+      mes,
     });
 
     if (leads.length === 0) {
@@ -55,7 +57,7 @@ export async function GET(request: Request) {
     }
 
     const scope = ids?.length ? "selected" : "report";
-    const filename = buildExportFilename(scope);
+    const filename = buildExportFilename(scope, mes);
 
     if (format === "json") {
       return NextResponse.json({

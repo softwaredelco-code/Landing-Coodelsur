@@ -709,8 +709,13 @@ export function buildLeadsExcelBuffer(leads: LeadExportRecord[]): Uint8Array {
   return new Uint8Array(raw);
 }
 
-export function buildExportFilename(scope: "selected" | "report"): string {
+export function buildExportFilename(scope: "selected" | "report", mes?: string | null): string {
   const date = new Date().toISOString().slice(0, 10);
-  const suffix = scope === "selected" ? "seleccionadas" : "informe-general";
-  return `solicitudes-coodelsur-${suffix}-${date}.xlsx`;
+  if (scope === "selected") {
+    return `solicitudes-coodelsur-seleccionadas-${date}.xlsx`;
+  }
+  if (mes && /^\d{4}-\d{2}$/.test(mes)) {
+    return `solicitudes-coodelsur-mes-${mes}.xlsx`;
+  }
+  return `solicitudes-coodelsur-informe-completo-${date}.xlsx`;
 }
