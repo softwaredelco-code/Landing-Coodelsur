@@ -62,43 +62,75 @@ export function resolvePostbackProduct(tipoCredito: string): "nanocredito" | "mi
   return "microcredito";
 }
 
+const DEFAULT_POSTBACK_URL_NANO =
+  "https://go.servy.es/postback?cid=%7Bwitme_id%7D&payout=%7Bsum%7D&currency=USD&param1=COODELSUR_CO_API_NANO";
+const DEFAULT_POSTBACK_URL_MICRO =
+  "https://go.servy.es/postback?cid=%7Bwitme_id%7D&payout=%7Bsum%7D&currency=USD&param1=COODELSUR_CO_API_MICRO";
+
 /**
  * Obtiene la URL base configurada según el producto.
  */
-export function getPostbackBaseUrl(product: "nanocredito" | "microcredito"): string | null {
+export function getPostbackBaseUrl(product: "nanocredito" | "microcredito"): string {
   if (product === "nanocredito") {
     return (
       process.env.WITME_POSTBACK_URL_NANOCREDITO?.trim() ||
       process.env.WITME_POSTBACK_URL_SMALL?.trim() ||
-      null
+      DEFAULT_POSTBACK_URL_NANO
     );
   }
   return (
     process.env.WITME_POSTBACK_URL_MICROCREDITO?.trim() ||
     process.env.WITME_POSTBACK_URL_LIBRANZA?.trim() ||
-    null
+    DEFAULT_POSTBACK_URL_MICRO
   );
 }
 
 /**
- * Construye la URL final inyectando el parámetro `witme_id`.
+ * Obtiene el payout acordado en USD para enviar a Servy/Witme.
  */
-export function buildPostbackUrl(baseUrl: string, witmeId: string): string {
-  const cleanBase = baseUrl.trim();
-  if (cleanBase.includes("{witme_id}") || cleanBase.includes("{click_id}")) {
-    return cleanBase
-      .replace(/{witme_id}/gi, encodeURIComponent(witmeId))
-      .replace(/{click_id}/gi, encodeURIComponent(witmeId));
+export function getPostbackPayout(product: "nanocredito" | "microcredito"): string {
+  if (product === "nanocredito") {
+    return process.env.WITME_PAYOUT_NANOCREDITO?.trim() || "";
+  }
+  return process.env.WITME_PAYOUT_MICROCREDITO?.trim() || "";
+}
+
+/**
+ * Construye la URL final inyectando el parámetro `witme_id` (en cid) y el payout (en {sum}).
+ */
+export function buildPostbackUrl(
+  baseUrl: string,
+  witmeId: string,
+  payout?: string | null,
+): string {
+  let cleanBase = baseUrl.trim();
+
+  // Reemplazar placeholders de witme_id (tanto literales {witme_id} como URL-encoded %7Bwitme_id%7D)
+  cleanBase = cleanBase
+    .replace(/(?:\{witme_id\}|%7Bwitme_id%7D)/gi, encodeURIComponent(witmeId))
+    .replace(/(?:\{click_id\}|%7Bclick_id%7D)/gi, encodeURIComponent(witmeId))
+    .replace(/(?:\{cid\}|%7Bcid%7D)/gi, encodeURIComponent(witmeId));
+
+  // Reemplazar placeholder de payout / sum si viene en la URL
+  if (payout != null && payout !== "") {
+    cleanBase = cleanBase
+      .replace(/(?:\{sum\}|%7Bsum%7D)/gi, encodeURIComponent(payout))
+      .replace(/(?:\{payout\}|%7Bpayout%7D)/gi, encodeURIComponent(payout));
   }
 
-  try {
-    const url = new URL(cleanBase);
-    url.searchParams.set("witme_id", witmeId);
-    return url.toString();
-  } catch {
-    const sep = cleanBase.includes("?") ? "&" : "?";
-    return `${cleanBase}${sep}witme_id=${encodeURIComponent(witmeId)}`;
+  // Si no tenía placeholder y tampoco tiene parámetro cid ni witme_id, agregarlo
+  if (!cleanBase.includes("cid=") && !cleanBase.includes("witme_id=")) {
+    try {
+      const url = new URL(cleanBase);
+      url.searchParams.set("cid", witmeId);
+      return url.toString();
+    } catch {
+      const sep = cleanBase.includes("?") ? "&" : "?";
+      return `${cleanBase}${sep}cid=${encodeURIComponent(witmeId)}`;
+    }
   }
+
+  return cleanBase;
 }
 
 /**
@@ -283,7 +315,8 @@ export async function triggerWitmePostbackForLead(
     return pendingResult;
   }
 
-  const targetUrl = buildPostbackUrl(baseUrl, witmeId);
+  const payout = getPostbackPayout(product);
+  const targetUrl = buildPostbackUrl(baseUrl, witmeId, payout);
   const result = await executePostbackCall(targetUrl, witmeId, product);
 
   await persistPostbackResult(leadId, datos, result);
