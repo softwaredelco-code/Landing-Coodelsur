@@ -434,6 +434,20 @@ export default function AdminLeadDetailPage() {
                 </div>
 
                 <div className="sm:col-span-2 rounded-lg bg-white/90 p-3 border border-indigo-100 shadow-xs">
+                  <span className="block text-xs font-medium text-gray-500">Comisión Witme (Payout acordado)</span>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-emerald-800">
+                      {lead.witmePostback?.payout
+                        ? `$${lead.witmePostback.payout} USD · ${lead.witmePostback.tierLabel ?? ""}`
+                        : (lead.tipoCredito.includes("small") || lead.tipoCredito.includes("nano"))
+                          ? "Inicial: $1.5 USD · 1ra reincidencia: $1.0 USD · 2da: $0.5 USD"
+                          : "Inicial: $2.5 USD · 1ra reincidencia: $1.5 USD · 2da: $1.0 USD"}
+                    </span>
+                    <span className="text-[11px] text-gray-400">Calculado automáticamente por cédula</span>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2 rounded-lg bg-white/90 p-3 border border-indigo-100 shadow-xs">
                   <span className="block text-xs font-medium text-gray-500">Estado del postback</span>
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
                     {lead.witmePostback?.status === "success" ? (

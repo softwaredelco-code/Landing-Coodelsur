@@ -12,7 +12,10 @@
  */
 
 import { prisma } from "@/infrastructure/database/prisma";
-import { getLeadFromFile, updateLeadInFile } from "@/infrastructure/persistence/file-store";
+import { getLeadFromFile, listLeadsFromFile, updateLeadInFile } from "@/infrastructure/persistence/file-store";
+import { normalizeDocumentNumber } from "@/domain/identity/cedula";
+
+export type WitmeReincidenciaTier = "inicial" | "primera_reincidencia" | "segunda_reincidencia";
 
 export interface PostbackResult {
   success: boolean;
@@ -23,7 +26,85 @@ export interface PostbackResult {
   url?: string | null;
   product: "nanocredito" | "microcredito";
   witmeId: string;
+  payout?: string;
+  tier?: WitmeReincidenciaTier;
+  tierLabel?: string;
   triggeredAt: string;
+}
+
+export interface CalculatedPayout {
+  payout: string;
+  tier: WitmeReincidenciaTier;
+  tierLabel: string;
+  previousDisbursementsCount: number;
+}
+
+/**
+ * Calcula el payout exacto en USD según la tabla comercial de Witme:
+ *
+ * | Producto     | Lead inicial | Primera reincidencia | Segunda reincidencia |
+ * | Nanocrédito  | 1.5 USD      | 1.0 USD              | 0.5 USD              |
+ * | Microcrédito | 2.5 USD      | 1.5 USD              | 1.0 USD              |
+ */
+export async function calculateWitmePayout(
+  cedula: string,
+  tipoCredito: string,
+  currentLeadId?: string,
+): Promise<CalculatedPayout> {
+  const normalizedCedula = normalizeDocumentNumber(cedula) || cedula.trim();
+  const product = resolvePostbackProduct(tipoCredito);
+
+  // Si hay una variable de entorno fija para sobreescribir, se respeta
+  const envOverride =
+    product === "nanocredito"
+      ? process.env.WITME_PAYOUT_NANOCREDITO?.trim()
+      : process.env.WITME_PAYOUT_MICROCREDITO?.trim();
+
+  let previousDisbursementsCount = 0;
+  if (normalizedCedula) {
+    try {
+      previousDisbursementsCount = await prisma.lead.count({
+        where: {
+          cedula: normalizedCedula,
+          estado: "desembolsado",
+          ...(currentLeadId ? { id: { not: currentLeadId } } : {}),
+        },
+      });
+    } catch {
+      const fileLeads = listLeadsFromFile();
+      previousDisbursementsCount = fileLeads.filter(
+        (l) =>
+          normalizeDocumentNumber(l.cedula) === normalizedCedula &&
+          l.estado === "desembolsado" &&
+          (currentLeadId ? l.id !== currentLeadId : true),
+      ).length;
+    }
+  }
+
+  let tier: WitmeReincidenciaTier = "inicial";
+  let tierLabel = "Lead inicial (1er crédito)";
+  let payout = product === "nanocredito" ? "1.5" : "2.5";
+
+  if (previousDisbursementsCount === 1) {
+    tier = "primera_reincidencia";
+    tierLabel = "Primera reincidencia (2do crédito)";
+    payout = product === "nanocredito" ? "1.0" : "1.5";
+  } else if (previousDisbursementsCount >= 2) {
+    tier = "segunda_reincidencia";
+    tierLabel = "Segunda reincidencia (3er crédito o más)";
+    payout = product === "nanocredito" ? "0.5" : "1.0";
+  }
+
+  if (envOverride) {
+    payout = envOverride;
+  }
+
+  return {
+    payout,
+    tier,
+    tierLabel,
+    previousDisbursementsCount,
+  };
 }
 
 /**
@@ -142,6 +223,7 @@ export async function executePostbackCall(
   targetUrl: string,
   witmeId: string,
   product: "nanocredito" | "microcredito",
+  calculated?: CalculatedPayout,
 ): Promise<PostbackResult> {
   const maxAttempts = 3;
   let attempt = 0;
@@ -156,7 +238,7 @@ export async function executePostbackCall(
 
     try {
       console.log(
-        `[WitmePostback] Intento ${attempt}/${maxAttempts} (${product}) -> ${targetUrl}`,
+        `[WitmePostback] Intento ${attempt}/${maxAttempts} (${product}, ${calculated?.tierLabel ?? "tier desconocido"} -> $${calculated?.payout ?? "—"} USD) -> ${targetUrl}`,
       );
 
       const res = await fetch(targetUrl, {
@@ -172,7 +254,7 @@ export async function executePostbackCall(
 
       if (res.ok) {
         console.log(
-          `[WitmePostback] Éxito HTTP ${res.status} en intento ${attempt} para ${witmeId}`,
+          `[WitmePostback] Éxito HTTP ${res.status} en intento ${attempt} para ${witmeId} (payout $${calculated?.payout ?? "—"} USD)`,
         );
         return {
           success: true,
@@ -182,6 +264,9 @@ export async function executePostbackCall(
           url: targetUrl,
           product,
           witmeId,
+          payout: calculated?.payout,
+          tier: calculated?.tier,
+          tierLabel: calculated?.tierLabel,
           triggeredAt: now,
         };
       }
@@ -222,6 +307,9 @@ export async function executePostbackCall(
     url: targetUrl,
     product,
     witmeId,
+    payout: calculated?.payout,
+    tier: calculated?.tier,
+    tierLabel: calculated?.tierLabel,
     triggeredAt: now,
   };
 }
@@ -239,6 +327,7 @@ export async function triggerWitmePostbackForLead(
   // 1. Cargar lead
   let lead: {
     id: string;
+    cedula: string;
     tipoCredito: string;
     estado: string;
     origen: string;
@@ -251,6 +340,7 @@ export async function triggerWitmePostbackForLead(
       where: { id: leadId },
       select: {
         id: true,
+        cedula: true,
         tipoCredito: true,
         estado: true,
         origen: true,
@@ -263,6 +353,7 @@ export async function triggerWitmePostbackForLead(
     if (fileLead) {
       lead = {
         id: fileLead.id,
+        cedula: fileLead.cedula,
         tipoCredito: fileLead.tipoCredito,
         estado: fileLead.estado,
         origen: fileLead.origen,
@@ -286,6 +377,7 @@ export async function triggerWitmePostbackForLead(
   }
 
   const product = resolvePostbackProduct(lead.tipoCredito);
+  const calculated = await calculateWitmePayout(lead.cedula, lead.tipoCredito, lead.id);
 
   // Evitar duplicar conversión si ya se envió con éxito previamente (a menos que se fuerce)
   const previousPostback = datos.witmePostback as PostbackResult | undefined;
@@ -308,6 +400,9 @@ export async function triggerWitmePostbackForLead(
       url: null,
       product,
       witmeId,
+      payout: calculated.payout,
+      tier: calculated.tier,
+      tierLabel: calculated.tierLabel,
       triggeredAt: now,
     };
 
@@ -315,9 +410,8 @@ export async function triggerWitmePostbackForLead(
     return pendingResult;
   }
 
-  const payout = getPostbackPayout(product);
-  const targetUrl = buildPostbackUrl(baseUrl, witmeId, payout);
-  const result = await executePostbackCall(targetUrl, witmeId, product);
+  const targetUrl = buildPostbackUrl(baseUrl, witmeId, calculated.payout);
+  const result = await executePostbackCall(targetUrl, witmeId, product, calculated);
 
   await persistPostbackResult(leadId, datos, result);
   return result;
