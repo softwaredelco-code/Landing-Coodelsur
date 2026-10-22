@@ -17,24 +17,21 @@ interface CurrentUser {
 
 const ROLE_CONFIG: Record<
   RolUsuario,
-  { label: string; badge: string; icon: string; description: string }
+  { label: string; badge: string; description: string }
 > = {
   sistemas: {
     label: "Sistemas",
-    badge: "bg-purple-100 text-purple-800 border-purple-200",
-    icon: "🛡️",
+    badge: "bg-purple-50 text-purple-800 border-purple-200",
     description: "Acceso total y control de usuarios",
   },
   administrador: {
     label: "Administrador",
-    badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
-    icon: "⚡",
+    badge: "bg-emerald-50 text-emerald-800 border-emerald-200",
     description: "Gestión de solicitudes y configuración de tasas",
   },
   asesor: {
     label: "Asesor",
-    badge: "bg-slate-100 text-slate-700 border-slate-200",
-    icon: "👤",
+    badge: "bg-slate-50 text-slate-700 border-slate-200",
     description: "Visualización y gestión operativa de solicitudes",
   },
 };
@@ -305,8 +302,15 @@ export default function UsuariosPage() {
     return (
       <AdminShell title="Acceso Restringido">
         <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-2xl">
-            🔒
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+              />
+            </svg>
           </div>
           <h2 className="mt-4 text-xl font-bold text-coodel-dark">Control de Usuarios Restringido</h2>
           <p className="mt-2 text-sm text-gray-600">
@@ -340,7 +344,9 @@ export default function UsuariosPage() {
           }}
           className="flex items-center gap-2"
         >
-          <span>➕</span>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
           <span>Nuevo Usuario</span>
         </Button>
       }
@@ -348,8 +354,14 @@ export default function UsuariosPage() {
       {/* Toast de éxito */}
       {successMessage && (
         <div className="mb-6 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-sm animate-fade-in">
-          <div className="flex items-center gap-2">
-            <span>✅</span>
+          <div className="flex items-center gap-2.5">
+            <svg className="h-5 w-5 shrink-0 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clipRule="evenodd"
+              />
+            </svg>
             <span>{successMessage}</span>
           </div>
           <button
@@ -357,7 +369,7 @@ export default function UsuariosPage() {
             onClick={() => setSuccessMessage(null)}
             className="text-xs text-emerald-600 hover:text-emerald-900"
           >
-            ✕
+            Cerrar
           </button>
         </div>
       )}
@@ -414,7 +426,7 @@ export default function UsuariosPage() {
                 onClick={() => setSearch("")}
                 className="absolute right-2.5 top-2.5 text-xs text-gray-400 hover:text-gray-600"
               >
-                ✕
+                Limpiar
               </button>
             )}
           </div>
@@ -471,7 +483,6 @@ export default function UsuariosPage() {
                   const roleConfig = ROLE_CONFIG[u.rol] || {
                     label: u.rol,
                     badge: "bg-gray-100 text-gray-700 border-gray-200",
-                    icon: "👤",
                     description: "",
                   };
                   const isCurrent = currentUser?.id === u.id;
@@ -493,7 +504,7 @@ export default function UsuariosPage() {
                             <div className="flex items-center gap-1.5 font-semibold text-coodel-dark">
                               <span>@{u.usuario}</span>
                               {isCurrent && (
-                                <span className="rounded bg-blue-100 px-1.5 py-0.2 text-[10px] font-bold text-blue-700">
+                                <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
                                   Tú
                                 </span>
                               )}
@@ -514,10 +525,9 @@ export default function UsuariosPage() {
                       <td className="px-6 py-4">
                         <span
                           title={roleConfig.description}
-                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold ${roleConfig.badge}`}
+                          className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold ${roleConfig.badge}`}
                         >
-                          <span>{roleConfig.icon}</span>
-                          <span>{roleConfig.label}</span>
+                          {roleConfig.label}
                         </span>
                       </td>
 
@@ -559,17 +569,17 @@ export default function UsuariosPage() {
                           <button
                             type="button"
                             onClick={() => openEditModal(u)}
-                            className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-coodel-primary hover:bg-gray-50"
+                            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-coodel-primary hover:bg-gray-50"
                             title="Editar usuario"
                           >
-                            ✏️ Editar
+                            Editar
                           </button>
 
                           <button
                             type="button"
                             disabled={isCurrent && u.activo}
                             onClick={() => void handleToggleActivo(u)}
-                            className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
                               u.activo
                                 ? "border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-40"
                                 : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
@@ -592,14 +602,22 @@ export default function UsuariosPage() {
                               setDeleteError(null);
                               setDeleteModalUser(u);
                             }}
-                            className="rounded-lg border border-red-200 bg-white px-2 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-white"
+                            className="rounded-lg border border-red-200 bg-white p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-white"
                             title={
                               isCurrent
                                 ? "No puedes eliminarte a ti mismo"
                                 : "Eliminar usuario permanentemente"
                             }
+                            aria-label="Eliminar usuario"
                           >
-                            🗑️
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
                           </button>
                         </div>
                       </td>
@@ -628,7 +646,7 @@ export default function UsuariosPage() {
                 onClick={() => setCreateModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                ✕
+                Cerrar
               </button>
             </div>
 
@@ -733,7 +751,7 @@ export default function UsuariosPage() {
                 onClick={() => setEditModalUser(null)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                ✕
+                Cerrar
               </button>
             </div>
 
@@ -816,13 +834,22 @@ export default function UsuariosPage() {
       {deleteModalUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl md:p-8">
-            <div className="flex items-center gap-3 text-red-600">
-              <span className="text-2xl">⚠️</span>
-              <h3 className="text-lg font-bold text-gray-900">¿Eliminar usuario?</h3>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Confirmar eliminación</h3>
             </div>
 
             <p className="mt-3 text-sm text-gray-600">
-              ¿Estás seguro de que deseas eliminar permanentemente al usuario{" "}
+              ¿Estás seguro de que deseas eliminar al usuario{" "}
               <strong className="text-gray-900">@{deleteModalUser.usuario}</strong> ({deleteModalUser.nombre})?
               Esta acción no se puede deshacer.
             </p>
@@ -848,7 +875,7 @@ export default function UsuariosPage() {
                 onClick={() => void handleDeleteConfirm()}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
               >
-                {deleteLoading ? "Eliminando..." : "Sí, eliminar definitivamente"}
+                {deleteLoading ? "Eliminando..." : "Eliminar usuario"}
               </button>
             </div>
           </div>
