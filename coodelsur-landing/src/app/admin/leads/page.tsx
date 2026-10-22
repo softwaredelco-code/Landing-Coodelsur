@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminShell } from "@/presentation/components/admin/AdminShell";
+import { ResumenInformeModal } from "@/presentation/components/admin/ResumenInformeModal";
 import { StatusBadge } from "@/presentation/components/admin/StatusBadge";
 import { Button } from "@/presentation/components/ui/Button";
 import { formatLeadOrigen, LEAD_ORIGEN_FILTER_OPTIONS } from "@/domain/lead/lead-origin";
@@ -29,6 +30,11 @@ interface LeadRow {
 
 const TIPO_CREDITO_LABELS: Record<string, string> = {
   microcredito_small: "Microcrédito Small",
+  microcredito_urbano: "Microcrédito Urbano",
+  microcredito_rural: "Microcrédito Rural",
+  libranza: "Crédito Libranza",
+  consumo: "Crédito Consumo",
+  comercial: "Crédito Comercial",
 };
 
 function ProgressCell({ value, paso }: { value: number | null; paso: string | null }) {
@@ -180,6 +186,7 @@ export default function AdminLeadsPage() {
   const [selectedAllInScope, setSelectedAllInScope] = useState(false);
   const [exporting, setExporting] = useState<"selected" | "report" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [isResumenModalOpen, setIsResumenModalOpen] = useState(false);
 
   const activeMonthLabel = useMemo(() => {
     if (!appliedMes) return null;
@@ -525,6 +532,29 @@ export default function AdminLeadsPage() {
               ? `Exportar mes ${activeMonthLabel} (${total})`
               : `Exportar todas (${total} solicitudes)`}
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsResumenModalOpen(true)}
+            title="Descargar informe de estados por producto en formato oficial"
+            className="flex items-center gap-1.5 border-[#708238] text-[#708238] hover:bg-[#708238] hover:text-white"
+          >
+            <svg
+              className="h-3.5 w-3.5 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <span>Informe por Estado</span>
+          </Button>
         </div>
       </div>
 
@@ -754,6 +784,15 @@ export default function AdminLeadsPage() {
           )}
         </div>
       )}
+
+      <ResumenInformeModal
+        isOpen={isResumenModalOpen}
+        onClose={() => setIsResumenModalOpen(false)}
+        initialTipoCredito="microcredito_small"
+        initialOrigen={appliedOrigen}
+        initialMes={appliedMes}
+        monthOptions={monthOptions}
+      />
     </AdminShell>
   );
 }
