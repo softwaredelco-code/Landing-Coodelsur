@@ -2,41 +2,61 @@ import { NextResponse } from "next/server";
 import {
   buildAdminCookie,
   clearAdminCookie,
-  isValidAdminToken,
-  readCookie,
-  ADMIN_COOKIE,
-  signAdminToken,
+  signSessionToken,
 } from "@/infrastructure/auth/auth";
+import { getAdminSession } from "@/infrastructure/auth/require-admin";
+import { authenticateUsuario } from "@/application/usuario/usuario-service";
 
 export async function POST(request: Request) {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) {
-    return NextResponse.json({ error: "Admin no configurado" }, { status: 503 });
-  }
+  try {
+    const body = (await request.json().catch(() => ({}))) as {
+      usuario?: string;
+      password?: string;
+      action?: string;
+    };
 
-  const body = (await request.json().catch(() => ({}))) as { password?: string; action?: string };
+    if (body.action === "logout") {
+      const res = NextResponse.json({ success: true });
+      res.headers.set("Set-Cookie", clearAdminCookie());
+      return res;
+    }
 
-  if (body.action === "logout") {
-    const res = NextResponse.json({ success: true });
-    res.headers.set("Set-Cookie", clearAdminCookie());
+    let sessionUser;
+
+    if (body.usuario && body.password) {
+      sessionUser = await authenticateUsuario({
+        usuario: body.usuario,
+        password: body.password,
+      });
+    } else if (body.password && process.env.ADMIN_PASSWORD && body.password === process.env.ADMIN_PASSWORD) {
+      // Fallback legado si se envía solo la contraseña maestra de entorno
+      sessionUser = {
+        id: "legacy-admin",
+        usuario: "sistemas",
+        nombre: "Administrador de Sistemas",
+        rol: "sistemas" as const,
+      };
+    } else {
+      return NextResponse.json(
+        { error: "Debe ingresar el usuario y la contraseña" },
+        { status: 400 },
+      );
+    }
+
+    const token = signSessionToken(sessionUser);
+    const res = NextResponse.json({ success: true, user: sessionUser });
+    res.headers.set("Set-Cookie", buildAdminCookie(token));
     return res;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Error de autenticación";
+    return NextResponse.json({ error: message }, { status: 401 });
   }
-
-  if (!body.password || body.password !== password) {
-    return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
-  }
-
-  const token = signAdminToken(password);
-  const res = NextResponse.json({ success: true });
-  res.headers.set("Set-Cookie", buildAdminCookie(token));
-  return res;
 }
 
 export async function GET(request: Request) {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) {
-    return NextResponse.json({ authenticated: false });
+  const session = getAdminSession(request);
+  if (!session) {
+    return NextResponse.json({ authenticated: false, user: null });
   }
-  const token = readCookie(request.headers.get("cookie"), ADMIN_COOKIE);
-  return NextResponse.json({ authenticated: isValidAdminToken(token, password) });
+  return NextResponse.json({ authenticated: true, user: session });
 }

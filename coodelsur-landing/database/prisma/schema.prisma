@@ -77,3 +77,27 @@ model CreditoParametros {
   activo                  Boolean  @default(true)
   fechaActualizacion      DateTime @updatedAt
 }
+
+enum RolUsuario {
+  sistemas
+  administrador
+  asesor
+}
+
+/// Usuarios del panel administrativo con control de acceso por roles.
+model Usuario {
+  id                 String      @id @default(uuid())
+  usuario            String      @unique
+  nombre             String
+  passwordHash       String
+  rol                RolUsuario  @default(asesor)
+  activo             Boolean     @default(true)
+  ultimoAcceso       DateTime?
+  fechaCreacion      DateTime    @default(now())
+  fechaActualizacion DateTime    @updatedAt
+
+  @@index([usuario])
+  @@index([rol])
+  @@index([activo])
+}
+

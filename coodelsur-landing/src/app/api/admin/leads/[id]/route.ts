@@ -1,18 +1,13 @@
 import { loadLeadForAdminDetail } from "@/application/lead/load-admin-lead-detail";
 import { deleteLead } from "@/application/lead/delete-lead";
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/infrastructure/auth/auth";
+import { isAdminRequest } from "@/infrastructure/auth/require-admin";
 
 export async function GET(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-  const token = readCookie(request.headers.get("cookie"), ADMIN_COOKIE);
-  if (!isValidAdminToken(token, password)) {
+  if (!isAdminRequest(request)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
@@ -35,12 +30,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-  const token = readCookie(request.headers.get("cookie"), ADMIN_COOKIE);
-  if (!isValidAdminToken(token, password)) {
+  if (!isAdminRequest(request)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 

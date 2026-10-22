@@ -1,6 +1,6 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/infrastructure/auth/auth";
+import { isAdminRequest } from "@/infrastructure/auth/require-admin";
 import {
   getLeadFromFile,
   isDbConnectionError,
@@ -12,18 +12,11 @@ import { parseMonthRange } from "@/application/lead/fetch-leads-for-export";
 import { triggerWitmePostbackForLead } from "@/application/tracking/witme-postback";
 import type { LeadEstado } from "@prisma/client";
 
-function requireAdmin(request: Request): boolean {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) return false;
-  const token = readCookie(request.headers.get("cookie"), ADMIN_COOKIE);
-  return isValidAdminToken(token, password);
-}
-
 let cachedEstadoCounts: { counts: Record<string, number>; timestamp: number } | null = null;
 const CACHE_TTL_MS = 20_000;
 
 export async function GET(request: Request) {
-  if (!requireAdmin(request)) {
+  if (!isAdminRequest(request)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
@@ -176,7 +169,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!requireAdmin(request)) {
+  if (!isAdminRequest(request)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 

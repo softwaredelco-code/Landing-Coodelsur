@@ -1,13 +1,6 @@
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/infrastructure/auth/auth";
+import { isAdminRequest } from "@/infrastructure/auth/require-admin";
 import { triggerWitmePostbackForLead } from "@/application/tracking/witme-postback";
-
-function requireAdmin(request: Request): boolean {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) return false;
-  const token = readCookie(request.headers.get("cookie"), ADMIN_COOKIE);
-  return isValidAdminToken(token, password);
-}
 
 export const runtime = "nodejs";
 
@@ -15,7 +8,7 @@ export async function POST(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  if (!requireAdmin(request)) {
+  if (!isAdminRequest(request)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 

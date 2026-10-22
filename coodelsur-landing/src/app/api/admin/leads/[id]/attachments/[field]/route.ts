@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, isValidAdminToken, readCookie } from "@/infrastructure/auth/auth";
+import { isAdminRequest } from "@/infrastructure/auth/require-admin";
 import {
   isLeadAttachmentField,
   loadAttachmentBytes,
@@ -10,18 +10,11 @@ import { downloadStorageObject } from "@/infrastructure/storage/upload";
 
 export const runtime = "nodejs";
 
-function requireAdmin(request: Request): boolean {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) return false;
-  const token = readCookie(request.headers.get("cookie"), ADMIN_COOKIE);
-  return isValidAdminToken(token, password);
-}
-
 export async function GET(
   request: Request,
   { params }: { params: { id: string; field: string } },
 ) {
-  if (!requireAdmin(request)) {
+  if (!isAdminRequest(request)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
