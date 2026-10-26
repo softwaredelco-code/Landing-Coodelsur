@@ -236,9 +236,15 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
     const dir = dirParts.length ? dirParts.join(", ") : "No reportada";
     const banco = datos.entidadBancaria || datos.banco || "No reportado";
     const cuenta = `${banco} - ${datos.tipoCuenta || "Ahorros"} ${datos.numeroCuenta || ""}`.trim();
+    const codeudorInfo =
+      datos.tieneCodeudor === "si"
+        ? ` | Codeudor: ${datos.codeudorNombre || "Sin nombre"} (CC ${datos.codeudorCedula || "-"}, Tel ${datos.codeudorTelefono || "-"})`
+        : datos.moraVigente === "si"
+          ? " | Sin codeudor"
+          : "";
     const mora =
       datos.moraVigente === "si"
-        ? `Sí (${datos.moraEntidad || "Entidad"} $${datos.moraValor || 0})`
+        ? `Sí (${datos.moraEntidad || "Entidad"} $${datos.moraValor || 0})${codeudorInfo}`
         : "No registra";
     const refFamiliar =
       datos.referenciaFamiliarNombre && datos.referenciaFamiliarTelefono

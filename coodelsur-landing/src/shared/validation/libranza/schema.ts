@@ -182,6 +182,22 @@ const libranzaBaseSchema = z.object({
     z.string().trim().optional(),
   ),
   moraValor: optionalNumber,
+  tieneCodeudor: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  codeudorNombre: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  codeudorCedula: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  codeudorTelefono: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
 
   /* ── 5. Información laboral ──────────────────────────────── */
   actividadEconomica: requiredText("Actividad económica"),
@@ -283,6 +299,32 @@ export function collectCrossFieldErrors(data: LibranzaFormValues): StepFieldErro
     const valMora = Number(data.moraValor);
     if (data.moraValor == null || Number.isNaN(valMora) || valMora <= 0) {
       errors.push({ path: "moraValor", message: "Indica el monto aproximado de la mora" });
+    }
+    if (!data.tieneCodeudor?.trim()) {
+      errors.push({ path: "tieneCodeudor", message: "Indica si cuentas con un codeudor sin reporte" });
+    } else if (data.tieneCodeudor === "si") {
+      const nom = (data.codeudorNombre ?? "").trim();
+      if (!nom) {
+        errors.push({ path: "codeudorNombre", message: "Ingresa el nombre del codeudor" });
+      } else if (nom.length < 3) {
+        errors.push({ path: "codeudorNombre", message: "Ingresa el nombre completo del codeudor" });
+      }
+
+      const ced = (data.codeudorCedula ?? "").replace(/\D/g, "");
+      if (!ced) {
+        errors.push({ path: "codeudorCedula", message: "Ingresa la cédula del codeudor" });
+      } else if (ced.length < 5 || ced.length > 12) {
+        errors.push({ path: "codeudorCedula", message: "Cédula del codeudor debe tener entre 5 y 12 dígitos" });
+      } else if (data.cedula && ced === data.cedula.replace(/\D/g, "")) {
+        errors.push({ path: "codeudorCedula", message: "El codeudor no puede ser el mismo solicitante" });
+      }
+
+      const tel = (data.codeudorTelefono ?? "").replace(/\D/g, "");
+      if (!tel) {
+        errors.push({ path: "codeudorTelefono", message: "Ingresa el celular del codeudor" });
+      } else if (tel.length !== 10 || !tel.startsWith("3")) {
+        errors.push({ path: "codeudorTelefono", message: "Celular debe tener 10 dígitos y comenzar por 3" });
+      }
     }
   }
 
@@ -394,7 +436,16 @@ export const LIBRANZA_STEPS = [
     id: "centralesRiesgo",
     title: "Centrales de riesgo",
     description: "Información sobre tu historial crediticio.",
-    fields: ["moraVigente", "moraEntidad", "moraTiempo", "moraValor"],
+    fields: [
+      "moraVigente",
+      "moraEntidad",
+      "moraTiempo",
+      "moraValor",
+      "tieneCodeudor",
+      "codeudorNombre",
+      "codeudorCedula",
+      "codeudorTelefono",
+    ],
   },
   {
     id: "laboral",
@@ -515,6 +566,10 @@ export const libranzaDefaultValues: Partial<LibranzaFormValues> = {
   moraEntidad: "",
   moraTiempo: "",
   moraValor: undefined,
+  tieneCodeudor: "",
+  codeudorNombre: "",
+  codeudorCedula: "",
+  codeudorTelefono: "",
 
   actividadEconomica: "",
   empresaLaboral: "",

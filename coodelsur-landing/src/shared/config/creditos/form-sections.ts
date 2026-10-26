@@ -101,6 +101,27 @@ export const formSectionsNanocredito: FormSectionConfig[] = [
         label: "Monto de la mora",
         type: "number",
       },
+      {
+        name: "tieneCodeudor",
+        label: "¿Cuenta con un codeudor que no esté reportado?",
+        type: "select",
+        options: SI_NO,
+      },
+      {
+        name: "codeudorNombre",
+        label: "Nombre del codeudor",
+        type: "text",
+      },
+      {
+        name: "codeudorCedula",
+        label: "Cédula del codeudor",
+        type: "text",
+      },
+      {
+        name: "codeudorTelefono",
+        label: "Teléfono del codeudor",
+        type: "tel",
+      },
       { name: "ingresosMensuales", label: "Ingresos mensuales", type: "number", required: true },
       {
         name: "origenOtrosIngresos",

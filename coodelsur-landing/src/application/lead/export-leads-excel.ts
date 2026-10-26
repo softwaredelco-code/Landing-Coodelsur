@@ -447,6 +447,26 @@ const BASE_COLUMNS: ExportColumn[] = [
       return v != null ? formatMoney(v) : "";
     },
   },
+  {
+    header: "¿Tiene Codeudor no Reportado?",
+    width: 20,
+    value: (l) => readOption(datosOf(l), "tieneCodeudor", SI_NO_LABELS),
+  },
+  {
+    header: "Nombre Codeudor",
+    width: 28,
+    value: (l) => readString(datosOf(l), "codeudorNombre"),
+  },
+  {
+    header: "Cédula Codeudor",
+    width: 18,
+    value: (l) => readString(datosOf(l), "codeudorCedula"),
+  },
+  {
+    header: "Teléfono Codeudor",
+    width: 18,
+    value: (l) => readString(datosOf(l), "codeudorTelefono"),
+  },
 
   // 5. Información financiera
   {
@@ -607,6 +627,7 @@ const KNOWN_DATA_KEYS = new Set([
   "diaPagoCuota", "fechaPagoOportunoModo", "cuotaCapitalInteres", "cuotaFianzaMensual",
   "cuotaVidaDeudoresMensual", "valorCreditoFinanciado", "estudioCredito", "moraVigente",
   "moraEntidad", "moraTiempo", "moraValor",
+  "tieneCodeudor", "codeudorNombre", "codeudorCedula", "codeudorTelefono",
   "ingresosMensuales", "origenOtrosIngresos", "origenOtrosIngresosOtro", "otrosIngresos",
   "egresosMensuales", "activosTotales", "pasivosTotales",
   "ocupacion", "empresa", "empresaLaboral", "cargo", "cargoLaboral", "tipoContrato",

@@ -133,6 +133,22 @@ const nanocreditoBaseSchema = z.object({
     z.string().trim().optional(),
   ),
   moraValor: optionalNumber,
+  tieneCodeudor: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  codeudorNombre: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  codeudorCedula: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  codeudorTelefono: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
   ingresosMensuales: requiredMoney("Ingresos mensuales"),
   origenOtrosIngresos: z.preprocess(
     (val) => (val == null ? "" : String(val)),
@@ -288,6 +304,32 @@ export function collectCrossFieldErrors(data: NanocreditoFormValues): StepFieldE
     if (data.moraValor == null || Number.isNaN(valMora) || valMora <= 0) {
       errors.push({ path: "moraValor", message: "Indica el monto aproximado de la mora" });
     }
+    if (!data.tieneCodeudor?.trim()) {
+      errors.push({ path: "tieneCodeudor", message: "Indica si cuentas con un codeudor sin reporte" });
+    } else if (data.tieneCodeudor === "si") {
+      const nom = (data.codeudorNombre ?? "").trim();
+      if (!nom) {
+        errors.push({ path: "codeudorNombre", message: "Ingresa el nombre del codeudor" });
+      } else if (nom.length < 3) {
+        errors.push({ path: "codeudorNombre", message: "Ingresa el nombre completo del codeudor" });
+      }
+
+      const ced = (data.codeudorCedula ?? "").replace(/\D/g, "");
+      if (!ced) {
+        errors.push({ path: "codeudorCedula", message: "Ingresa la cédula del codeudor" });
+      } else if (ced.length < 5 || ced.length > 12) {
+        errors.push({ path: "codeudorCedula", message: "Cédula del codeudor debe tener entre 5 y 12 dígitos" });
+      } else if (data.cedula && ced === data.cedula.replace(/\D/g, "")) {
+        errors.push({ path: "codeudorCedula", message: "El codeudor no puede ser el mismo solicitante" });
+      }
+
+      const tel = (data.codeudorTelefono ?? "").replace(/\D/g, "");
+      if (!tel) {
+        errors.push({ path: "codeudorTelefono", message: "Ingresa el celular del codeudor" });
+      } else if (tel.length !== 10 || !tel.startsWith("3")) {
+        errors.push({ path: "codeudorTelefono", message: "Celular debe tener 10 dígitos y comenzar por 3" });
+      }
+    }
   }
 
   if (data.tieneVehiculo === "si") {
@@ -370,6 +412,10 @@ export const NANOCREDITO_STEPS = [
       "moraEntidad",
       "moraTiempo",
       "moraValor",
+      "tieneCodeudor",
+      "codeudorNombre",
+      "codeudorCedula",
+      "codeudorTelefono",
       "ingresosMensuales",
       "origenOtrosIngresos",
       "origenOtrosIngresosOtro",
@@ -467,6 +513,10 @@ export const nanocreditoDefaultValues: Partial<NanocreditoFormValues> = {
   moraEntidad: "",
   moraTiempo: "",
   moraValor: undefined,
+  tieneCodeudor: "",
+  codeudorNombre: "",
+  codeudorCedula: "",
+  codeudorTelefono: "",
   origenOtrosIngresos: "",
   origenOtrosIngresosOtro: "",
   departamento: "",

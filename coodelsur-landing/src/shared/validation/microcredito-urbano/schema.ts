@@ -123,6 +123,31 @@ const microcreditoUrbanoBaseSchema = z.object({
     { message: "Selecciona un día de pago válido (5, 15 o 30)" },
   ),
   moraVigente: requiredText("Indica si tienes mora vigente"),
+  moraEntidad: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  moraTiempo: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  moraValor: optionalNumber,
+  tieneCodeudor: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  codeudorNombre: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  codeudorCedula: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
+  codeudorTelefono: z.preprocess(
+    (val) => (val == null ? "" : String(val)),
+    z.string().trim().optional(),
+  ),
   ingresosMensuales: requiredMoney("Ingresos mensuales"),
   egresosMensuales: requiredMoney("Egresos mensuales"),
   origenOtrosIngresos: z.preprocess(
@@ -278,6 +303,45 @@ export function collectMicrocreditoUrbanoCrossFieldErrors(
     }
   }
 
+  if (data.moraVigente === "si") {
+    if (!data.moraEntidad?.trim()) {
+      errors.push({ path: "moraEntidad", message: "Indica con qué entidad tienes la mora" });
+    }
+    if (!data.moraTiempo?.trim()) {
+      errors.push({ path: "moraTiempo", message: "Indica hace cuánto tiempo es la mora" });
+    }
+    const valMora = Number(data.moraValor);
+    if (data.moraValor == null || Number.isNaN(valMora) || valMora <= 0) {
+      errors.push({ path: "moraValor", message: "Indica el monto aproximado de la mora" });
+    }
+    if (!data.tieneCodeudor?.trim()) {
+      errors.push({ path: "tieneCodeudor", message: "Indica si cuentas con un codeudor sin reporte" });
+    } else if (data.tieneCodeudor === "si") {
+      const nom = (data.codeudorNombre ?? "").trim();
+      if (!nom) {
+        errors.push({ path: "codeudorNombre", message: "Ingresa el nombre del codeudor" });
+      } else if (nom.length < 3) {
+        errors.push({ path: "codeudorNombre", message: "Ingresa el nombre completo del codeudor" });
+      }
+
+      const ced = (data.codeudorCedula ?? "").replace(/\D/g, "");
+      if (!ced) {
+        errors.push({ path: "codeudorCedula", message: "Ingresa la cédula del codeudor" });
+      } else if (ced.length < 5 || ced.length > 12) {
+        errors.push({ path: "codeudorCedula", message: "Cédula del codeudor debe tener entre 5 y 12 dígitos" });
+      } else if (data.cedula && ced === data.cedula.replace(/\D/g, "")) {
+        errors.push({ path: "codeudorCedula", message: "El codeudor no puede ser el mismo solicitante" });
+      }
+
+      const tel = (data.codeudorTelefono ?? "").replace(/\D/g, "");
+      if (!tel) {
+        errors.push({ path: "codeudorTelefono", message: "Ingresa el celular del codeudor" });
+      } else if (tel.length !== 10 || !tel.startsWith("3")) {
+        errors.push({ path: "codeudorTelefono", message: "Celular debe tener 10 dígitos y comenzar por 3" });
+      }
+    }
+  }
+
   if (requiereNombreConyuge(data.estadoCivil)) {
     const nombreConyuge = (data.nombreConyuge ?? "").trim();
     if (!nombreConyuge) {
@@ -386,6 +450,13 @@ export const MICROCREDITO_URBANO_STEPS = [
       "destinoCredito",
       "diaPagoCuota",
       "moraVigente",
+      "moraEntidad",
+      "moraTiempo",
+      "moraValor",
+      "tieneCodeudor",
+      "codeudorNombre",
+      "codeudorCedula",
+      "codeudorTelefono",
       "ingresosMensuales",
       "egresosMensuales",
       "origenOtrosIngresos",
@@ -496,6 +567,13 @@ export const microcreditoUrbanoDefaultValues: Partial<MicrocreditoUrbanoFormValu
   destinoCredito: "",
   diaPagoCuota: "",
   moraVigente: "",
+  moraEntidad: "",
+  moraTiempo: "",
+  moraValor: undefined,
+  tieneCodeudor: "",
+  codeudorNombre: "",
+  codeudorCedula: "",
+  codeudorTelefono: "",
   origenOtrosIngresos: "",
   origenOtrosIngresosOtro: "",
   departamento: "",
