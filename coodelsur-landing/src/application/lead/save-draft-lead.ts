@@ -412,6 +412,12 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
 
   if (!forceFile) {
     try {
+      // Si el contacto ya cuenta con una solicitud finalizada o enviada, no crear borradores incompletos
+      const alreadyCompleted = await hasCompletedLeadForContact(prisma, cedula, telefono);
+      if (alreadyCompleted) {
+        return null;
+      }
+
       if (input.draftId) {
         const existingById = await prisma.lead.findUnique({
           where: { id: input.draftId },
@@ -425,10 +431,11 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
       if (!existingDraftId) {
         const matchFilters = buildIncompleteMatchFilters(cedula, telefono);
         if (matchFilters.length > 0) {
+          // Busca cualquier borrador incompleto del contacto sin restringir por tipoCredito,
+          // de modo que si el cliente cambia de producto, actualice el borrador en lugar de duplicarlo.
           const recentDraft = await prisma.lead.findFirst({
             where: {
               estado: "incompleto",
-              tipoCredito,
               OR: matchFilters,
             },
             orderBy: { fechaActualizacion: "desc" },
