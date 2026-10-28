@@ -46,6 +46,8 @@ const SKIP_FIELDS = new Set([
   "firma",
   "geolocalizacion",
   "tipoCredito",
+  "montoAprobado",
+  "fechaAprobacionMonto",
 ]);
 
 /** Ya se muestran en la tarjeta de contacto del detalle. */

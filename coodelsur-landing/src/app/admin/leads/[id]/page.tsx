@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminShell } from "@/presentation/components/admin/AdminShell";
+import { AprobarMontoModal } from "@/presentation/components/admin/AprobarMontoModal";
 import { LeadAttachmentGallery } from "@/presentation/components/admin/LeadAttachmentGallery";
 import { LeadInfoGrid, LeadSummaryCard } from "@/presentation/components/admin/LeadInfoGrid";
 import { LeadUbicacionSection } from "@/presentation/components/admin/LeadUbicacionSection";
@@ -27,6 +28,8 @@ export default function AdminLeadDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [triggeringPostback, setTriggeringPostback] = useState(false);
+  const [isMontoModalOpen, setIsMontoModalOpen] = useState(false);
+  const [montoNotice, setMontoNotice] = useState<string | null>(null);
   const [postbackNotice, setPostbackNotice] = useState<{
     type: "success" | "error" | "info";
     text: string;
@@ -131,6 +134,29 @@ export default function AdminLeadDetailPage() {
     } finally {
       setTriggeringPostback(false);
     }
+  };
+
+  const handleMontoAprobadoSaved = (result: {
+    montoAprobado: number | null;
+    fechaAprobacionMonto: string | null;
+    estado?: string;
+  }) => {
+    setLead((prev) =>
+      prev
+        ? {
+            ...prev,
+            montoAprobado: result.montoAprobado,
+            fechaAprobacionMonto: result.fechaAprobacionMonto,
+            ...(result.estado ? { estado: result.estado } : {}),
+          }
+        : prev,
+    );
+    setMontoNotice(
+      result.montoAprobado != null
+        ? `Monto aprobado guardado correctamente: ${formatCOP(result.montoAprobado)} COP`
+        : "Se restableció el monto aprobado de la solicitud",
+    );
+    setTimeout(() => setMontoNotice(null), 6000);
   };
 
   const deleteSolicitud = async () => {
@@ -246,6 +272,28 @@ export default function AdminLeadDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsMontoModalOpen(true)}
+            className="inline-flex items-center gap-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-50 text-xs sm:text-sm font-semibold"
+          >
+            <svg
+              className="h-4 w-4 shrink-0 text-emerald-700"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            {lead.montoAprobado != null ? "Editar Monto Aprobado" : "Aprobar Monto"}
+          </Button>
+          <Button
+            type="button"
             variant="primary"
             size="sm"
             loading={downloadingExcel}
@@ -291,6 +339,24 @@ export default function AdminLeadDetailPage() {
         </div>
       }
     >
+      {montoNotice && (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 shadow-xs">
+          <div className="flex items-center gap-2">
+            <svg className="h-4 w-4 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span>{montoNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMontoNotice(null)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <StatusBadge estado={lead.estado} />
         <span className="text-xs text-gray-400">
@@ -331,12 +397,80 @@ export default function AdminLeadDetailPage() {
         </section>
       )}
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <LeadSummaryCard
           label="Monto solicitado"
           value={lead.capitalSolicitado ? formatCOP(lead.capitalSolicitado) : "—"}
           highlight
         />
+
+        {/* Tarjeta interactiva Monto Aprobado */}
+        <div className="relative rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50/50 via-white to-white p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Monto aprobado
+              </p>
+              {lead.montoAprobado != null ? (
+                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 ring-1 ring-inset ring-emerald-600/20">
+                  Aprobado
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                  Sin asignar
+                </span>
+              )}
+            </div>
+            {lead.montoAprobado != null ? (
+              <div className="mt-1">
+                <p className="text-lg font-bold text-emerald-700">
+                  {formatCOP(lead.montoAprobado)}
+                </p>
+                {lead.capitalSolicitado && (
+                  <p className="mt-0.5 text-xs font-medium">
+                    {lead.montoAprobado === lead.capitalSolicitado ? (
+                      <span className="text-emerald-700">100% del solicitado</span>
+                    ) : lead.montoAprobado < lead.capitalSolicitado ? (
+                      <span className="text-amber-800">
+                        -{formatCOP(lead.capitalSolicitado - lead.montoAprobado)} vs solicitado
+                      </span>
+                    ) : (
+                      <span className="text-blue-700">
+                        +{formatCOP(lead.montoAprobado - lead.capitalSolicitado)} vs solicitado
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-1 text-sm font-semibold text-gray-400">
+                Pendiente de definir
+              </p>
+            )}
+          </div>
+          <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setIsMontoModalOpen(true)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d={
+                    lead.montoAprobado != null
+                      ? "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                      : "M12 4v16m8-8H4"
+                  }
+                />
+              </svg>
+              {lead.montoAprobado != null ? "Modificar" : "Asignar monto"}
+            </button>
+          </div>
+        </div>
+
         <LeadSummaryCard
           label="Cuotas"
           value={lead.cantidadCuotas ? String(lead.cantidadCuotas) : "—"}
@@ -548,6 +682,18 @@ export default function AdminLeadDetailPage() {
           </Button>
         </div>
       </div>
+
+      <AprobarMontoModal
+        isOpen={isMontoModalOpen}
+        onClose={() => setIsMontoModalOpen(false)}
+        leadId={lead.id}
+        nombreCliente={lead.nombre}
+        cedulaCliente={lead.cedula}
+        capitalSolicitado={lead.capitalSolicitado}
+        currentMontoAprobado={lead.montoAprobado}
+        currentEstado={lead.estado}
+        onSaved={handleMontoAprobadoSaved}
+      />
     </AdminShell>
   );
 }

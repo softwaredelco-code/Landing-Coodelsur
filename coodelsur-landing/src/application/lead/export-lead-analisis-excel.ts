@@ -180,6 +180,8 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
   const linea = formatLineaCredito(lead.tipoCredito);
 
   const montoSolicitado = Number(lead.capitalSolicitado || datos.capitalSeleccionado || datos.monto || 0);
+  const montoAprobado = Number(datos.montoAprobado || 0);
+  const montoPlanPagos = montoAprobado > 0 ? montoAprobado : montoSolicitado;
   const cuotas = Number(lead.cantidadCuotas || datos.cantidadCuotas || 2);
   const ingresos = Number(datos.ingresosMensuales || datos.ingresos_mensuales || datos.ingresos || 0);
   const quanto = Number(datos.quantoMedio || datos.ingresosMedio || (ingresos > 0 ? ingresos : 3011000));
@@ -200,8 +202,8 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
     s2 = updateCell(s2, "M8", { value: empresa, isString: true, defaultStyle: "262" });
     s2 = updateCell(s2, "M9", { value: cargo, isString: true, defaultStyle: "262" });
     s2 = updateCell(s2, "M10", { value: linea, isString: true, defaultStyle: "263" });
-    s2 = updateCell(s2, "P13", { value: montoSolicitado, isString: false, defaultStyle: "68" });
-    s2 = updateCell(s2, "P14", { value: montoSolicitado, isString: false, defaultStyle: "68" });
+    s2 = updateCell(s2, "P13", { value: montoPlanPagos, isString: false, defaultStyle: "68" });
+    s2 = updateCell(s2, "P14", { value: montoPlanPagos, isString: false, defaultStyle: "68" });
     s2 = updateCell(s2, "F8", { value: cuotas, isString: false, defaultStyle: "288" });
     s2 = updateCell(s2, "F9", { value: dia, isString: false, defaultStyle: "49" });
     s2 = updateCell(s2, "G9", { value: mes, isString: false, defaultStyle: "49" });
@@ -256,6 +258,9 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
 
     const concepto = [
       `Tipo crédito:  ${linea}`,
+      ...(montoAprobado > 0
+        ? [`Monto aprobado:  $${montoAprobado.toLocaleString("es-CO")} COP (Solicitado: $${montoSolicitado.toLocaleString("es-CO")} COP)`]
+        : [`Monto solicitado:  $${montoSolicitado.toLocaleString("es-CO")} COP`]),
       `Adres:  ${esCotizante === "SI" ? "Cotizante" : "No cotizante"}`,
       `Validación de identidad:  Aprobada`,
       `Email:  ${lead.email || "No reportado"}`,

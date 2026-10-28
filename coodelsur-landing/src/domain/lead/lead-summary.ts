@@ -11,6 +11,17 @@ export function extractCapitalSolicitado(datosFormulario: unknown): number | nul
   return capital;
 }
 
+/** Extrae el monto aprobado asignado por el administrador en datosFormulario del lead. */
+export function extractMontoAprobado(datosFormulario: unknown): number | null {
+  if (!datosFormulario || typeof datosFormulario !== "object") return null;
+
+  const monto = (datosFormulario as Record<string, unknown>).montoAprobado;
+  if (typeof monto === "number" && Number.isFinite(monto) && monto > 0) return Math.round(monto);
+  if (typeof monto === "string" && !isNaN(Number(monto)) && Number(monto) > 0) return Math.round(Number(monto));
+
+  return null;
+}
+
 export function extractProgresoFormulario(datosFormulario: unknown): number | null {
   if (!datosFormulario || typeof datosFormulario !== "object") return null;
   const progreso = (datosFormulario as Record<string, unknown>)._progreso;

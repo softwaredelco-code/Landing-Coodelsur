@@ -51,6 +51,8 @@ export interface AdminLeadDetail {
   longitud: number | null;
   fechaCreacion: string;
   capitalSolicitado: number | null;
+  montoAprobado: number | null;
+  fechaAprobacionMonto: string | null;
   valorCuota: number | null;
   cantidadCuotas: number | string | null;
   progresoFormulario: number | null;
@@ -185,6 +187,16 @@ export function mapLeadToAdminDetail(
     longitud: lead.longitud,
     fechaCreacion: toIsoDateRequired(lead.fechaCreacion),
     capitalSolicitado: lead.capitalSolicitado ?? extractCapitalSolicitado(datos),
+    montoAprobado:
+      typeof datos.montoAprobado === "number" && Number.isFinite(datos.montoAprobado) && datos.montoAprobado > 0
+        ? Math.round(datos.montoAprobado)
+        : typeof datos.montoAprobado === "string" && !isNaN(Number(datos.montoAprobado)) && Number(datos.montoAprobado) > 0
+          ? Math.round(Number(datos.montoAprobado))
+          : null,
+    fechaAprobacionMonto:
+      typeof datos.fechaAprobacionMonto === "string" && datos.fechaAprobacionMonto.trim()
+        ? datos.fechaAprobacionMonto.trim()
+        : null,
     valorCuota,
     cantidadCuotas: cuotasNormalized,
     progresoFormulario: lead.progresoFormulario ?? extractProgresoFormulario(datos),

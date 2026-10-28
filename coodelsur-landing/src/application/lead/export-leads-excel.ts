@@ -360,6 +360,14 @@ const BASE_COLUMNS: ExportColumn[] = [
       return monto != null ? formatMoney(monto) : "";
     },
   },
+  {
+    header: "Monto Aprobado (COP)",
+    width: 20,
+    value: (l) => {
+      const monto = readNumber(datosOf(l), "montoAprobado");
+      return monto != null ? formatMoney(monto) : "";
+    },
+  },
   { header: "Cantidad Cuotas", width: 14, value: (l) => readString(datosOf(l), "cantidadCuotas") },
   {
     header: "Valor Estimado Cuota (COP)",

@@ -6,6 +6,7 @@ import {
   isDbConnectionError,
   listLeadsFromFile,
   updateLeadEstadoInFile,
+  updateLeadInFile,
 } from "@/infrastructure/persistence/file-store";
 import { mapLeadListRow } from "@/domain/lead/lead-summary";
 import { parseMonthRange } from "@/application/lead/fetch-leads-for-export";
@@ -173,23 +174,59 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { id?: string; estado?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    id?: string;
+    estado?: string;
+    montoAprobado?: number | string | null;
+  };
   const leadId = body.id?.trim();
   const leadEstado = body.estado?.trim();
 
-  if (!leadId || !leadEstado) {
-    return NextResponse.json({ error: "id y estado requeridos" }, { status: 400 });
+  if (!leadId || (!leadEstado && body.montoAprobado === undefined)) {
+    return NextResponse.json({ error: "id y al menos estado o montoAprobado requeridos" }, { status: 400 });
+  }
+
+  let parsedMontoAprobado: number | null | undefined = undefined;
+  if (body.montoAprobado !== undefined) {
+    if (body.montoAprobado === null || body.montoAprobado === "") {
+      parsedMontoAprobado = null;
+    } else {
+      const num = Number(body.montoAprobado);
+      if (!isNaN(num) && num >= 0) {
+        parsedMontoAprobado = Math.round(num);
+      }
+    }
   }
 
   try {
     const previousLead = await prisma.lead.findUnique({
       where: { id: leadId },
-      select: { estado: true },
+      select: { estado: true, datosFormulario: true },
     });
+
+    if (!previousLead) {
+      return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
+    }
+
+    const currentDatos =
+      previousLead.datosFormulario && typeof previousLead.datosFormulario === "object"
+        ? (previousLead.datosFormulario as Record<string, unknown>)
+        : {};
+
+    const updatedDatos = { ...currentDatos };
+    if (parsedMontoAprobado !== undefined) {
+      updatedDatos.montoAprobado = parsedMontoAprobado;
+      updatedDatos.fechaAprobacionMonto =
+        parsedMontoAprobado !== null ? new Date().toISOString() : null;
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (leadEstado) updateData.estado = leadEstado as any;
+    if (parsedMontoAprobado !== undefined) updateData.datosFormulario = updatedDatos as any;
 
     const lead = await prisma.lead.update({
       where: { id: leadId },
-      data: { estado: leadEstado as any },
+      data: updateData as any,
     });
     cachedEstadoCounts = null;
 
@@ -203,7 +240,27 @@ export async function PATCH(request: Request) {
   } catch (error) {
     if (isDbConnectionError(error) || getLeadFromFile(leadId)) {
       const prevFileLead = getLeadFromFile(leadId);
-      const lead = updateLeadEstadoInFile(leadId, leadEstado);
+      if (!prevFileLead) {
+        return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
+      }
+
+      const currentDatos =
+        prevFileLead.datosFormulario && typeof prevFileLead.datosFormulario === "object"
+          ? (prevFileLead.datosFormulario as Record<string, unknown>)
+          : {};
+
+      const updatedDatos = { ...currentDatos };
+      if (parsedMontoAprobado !== undefined) {
+        updatedDatos.montoAprobado = parsedMontoAprobado;
+        updatedDatos.fechaAprobacionMonto =
+          parsedMontoAprobado !== null ? new Date().toISOString() : null;
+      }
+
+      const fileUpdate: Record<string, unknown> = {};
+      if (leadEstado) fileUpdate.estado = leadEstado;
+      if (parsedMontoAprobado !== undefined) fileUpdate.datosFormulario = updatedDatos;
+
+      const lead = updateLeadInFile(leadId, fileUpdate);
       if (!lead) {
         return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
       }
