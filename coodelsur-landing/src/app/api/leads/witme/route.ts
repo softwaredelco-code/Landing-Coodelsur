@@ -1,6 +1,11 @@
 import { createLead } from "@/application/lead/create-lead";
 import { mapWitmePayload, type MappedWitmeLead } from "@/application/lead/map-witme-payload";
-import { findRecentDuplicateCedula } from "@/domain/lead/duplicate-cedula";
+import {
+  findRecentDuplicateCedula,
+  resolveClientDuplicateByProgress,
+} from "@/domain/lead/duplicate-cedula";
+import { calcularProgresoFormulario } from "@/domain/lead/form-progress";
+import { cleanupIncompleteDraftsForContact } from "@/application/lead/save-draft-lead";
 import { prisma } from "@/infrastructure/database/prisma";
 import { getClientIp } from "@/shared/utils";
 import type { TipoCredito } from "@/shared/types/credito";
@@ -231,94 +236,64 @@ export async function POST(request: Request) {
     const origin = getRequestOrigin(request);
 
     // =========================================================================
-    // 1. CONTROL DE DUPLICADOS Y LEADS REPETIDOS
+    // 1. EVALUACIÓN DE COMPLETITUD Y PROGRESO DEL LEAD ENTRANTE
     // =========================================================================
-
-    // A) Deduplicación por witme_id / id_externo
-    if (mapped.witmeLeadId) {
-      const existingByWitmeId = await prisma.lead.findFirst({
-        where: {
-          OR: [
-            { datosFormulario: { path: ["witmeLeadId"], equals: mapped.witmeLeadId } },
-            { datosFormulario: { path: ["payloadOriginal", "witme_id"], equals: mapped.witmeLeadId } },
-            { datosFormulario: { path: ["payloadOriginal", "external_id"], equals: mapped.witmeLeadId } },
-            { datosFormulario: { path: ["payloadOriginal", "id_externo"], equals: mapped.witmeLeadId } },
-          ],
-        },
-        select: { id: true, estado: true, fechaCreacion: true, tipoCredito: true },
-      });
-
-      if (existingByWitmeId) {
-        return NextResponse.json(
-          {
-            success: true,
-            duplicate: true,
-            id: existingByWitmeId.id,
-            leadId: existingByWitmeId.id,
-            estado: existingByWitmeId.estado,
-            tipoCredito: existingByWitmeId.tipoCredito,
-            message: "Lead repetido: ya fue registrado previamente con este witme_id.",
-          },
-          { status: 200 },
+    const completeness = checkWitmeLeadCompleteness(mapped, rawBody);
+    const redirectUrl = buildWitmeRedirectUrl(origin, mapped.tipoCredito, "", mapped);
+    const incomingProgreso = completeness.complete
+      ? 100
+      : Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round(calcularProgresoFormulario(mapped.datosFormulario, 0).porcentaje),
+          ),
         );
-      }
-    }
 
-    // B) Deduplicación por cédula activa en los últimos 30 días
-    const duplicateCedula = await findRecentDuplicateCedula(mapped.cedula);
-    if (duplicateCedula.duplicate) {
+    // =========================================================================
+    // 2. CONTROL DE DUPLICADOS Y POLÍTICA DE MAYOR PORCENTAJE (WITME)
+    //    1. Código de error HTTP 409
+    //    2. Payload con status: "duplicate"
+    //    3. Se conserva únicamente el registro con mayor porcentaje completado
+    // =========================================================================
+    const duplicateResolution = await resolveClientDuplicateByProgress({
+      cedula: mapped.cedula,
+      telefono: mapped.telefono,
+      witmeId: mapped.witmeLeadId,
+      incomingProgreso,
+      windowDays: 30,
+    });
+
+    if (
+      duplicateResolution.isDuplicate &&
+      duplicateResolution.action === "REJECT_INCOMING_DUPLICATE"
+    ) {
       return NextResponse.json(
         {
-          success: false,
+          status: "duplicate",
           duplicate: true,
           error: "Lead duplicado",
           message:
-            duplicateCedula.message ??
-            `Ya existe una solicitud activa registrada con el documento ${mapped.cedula}.`,
-          existingLeadId: duplicateCedula.existingLeadId,
-          existingFecha: duplicateCedula.existingFecha,
+            duplicateResolution.message ??
+            "Lead duplicado: ya existe un registro con mayor o igual porcentaje completado para este cliente.",
+          leadId: duplicateResolution.existingLead?.id,
+          existingLeadId: duplicateResolution.existingLead?.id,
+          estado: duplicateResolution.existingLead?.estado,
+          porcentaje: duplicateResolution.existingLead?.progreso,
+          existingProgreso: duplicateResolution.existingLead?.progreso,
+          incomingProgreso,
         },
         { status: 409 },
       );
     }
 
-    // C) Deduplicación por teléfono y cédula en las últimas 24 horas
-    const phoneDigits = mapped.telefono.replace(/\D/g, "");
-    if (phoneDigits.length >= 10) {
-      const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const existingPhone = await prisma.lead.findFirst({
-        where: {
-          cedula: mapped.cedula,
-          telefono: { contains: phoneDigits.slice(-10) },
-          fechaCreacion: { gte: cutoff24h },
-        },
-        select: { id: true, estado: true, fechaCreacion: true },
-      });
-
-      if (existingPhone) {
-        return NextResponse.json(
-          {
-            success: false,
-            duplicate: true,
-            error: "Lead duplicado",
-            message: "Ya existe una solicitud registrada en las últimas 24 horas con este teléfono y cédula.",
-            existingLeadId: existingPhone.id,
-          },
-          { status: 409 },
-        );
-      }
-    }
-
     // =========================================================================
-    // 2. VALIDACIÓN DE COMPLETITUD (ÚNICAMENTE LEADS COMPLETOS)
+    // 3. REGLA: ÚNICAMENTE LEADS COMPLETOS INGRESAN A LA BASE DE DATOS
     // =========================================================================
-    const completeness = checkWitmeLeadCompleteness(mapped, rawBody);
-    const redirectUrl = buildWitmeRedirectUrl(origin, mapped.tipoCredito, "", mapped);
-
     if (!completeness.complete) {
-      // REGLA: No se permite el ingreso de leads incompletos en la base de datos por parte de Witme.
       return NextResponse.json(
         {
+          status: "incomplete",
           success: false,
           error: "Lead incompleto no permitido",
           message:
@@ -326,13 +301,14 @@ export async function POST(request: Request) {
           camposFaltantes: completeness.missingFields,
           redirect_url: redirectUrl,
           redirectUrl: redirectUrl,
+          incomingProgreso,
         },
         { status: 422 },
       );
     }
 
     // =========================================================================
-    // 3. REGISTRO DEL LEAD COMPLETO
+    // 4. REGISTRO DEL LEAD COMPLETO (Y PURGA DE CUALQUIER BORRADOR INFERIOR)
     // =========================================================================
     const ip = getClientIp(request);
 
@@ -350,10 +326,14 @@ export async function POST(request: Request) {
       aceptaTerminos: mapped.aceptaTerminos,
     });
 
+    // Asegurar que no quede ningún borrador previo incompleto para este cliente (1 solo registro)
+    await cleanupIncompleteDraftsForContact(mapped.cedula, mapped.telefono);
+
     const finalRedirectUrl = buildWitmeRedirectUrl(origin, mapped.tipoCredito, lead.id, mapped);
 
     return NextResponse.json(
       {
+        status: "created",
         success: true,
         id: lead.id,
         leadId: lead.id,
@@ -383,7 +363,7 @@ export async function GET(request: Request) {
     auth: "Authorization: Bearer <WITME_API_KEY>",
     policy: {
       incompletePolicy: "REJECT (Solo se admiten leads completos en base de datos. Leads incompletos reciben 422 con redirect_url)",
-      duplicatePolicy: "BLOCK (Detección estricta por witme_id, cédula activa en 30 días y teléfono en 24h)",
+      duplicatePolicy: "HTTP 409 { status: 'duplicate' } (Comparación por porcentaje de completitud: se mantiene un único registro por cliente con el mayor porcentaje completado y se eliminan duplicados inferiores)",
     },
     requiredFields: [
       "nombre (completo)",
