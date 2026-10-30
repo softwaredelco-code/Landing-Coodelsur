@@ -65,11 +65,24 @@ export function ResumenInformeModal({
       if (origen) params.set("origen", origen);
       if (mes) params.set("mes", mes);
 
-      const res = await fetch(`/api/admin/leads/export-resumen?${params.toString()}`, {
-        cache: "no-store",
-      });
+      const url = `/api/admin/leads/export-resumen?${params.toString()}`;
+      let res: Response | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          res = await fetch(url, { cache: "no-store" });
+          if (res.ok || res.status === 401) break;
+          if (attempt < 3 && (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504)) {
+            await new Promise((r) => setTimeout(r, 900 * attempt));
+            continue;
+          }
+          break;
+        } catch (err) {
+          if (attempt === 3) throw err;
+          await new Promise((r) => setTimeout(r, 900 * attempt));
+        }
+      }
 
-      if (!res.ok) {
+      if (!res || !res.ok) {
         throw new Error("No se pudo cargar el resumen");
       }
 

@@ -2,12 +2,16 @@
  * Consulta leads completos para exportación Excel (admin).
  */
 
-import { isDbConnectionError, listLeadsFromFile } from "@/infrastructure/persistence/file-store";
+import {
+  isDbConnectionError,
+  isTransientDbError,
+  listLeadsFromFile,
+} from "@/infrastructure/persistence/file-store";
 import type { LeadExportRecord } from "@/application/lead/export-leads-excel";
 import { prisma } from "@/infrastructure/database/prisma";
-import type { LeadEstado } from "@prisma/client";
 
 export const MAX_LEADS_EXPORT = 5000;
+const EXPORT_BATCH_SIZE = 150;
 
 export interface FetchLeadsForExportOptions {
   ids?: string[];
@@ -16,6 +20,86 @@ export interface FetchLeadsForExportOptions {
   origen?: string | null;
   q?: string | null;
   mes?: string | null;
+  take?: number;
+  skip?: number;
+}
+
+const ATTACHMENT_KEYS = [
+  "cedulaFrontal",
+  "cedulaReverso",
+  "videoVerificacion",
+  "firma",
+] as const;
+
+/**
+ * Elimina binarios base64 pesados (videos/imágenes inline) y payloads duplicados
+ * que no se usan en las celdas de Excel pero consumen varios MB de RAM en cPanel.
+ */
+export function sanitizeDatosFormularioForExport(
+  datosFormulario: unknown,
+): Record<string, unknown> {
+  if (!datosFormulario || typeof datosFormulario !== "object") return {};
+
+  const raw = datosFormulario as Record<string, unknown>;
+  const cleaned: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === "payloadOriginal" || key === "witmePostback") continue;
+
+    if (key === "_progreso" && value && typeof value === "object") {
+      const porc = (value as { porcentaje?: unknown }).porcentaje;
+      if (typeof porc === "number") {
+        cleaned._progreso = { porcentaje: porc };
+      }
+      continue;
+    }
+
+    if (key === "cedulaVerificacion" && value && typeof value === "object") {
+      const cv = value as Record<string, unknown>;
+      cleaned.cedulaVerificacion = {
+        status: cv.status,
+        message: cv.message,
+      };
+      continue;
+    }
+
+    if ((ATTACHMENT_KEYS as readonly string[]).includes(key)) {
+      if (typeof value === "string") {
+        cleaned[key] = value.startsWith("data:") ? "data:inline" : value;
+      } else if (value && typeof value === "object") {
+        const obj = value as Record<string, unknown>;
+        const preview =
+          typeof obj.preview === "string" && obj.preview.startsWith("data:")
+            ? "data:inline"
+            : typeof obj.preview === "string" && obj.preview.startsWith("http")
+              ? obj.preview
+              : undefined;
+        cleaned[key] = {
+          ...(typeof obj.url === "string" ? { url: obj.url } : {}),
+          ...(typeof obj.path === "string" ? { path: obj.path } : {}),
+          ...(typeof obj.uploaded === "boolean" ? { uploaded: obj.uploaded } : {}),
+          ...(preview ? { preview } : {}),
+        };
+      }
+      continue;
+    }
+
+    if (typeof value === "string" && value.startsWith("data:") && value.length > 200) {
+      cleaned[key] = "data:inline";
+      continue;
+    }
+
+    cleaned[key] = value;
+  }
+
+  return cleaned;
+}
+
+function sanitizeLeadForExport(lead: LeadExportRecord): LeadExportRecord {
+  return {
+    ...lead,
+    datosFormulario: sanitizeDatosFormularioForExport(lead.datosFormulario),
+  };
 }
 
 export function parseMonthRange(mes?: string | null): { gte: Date; lt: Date } | undefined {
@@ -108,7 +192,15 @@ function filterFileLeads(
     filtered = filtered.filter((lead) => idSet.has(lead.id));
   }
   if (options.estado) {
-    filtered = filtered.filter((lead) => lead.estado === options.estado);
+    const allowedEstados =
+      options.estado === "completo"
+        ? ["completo", "recibido"]
+        : options.estado === "por_contactar"
+          ? ["por_contactar", "revisado", "contactado"]
+          : options.estado === "rechazado_no_cumple"
+            ? ["rechazado_no_cumple", "descartado"]
+            : [options.estado];
+    filtered = filtered.filter((lead) => allowedEstados.includes(lead.estado));
   }
   if (options.tipoCredito) {
     filtered = filtered.filter((lead) => lead.tipoCredito === options.tipoCredito);
@@ -135,25 +227,72 @@ function filterFileLeads(
     );
   }
 
+  const startOffset = Math.max(0, options.skip ?? 0);
+  const maxRows = Math.min(MAX_LEADS_EXPORT, options.take ?? MAX_LEADS_EXPORT);
+
   return filtered
     .sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime())
-    .slice(0, MAX_LEADS_EXPORT);
+    .slice(startOffset, startOffset + maxRows)
+    .map((l) => sanitizeLeadForExport(l as unknown as LeadExportRecord));
+}
+
+async function fetchBatchWithRetry(
+  where: ReturnType<typeof buildWhere>,
+  skip: number,
+  take: number,
+): Promise<LeadExportRecord[]> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const rows = await prisma.lead.findMany({
+        where,
+        orderBy: [{ fechaCreacion: "desc" }, { id: "desc" }],
+        skip,
+        take,
+        select: EXPORT_SELECT,
+      });
+      return (rows as LeadExportRecord[]).map(sanitizeLeadForExport);
+    } catch (err) {
+      if (attempt === 1 && isTransientDbError(err)) {
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      throw err;
+    }
+  }
+  return [];
 }
 
 export async function fetchLeadsForExport(
   options: FetchLeadsForExportOptions,
 ): Promise<LeadExportRecord[]> {
   try {
-    const leads = await prisma.lead.findMany({
-      where: buildWhere(options),
-      orderBy: { fechaCreacion: "desc" },
-      take: MAX_LEADS_EXPORT,
-      select: EXPORT_SELECT,
-    });
+    const where = buildWhere(options);
+    const startSkip = Math.max(0, options.skip ?? 0);
+    const targetTotal = Math.min(
+      MAX_LEADS_EXPORT,
+      options.take && options.take > 0 ? options.take : MAX_LEADS_EXPORT,
+    );
 
-    return leads as LeadExportRecord[];
+    const results: LeadExportRecord[] = [];
+    let currentSkip = startSkip;
+    let remaining = targetTotal;
+
+    while (remaining > 0) {
+      const batchTake = Math.min(EXPORT_BATCH_SIZE, remaining);
+      const batch = await fetchBatchWithRetry(where, currentSkip, batchTake);
+      results.push(...batch);
+
+      if (batch.length < batchTake) {
+        break;
+      }
+
+      currentSkip += batch.length;
+      remaining -= batch.length;
+    }
+
+    return results;
   } catch (error) {
     if (!isDbConnectionError(error)) throw error;
-    return filterFileLeads(listLeadsFromFile(), options) as LeadExportRecord[];
+    return filterFileLeads(listLeadsFromFile(), options);
   }
 }

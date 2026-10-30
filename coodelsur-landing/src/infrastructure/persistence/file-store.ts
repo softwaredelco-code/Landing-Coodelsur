@@ -156,20 +156,39 @@ export function deleteLeadFromFile(id: string): boolean {
   return true;
 }
 
-export function isDbConnectionError(error: unknown): boolean {
+export function isTransientDbError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = "code" in error ? String((error as { code?: string }).code) : "";
   const name = "name" in error ? String((error as { name?: string }).name) : "";
   const message = "message" in error ? String((error as { message?: string }).message) : "";
   return (
     code === "P1001" ||
-    code === "P1000" ||
+    code === "P1002" ||
+    code === "P1008" ||
     code === "P1017" ||
+    code === "P2024" ||
     name === "PrismaClientRustPanicError" ||
+    name === "PrismaClientInitializationError" ||
     message.includes("Can't reach database server") ||
+    message.includes("Timed out fetching a new connection") ||
+    message.includes("Server has closed the connection") ||
+    message.includes("Connection reset") ||
+    message.includes("ECONNRESET") ||
+    message.includes("ETIMEDOUT") ||
+    message.includes("timer has gone away")
+  );
+}
+
+export function isDbConnectionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error ? String((error as { code?: string }).code) : "";
+  const name = "name" in error ? String((error as { name?: string }).name) : "";
+  const message = "message" in error ? String((error as { message?: string }).message) : "";
+  return (
+    isTransientDbError(error) ||
+    code === "P1000" ||
     message.includes("ECONNREFUSED") ||
     message.includes("does not exist") ||
-    message.includes("timer has gone away") ||
     message.includes("PANIC")
   );
 }

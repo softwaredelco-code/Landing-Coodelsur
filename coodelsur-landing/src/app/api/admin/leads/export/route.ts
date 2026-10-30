@@ -3,8 +3,7 @@ import {
   buildExportFilename,
   buildLeadsExcelBuffer,
 } from "@/application/lead/export-leads-excel";
-import { fetchLeadsForExport } from "@/application/lead/fetch-leads-for-export";
-import type { LeadEstado } from "@prisma/client";
+import { fetchLeadsForExport, MAX_LEADS_EXPORT } from "@/application/lead/fetch-leads-for-export";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +15,9 @@ export const maxDuration = 60;
  *
  * Query params:
  * - `format` — "json" para obtener payload estructurado rápido, omitir para .xlsx directo
+ * - `take`, `skip` — paginación opcional por lotes para evitar límites de memoria/503 en cPanel
  * - `ids` — UUIDs separados por coma (exportación de filas seleccionadas)
- * - `q`, `estado`, `tipoCredito`, `origen` — filtros del listado (informe general)
+ * - `q`, `estado`, `tipoCredito`, `origen`, `mes` — filtros del listado (informe general)
  */
 export async function GET(request: Request) {
   if (!isAdminRequest(request)) {
@@ -40,6 +40,17 @@ export async function GET(request: Request) {
     const q = searchParams.get("q")?.trim() || null;
     const mes = searchParams.get("mes")?.trim() || null;
 
+    const takeParam = searchParams.get("take");
+    const skipParam = searchParams.get("skip");
+    const take =
+      takeParam !== null && !isNaN(Number(takeParam)) && Number(takeParam) > 0
+        ? Math.min(Number(takeParam), MAX_LEADS_EXPORT)
+        : undefined;
+    const skip =
+      skipParam !== null && !isNaN(Number(skipParam)) && Number(skipParam) >= 0
+        ? Number(skipParam)
+        : undefined;
+
     const leads = await fetchLeadsForExport({
       ids,
       estado,
@@ -47,17 +58,26 @@ export async function GET(request: Request) {
       origen,
       q,
       mes,
+      take,
+      skip,
     });
 
+    const scope = ids?.length ? "selected" : "report";
+    const filename = buildExportFilename(scope, mes);
+
     if (leads.length === 0) {
+      if (format === "json" && skip && skip > 0) {
+        return NextResponse.json({
+          leads: [],
+          filename,
+          total: 0,
+        });
+      }
       return NextResponse.json(
         { error: "No hay solicitudes para exportar con los criterios indicados" },
         { status: 404 },
       );
     }
-
-    const scope = ids?.length ? "selected" : "report";
-    const filename = buildExportFilename(scope, mes);
 
     if (format === "json") {
       return NextResponse.json({

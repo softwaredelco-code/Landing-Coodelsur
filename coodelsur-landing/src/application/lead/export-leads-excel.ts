@@ -266,7 +266,7 @@ function readAttachmentInfo(datos: Record<string, unknown>, field: string): stri
     if (typeof obj.path === "string" && obj.path.trim()) {
       return `Storage: ${obj.path}`;
     }
-    if (isAttachmentAvailable(item)) {
+    if (isAttachmentAvailable(item) || obj.uploaded === true) {
       return "Disponible";
     }
   }
@@ -654,7 +654,7 @@ const KNOWN_DATA_KEYS = new Set([
   "utmCampaign", "utmSource", "utmMedium", "utmTerm", "utmContent",
   "latitud", "longitud", "pais",
   "_progreso", "pasoActualFormulario", "draftLeadId", "id", "storage",
-  "fuente", "witmeLeadId",
+  "fuente", "witmeLeadId", "witmePostback", "montoAprobado", "fechaAprobacionMonto",
 ]);
 
 /** Detecta cualquier campo adicional presente en los leads para agregarlo al final del Excel. */
@@ -705,6 +705,8 @@ function applyHeaderStyle(worksheet: XLSX.WorkSheet, columnCount: number) {
   }
 }
 
+const MAX_EXCEL_CELL_CHARS = 32_760;
+
 /** Construye el buffer `.xlsx` con todos los campos del formulario. */
 export function buildLeadsExcelBuffer(leads: LeadExportRecord[]): Uint8Array {
   const extraColumns = collectExtraColumns(leads);
@@ -715,6 +717,9 @@ export function buildLeadsExcelBuffer(leads: LeadExportRecord[]): Uint8Array {
     allColumns.map((column) => {
       const value = column.value(lead);
       if (value === null || value === undefined) return "";
+      if (typeof value === "string" && value.length > MAX_EXCEL_CELL_CHARS) {
+        return `${value.slice(0, MAX_EXCEL_CELL_CHARS)}…`;
+      }
       return value;
     }),
   );
@@ -734,7 +739,11 @@ export function buildLeadsExcelBuffer(leads: LeadExportRecord[]): Uint8Array {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Solicitudes Coodelsur");
 
-  const raw = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+  const raw = XLSX.write(workbook, {
+    type: "array",
+    bookType: "xlsx",
+    compression: true,
+  });
   return new Uint8Array(raw);
 }
 

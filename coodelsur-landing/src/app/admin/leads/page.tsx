@@ -8,7 +8,7 @@ import { formatLeadOrigen, LEAD_ORIGEN_FILTER_OPTIONS } from "@/domain/lead/lead
 import { formatCOP } from "@/shared/utils";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface LeadRow {
   id: string;
@@ -67,29 +67,128 @@ function triggerBlobDownload(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
 }
 
-async function downloadExcelExport(url: string, fallbackFilename: string) {
-  // 1. Intentar exportación rápida vía JSON + construcción en cliente
-  // Esto previene al 100% el error 503 por timeout de LiteSpeed en cPanel
-  try {
-    const jsonUrl = url.includes("?") ? `${url}&format=json` : `${url}?format=json`;
-    const res = await fetch(jsonUrl, { cache: "no-store" });
+const EXPORT_CHUNK_SIZE = 150;
+const MAX_EXPORT_CHUNKS = 35; // hasta 5,250 registros
 
-    if (res.status === 401) {
-      return "unauthorized" as const;
+async function fetchJsonChunkWithRetry(chunkUrl: string): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(chunkUrl, { cache: "no-store" });
+      if (
+        (res.status === 502 || res.status === 503 || res.status === 504) &&
+        attempt < 3
+      ) {
+        await new Promise((r) => setTimeout(r, 1200 * attempt));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastError = err;
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 1200 * attempt));
+      }
+    }
+  }
+  throw lastError ?? new Error("Network error");
+}
+
+async function downloadExcelExport(url: string, fallbackFilename: string) {
+  // 1. Exportación paginada vía JSON (lotes de 150 registros) + construcción en cliente.
+  // Evita picos de RAM y elimina al 100% los errores 503 de CloudLinux / LiteSpeed en cPanel
+  // incluso en meses con cientos o miles de solicitudes (ej. Octubre).
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    const idsParam = parsedUrl.searchParams.get("ids");
+    const allLeads: unknown[] = [];
+    let resolvedFilename = fallbackFilename;
+
+    if (idsParam) {
+      const allIds = idsParam
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+
+      for (let i = 0; i < allIds.length; i += EXPORT_CHUNK_SIZE) {
+        const chunkIds = allIds.slice(i, i + EXPORT_CHUNK_SIZE);
+        const chunkParams = new URLSearchParams(parsedUrl.searchParams);
+        chunkParams.set("ids", chunkIds.join(","));
+        chunkParams.set("format", "json");
+
+        const res = await fetchJsonChunkWithRetry(
+          `${parsedUrl.pathname}?${chunkParams.toString()}`,
+        );
+
+        if (res.status === 401) {
+          return "unauthorized" as const;
+        }
+        if (res.status === 404 && allLeads.length === 0) {
+          return "No hay solicitudes para exportar con los criterios indicados";
+        }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const data = (await res.json()) as { leads?: unknown[]; filename?: string };
+        if (typeof data.filename === "string" && data.filename) {
+          resolvedFilename = data.filename;
+        }
+        if (Array.isArray(data.leads) && data.leads.length > 0) {
+          allLeads.push(...data.leads);
+        }
+      }
+    } else {
+      for (let chunkIndex = 0; chunkIndex < MAX_EXPORT_CHUNKS; chunkIndex++) {
+        const skip = chunkIndex * EXPORT_CHUNK_SIZE;
+        const chunkParams = new URLSearchParams(parsedUrl.searchParams);
+        chunkParams.set("format", "json");
+        chunkParams.set("take", String(EXPORT_CHUNK_SIZE));
+        chunkParams.set("skip", String(skip));
+
+        const res = await fetchJsonChunkWithRetry(
+          `${parsedUrl.pathname}?${chunkParams.toString()}`,
+        );
+
+        if (res.status === 401) {
+          return "unauthorized" as const;
+        }
+        if (res.status === 404) {
+          if (allLeads.length === 0) {
+            return "No hay solicitudes para exportar con los criterios indicados";
+          }
+          break;
+        }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const data = (await res.json()) as { leads?: unknown[]; filename?: string };
+        if (typeof data.filename === "string" && data.filename) {
+          resolvedFilename = data.filename;
+        }
+
+        const chunkLeads = Array.isArray(data.leads) ? data.leads : [];
+        if (chunkLeads.length === 0) {
+          break;
+        }
+
+        allLeads.push(...chunkLeads);
+        if (chunkLeads.length < EXPORT_CHUNK_SIZE) {
+          break;
+        }
+      }
     }
 
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data?.leads) && data.leads.length > 0) {
-        const { buildLeadsExcelBuffer } = await import("@/application/lead/export-leads-excel");
-        const filename = typeof data.filename === "string" && data.filename ? data.filename : fallbackFilename;
-        const excelBuffer = buildLeadsExcelBuffer(data.leads);
-        const blob = new Blob([excelBuffer as unknown as BlobPart], {
-          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        });
-        triggerBlobDownload(blob, filename);
-        return null;
-      }
+    if (allLeads.length > 0) {
+      const { buildLeadsExcelBuffer } = await import("@/application/lead/export-leads-excel");
+      const excelBuffer = buildLeadsExcelBuffer(
+        allLeads as Parameters<typeof buildLeadsExcelBuffer>[0],
+      );
+      const blob = new Blob([excelBuffer as unknown as BlobPart], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      triggerBlobDownload(blob, resolvedFilename);
+      return null;
     }
   } catch (clientErr) {
     console.warn("[downloadExcelExport] Fallback a descarga binaria directa:", clientErr);
@@ -103,7 +202,7 @@ async function downloadExcelExport(url: string, fallbackFilename: string) {
         return "unauthorized" as const;
       }
 
-      if (res.status === 503 && attempt === 1) {
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt === 1) {
         await new Promise((r) => setTimeout(r, 1500));
         continue;
       }
@@ -187,6 +286,10 @@ export default function AdminLeadsPage() {
   const [exporting, setExporting] = useState<"selected" | "report" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isResumenModalOpen, setIsResumenModalOpen] = useState(false);
+  const requestSeqRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
+  const exportingRef = useRef<"selected" | "report" | null>(null);
+  exportingRef.current = exporting;
 
   const activeMonthLabel = useMemo(() => {
     if (!appliedMes) return null;
@@ -195,9 +298,19 @@ export default function AdminLeadsPage() {
   }, [appliedMes, monthOptions]);
 
   const load = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    else setRefreshing(true);
-    setError(null);
+    // Evitar que el polling en segundo plano compita con una descarga de Excel en curso
+    if (!showLoading && exportingRef.current !== null) {
+      return;
+    }
+
+    const seq = ++requestSeqRef.current;
+    if (showLoading) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setRefreshing(true);
+    }
+
     const params = new URLSearchParams();
     params.set("take", String(PAGE_SIZE));
     params.set("skip", String((page - 1) * PAGE_SIZE));
@@ -205,34 +318,75 @@ export default function AdminLeadsPage() {
     if (estado) params.set("estado", estado);
     if (appliedOrigen) params.set("origen", appliedOrigen);
     if (appliedMes) params.set("mes", appliedMes);
+
+    const requestUrl = `/api/admin/leads?${params.toString()}`;
+
     try {
-      const res = await fetch(`/api/admin/leads?${params.toString()}`, { cache: "no-store" });
+      let res: Response | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          res = await fetch(requestUrl, { cache: "no-store" });
+          if (res.status === 401 || res.ok) {
+            break;
+          }
+          if (attempt < 3 && (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504)) {
+            await new Promise((r) => setTimeout(r, 900 * attempt));
+            continue;
+          }
+          break;
+        } catch (fetchErr) {
+          if (attempt === 3) throw fetchErr;
+          await new Promise((r) => setTimeout(r, 900 * attempt));
+        }
+      }
+
+      if (seq !== requestSeqRef.current) return;
+
+      if (!res) {
+        if (showLoading || !hasLoadedOnceRef.current) {
+          setError("No se pudieron cargar las solicitudes");
+        }
+        return;
+      }
+
       if (res.status === 401) {
         setLoading(false);
         setRefreshing(false);
         router.replace("/admin");
         return;
       }
+
       if (!res.ok) {
-        setError("No se pudieron cargar las solicitudes");
-        setLoading(false);
-        setRefreshing(false);
+        if (showLoading || !hasLoadedOnceRef.current) {
+          setError("No se pudieron cargar las solicitudes");
+        }
         return;
       }
+
       const data = (await res.json()) as {
         leads: LeadRow[];
         total: number;
         estadoCounts?: Record<string, number>;
       };
+
+      if (seq !== requestSeqRef.current) return;
+
       setLeads(data.leads);
       setTotal(data.total);
       setEstadoCounts(data.estadoCounts ?? {});
+      setError(null);
+      hasLoadedOnceRef.current = true;
       setLastRefreshedAt(new Date());
     } catch {
-      setError("Error de conexión al cargar solicitudes");
+      if (seq !== requestSeqRef.current) return;
+      if (showLoading || !hasLoadedOnceRef.current) {
+        setError("Error de conexión al cargar solicitudes");
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (seq === requestSeqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [appliedQ, appliedOrigen, estado, appliedMes, page, router]);
 

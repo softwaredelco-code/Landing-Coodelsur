@@ -381,7 +381,11 @@ export function buildResumenExcelBuffer(data: ResumenInformeData): Uint8Array {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, ws, "Informe por Estado");
 
-  const raw = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+  const raw = XLSX.write(workbook, {
+    type: "array",
+    bookType: "xlsx",
+    compression: true,
+  });
   return new Uint8Array(raw);
 }
 

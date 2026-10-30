@@ -6,7 +6,11 @@ import {
 import { parseMonthRange } from "@/application/lead/fetch-leads-for-export";
 import { adminUnauthorizedResponse, isAdminRequest } from "@/infrastructure/auth/require-admin";
 import { prisma } from "@/infrastructure/database/prisma";
-import { isDbConnectionError, listLeadsFromFile } from "@/infrastructure/persistence/file-store";
+import {
+  isDbConnectionError,
+  isTransientDbError,
+  listLeadsFromFile,
+} from "@/infrastructure/persistence/file-store";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -43,14 +47,26 @@ export async function GET(request: Request) {
     let countsByEstado: Record<string, number> = {};
 
     try {
-      const groups = await prisma.lead.groupBy({
-        by: ["estado"],
-        where,
-        _count: { id: true },
-      });
+      let groups;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          groups = await prisma.lead.groupBy({
+            by: ["estado"],
+            where,
+            _count: { id: true },
+          });
+          break;
+        } catch (err) {
+          if (attempt === 1 && isTransientDbError(err)) {
+            await new Promise((r) => setTimeout(r, 400));
+            continue;
+          }
+          throw err;
+        }
+      }
 
       countsByEstado = Object.fromEntries(
-        groups.map((group) => [group.estado, group._count.id]),
+        (groups ?? []).map((group) => [group.estado, group._count.id]),
       );
     } catch (dbError) {
       if (!isDbConnectionError(dbError)) throw dbError;

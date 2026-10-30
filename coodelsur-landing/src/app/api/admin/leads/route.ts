@@ -4,17 +4,52 @@ import { isAdminRequest } from "@/infrastructure/auth/require-admin";
 import {
   getLeadFromFile,
   isDbConnectionError,
+  isTransientDbError,
   listLeadsFromFile,
-  updateLeadEstadoInFile,
   updateLeadInFile,
 } from "@/infrastructure/persistence/file-store";
 import { mapLeadListRow } from "@/domain/lead/lead-summary";
 import { parseMonthRange } from "@/application/lead/fetch-leads-for-export";
 import { triggerWitmePostbackForLead } from "@/application/tracking/witme-postback";
-import type { LeadEstado } from "@prisma/client";
 
-let cachedEstadoCounts: { counts: Record<string, number>; timestamp: number } | null = null;
-const CACHE_TTL_MS = 20_000;
+const estadoCountsCache = new Map<
+  string,
+  { counts: Record<string, number>; timestamp: number }
+>();
+const CACHE_TTL_MS = 15_000;
+
+function getEstadosForFilter(estado: string): string[] {
+  if (estado === "completo") return ["completo", "recibido"];
+  if (estado === "por_contactar") return ["por_contactar", "revisado", "contactado"];
+  if (estado === "rechazado_no_cumple") return ["rechazado_no_cumple", "descartado"];
+  return [estado];
+}
+
+function computeTotalFromCounts(
+  estadoCounts: Record<string, number>,
+  estado: string | null,
+): number {
+  if (!estado) {
+    return Object.values(estadoCounts).reduce((acc, curr) => acc + curr, 0);
+  }
+  const matchingEstados = getEstadosForFilter(estado);
+  return matchingEstados.reduce((acc, key) => acc + (estadoCounts[key] ?? 0), 0);
+}
+
+async function withDbRetry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === 1 && isTransientDbError(err)) {
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("DB retry exhausted");
+}
 
 export async function GET(request: Request) {
   if (!isAdminRequest(request)) {
@@ -25,27 +60,21 @@ export async function GET(request: Request) {
   const take = Math.min(Number(searchParams.get("take") ?? 50), 100);
   const skip = Math.max(Number(searchParams.get("skip") ?? 0), 0);
   const estado = searchParams.get("estado")?.trim() || null;
-  const tipo = searchParams.get("tipoCredito");
-  const origen = searchParams.get("origen")?.trim();
-  const q = searchParams.get("q")?.trim()?.toLowerCase();
+  const tipo = searchParams.get("tipoCredito")?.trim() || null;
+  const origen = searchParams.get("origen")?.trim() || null;
+  const q = searchParams.get("q")?.trim()?.toLowerCase() || null;
   const mes = searchParams.get("mes")?.trim() || null;
   const fechaCreacionRange = parseMonthRange(mes);
 
   try {
-    const estadoFilter = estado
-      ? estado === "completo"
-        ? { in: ["completo", "recibido"] as any }
-        : estado === "por_contactar"
-          ? { in: ["por_contactar", "revisado", "contactado"] as any }
-          : estado === "rechazado_no_cumple"
-            ? { in: ["rechazado_no_cumple", "descartado"] as any }
-            : (estado as any)
+    const allowedEstados = estado ? getEstadosForFilter(estado) : null;
+    const estadoFilter = allowedEstados
+      ? allowedEstados.length === 1
+        ? (allowedEstados[0] as any)
+        : ({ in: allowedEstados } as any)
       : undefined;
 
-    const hasFilters = Boolean(estadoFilter || tipo || origen || q || fechaCreacionRange);
-
-    const where = {
-      ...(estadoFilter ? { estado: estadoFilter } : {}),
+    const whereWithoutEstado = {
       ...(tipo ? { tipoCredito: tipo } : {}),
       ...(origen ? { origen } : {}),
       ...(fechaCreacionRange ? { fechaCreacion: fechaCreacionRange } : {}),
@@ -61,60 +90,62 @@ export async function GET(request: Request) {
         : {}),
     };
 
-    // Obtener estadoCounts usando caché en memoria
+    const where = {
+      ...whereWithoutEstado,
+      ...(estadoFilter ? { estado: estadoFilter } : {}),
+    };
+
+    const cacheKey = `${mes ?? ""}|${tipo ?? ""}|${origen ?? ""}|${q ?? ""}`;
     let estadoCounts: Record<string, number>;
     const now = Date.now();
-    if (cachedEstadoCounts && now - cachedEstadoCounts.timestamp < CACHE_TTL_MS) {
-      estadoCounts = cachedEstadoCounts.counts;
+    const cached = estadoCountsCache.get(cacheKey);
+
+    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+      estadoCounts = cached.counts;
     } else {
-      const estadoGroups = await prisma.lead.groupBy({
-        by: ["estado"],
-        _count: { id: true },
-      });
+      const estadoGroups = await withDbRetry(() =>
+        prisma.lead.groupBy({
+          by: ["estado"],
+          where: whereWithoutEstado,
+          _count: { id: true },
+        }),
+      );
       estadoCounts = Object.fromEntries(
         estadoGroups.map((row) => [row.estado, row._count.id]),
       );
-      cachedEstadoCounts = { counts: estadoCounts, timestamp: now };
+      if (estadoCountsCache.size > 30) {
+        estadoCountsCache.clear();
+      }
+      estadoCountsCache.set(cacheKey, { counts: estadoCounts, timestamp: now });
     }
 
-    const leadsQuery = prisma.lead.findMany({
-      where,
-      orderBy: [{ fechaActualizacion: "desc" }, { fechaCreacion: "desc" }],
-      take,
-      skip,
-      select: {
-        id: true,
-        tipoCredito: true,
-        nombre: true,
-        cedula: true,
-        telefono: true,
-        email: true,
-        origen: true,
-        estado: true,
-        aceptaTerminos: true,
-        ciudad: true,
-        fechaCreacion: true,
-        fechaActualizacion: true,
-        capitalSolicitado: true,
-        progresoFormulario: true,
-        pasoActualFormulario: true,
-      },
-    });
+    const leads = await withDbRetry(() =>
+      prisma.lead.findMany({
+        where,
+        orderBy: [{ fechaActualizacion: "desc" }, { fechaCreacion: "desc" }],
+        take,
+        skip,
+        select: {
+          id: true,
+          tipoCredito: true,
+          nombre: true,
+          cedula: true,
+          telefono: true,
+          email: true,
+          origen: true,
+          estado: true,
+          aceptaTerminos: true,
+          ciudad: true,
+          fechaCreacion: true,
+          fechaActualizacion: true,
+          capitalSolicitado: true,
+          progresoFormulario: true,
+          pasoActualFormulario: true,
+        },
+      }),
+    );
 
-    let leads;
-    let total: number;
-
-    if (hasFilters) {
-      const [fetchedLeads, count] = await Promise.all([
-        leadsQuery,
-        prisma.lead.count({ where }),
-      ]);
-      leads = fetchedLeads;
-      total = count;
-    } else {
-      leads = await leadsQuery;
-      total = Object.values(estadoCounts).reduce((acc, curr) => acc + curr, 0);
-    }
+    const total = computeTotalFromCounts(estadoCounts, estado);
 
     return NextResponse.json(
       {
@@ -132,10 +163,15 @@ export async function GET(request: Request) {
       },
     );
   } catch (error) {
-    if (!isDbConnectionError(error)) throw error;
+    if (!isDbConnectionError(error)) {
+      console.error("[GET /api/admin/leads]", error);
+      return NextResponse.json(
+        { error: "No se pudieron consultar las solicitudes en este momento" },
+        { status: 500 },
+      );
+    }
 
     let leads = listLeadsFromFile();
-    if (estado) leads = leads.filter((l) => l.estado === estado);
     if (tipo) leads = leads.filter((l) => l.tipoCredito === tipo);
     if (origen) leads = leads.filter((l) => l.origen === origen);
     if (fechaCreacionRange) {
@@ -153,11 +189,18 @@ export async function GET(request: Request) {
           (l.email ?? "").toLowerCase().includes(q),
       );
     }
-    const total = leads.length;
+
     const estadoCounts = leads.reduce<Record<string, number>>((acc, lead) => {
       acc[lead.estado] = (acc[lead.estado] ?? 0) + 1;
       return acc;
     }, {});
+
+    if (estado) {
+      const allowed = getEstadosForFilter(estado);
+      leads = leads.filter((l) => allowed.includes(l.estado));
+    }
+
+    const total = leads.length;
     return NextResponse.json({
       leads: leads.slice(skip, skip + take).map(mapLeadListRow),
       total,
@@ -228,7 +271,7 @@ export async function PATCH(request: Request) {
       where: { id: leadId },
       data: updateData as any,
     });
-    cachedEstadoCounts = null;
+    estadoCountsCache.clear();
 
     if (leadEstado === "desembolsado" && previousLead?.estado !== "desembolsado") {
       void triggerWitmePostbackForLead(leadId).catch((err) => {
@@ -264,7 +307,7 @@ export async function PATCH(request: Request) {
       if (!lead) {
         return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
       }
-      cachedEstadoCounts = null;
+      estadoCountsCache.clear();
 
       if (leadEstado === "desembolsado" && prevFileLead?.estado !== "desembolsado") {
         void triggerWitmePostbackForLead(leadId).catch((err) => {
@@ -277,4 +320,3 @@ export async function PATCH(request: Request) {
     throw error;
   }
 }
-
