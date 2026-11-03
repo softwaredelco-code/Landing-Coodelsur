@@ -1,27 +1,26 @@
 import { createLead } from "@/application/lead/create-lead";
 import { mapWitmePayload, type MappedWitmeLead } from "@/application/lead/map-witme-payload";
-import {
-  findRecentDuplicateCedula,
-  resolveClientDuplicateByProgress,
-} from "@/domain/lead/duplicate-cedula";
+import { resolveClientDuplicateByProgress } from "@/domain/lead/duplicate-cedula";
 import { calcularProgresoFormulario } from "@/domain/lead/form-progress";
 import { cleanupIncompleteDraftsForContact } from "@/application/lead/save-draft-lead";
-import { prisma } from "@/infrastructure/database/prisma";
 import { getClientIp } from "@/shared/utils";
 import type { TipoCredito } from "@/shared/types/credito";
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 
 /**
  * Webhook Witme → Coodelsur.
  *
- * Políticas estrictas:
- * 1. Únicamente se permite el ingreso de leads COMPLETOS a la base de datos.
- *    Si el lead viene incompleto, NO se persiste en PostgreSQL; se devuelve HTTP 422
- *    con los campos faltantes y la URL de redirección directa con datos precargados.
- * 2. Control riguroso de duplicados:
- *    - Por witme_id / id_externo: evita procesar múltiples veces la misma solicitud.
- *    - Por cédula: detecta si ya existe una solicitud activa en los últimos 30 días.
- *    - Por teléfono y cédula: evita envíos redundantes o repetidos en 24 horas.
+ * Políticas:
+ * 1. Si el lead recibido de Witme viene con datos parciales (pre-calificación),
+ *    NO se guarda un registro incompleto en PostgreSQL, pero se responde HTTP 200
+ *    (`success: true`, `status: "created"`, `redirect_url`) para que Witme redirija
+ *    al usuario al formulario con sus datos precargados y `witme_id` asignado.
+ *    El lead ingresa a la base de datos únicamente cuando el cliente completa el formulario.
+ * 2. Control riguroso de duplicados (HTTP 409 + `status: "duplicate"`):
+ *    - Se conserva un único registro por cliente (el de mayor porcentaje completado).
+ *    - Si ya existe una solicitud con mayor o igual porcentaje en los últimos 30 días,
+ *      se rechaza con HTTP 409 y `status: "duplicate"`.
  *
  * Auth: Authorization: Bearer <WITME_API_KEY>
  */
@@ -76,6 +75,11 @@ function buildWitmeRedirectUrl(
   if (leadId) {
     params.set("draftLeadId", leadId);
     params.set("leadId", leadId);
+  }
+
+  // Preservar witme_id para trazabilidad y postback de conversión al finalizar el formulario
+  if (mapped.witmeLeadId) {
+    params.set("witme_id", mapped.witmeLeadId);
   }
 
   // Datos básicos del solicitante
@@ -288,22 +292,28 @@ export async function POST(request: Request) {
     }
 
     // =========================================================================
-    // 3. REGLA: ÚNICAMENTE LEADS COMPLETOS INGRESAN A LA BASE DE DATOS
+    // 3. SI EL LEAD VIENE CON DATOS PARCIALES DE PRE-CALIFICACIÓN:
+    //    - NO se guarda como incompleto en PostgreSQL (evita basura en el panel).
+    //    - Se responde HTTP 200 (success: true) con redirect_url para que Witme
+    //      redirija al usuario al formulario y el lead se guarde al completarse.
     // =========================================================================
     if (!completeness.complete) {
+      const trackingId = mapped.witmeLeadId || randomUUID();
       return NextResponse.json(
         {
-          status: "incomplete",
-          success: false,
-          error: "Lead incompleto no permitido",
-          message:
-            "No se permite el ingreso de leads incompletos por parte de la API de Witme. Únicamente se admiten solicitudes completas.",
-          camposFaltantes: completeness.missingFields,
+          status: "created",
+          success: true,
+          id: trackingId,
+          leadId: trackingId,
+          estado: "redirect_pending",
+          origen: "witme",
           redirect_url: redirectUrl,
           redirectUrl: redirectUrl,
           incomingProgreso,
+          message:
+            "Datos de pre-calificación validados. Redirigir al usuario a redirect_url para finalizar y registrar su solicitud completa.",
         },
-        { status: 422 },
+        { status: 200 },
       );
     }
 
@@ -362,44 +372,22 @@ export async function GET(request: Request) {
     url: `${origin}/api/leads/witme`,
     auth: "Authorization: Bearer <WITME_API_KEY>",
     policy: {
-      incompletePolicy: "REJECT (Solo se admiten leads completos en base de datos. Leads incompletos reciben 422 con redirect_url)",
-      duplicatePolicy: "HTTP 409 { status: 'duplicate' } (Comparación por porcentaje de completitud: se mantiene un único registro por cliente con el mayor porcentaje completado y se eliminan duplicados inferiores)",
+      incompletePolicy:
+        "REDIRECT_ONLY (Datos parciales responden HTTP 200 con success: true y redirect_url sin guardar borrador incompleto en BD; la solicitud se guarda en BD al completarse en el formulario)",
+      duplicatePolicy:
+        "HTTP 409 { status: 'duplicate' } (Comparación por porcentaje de completitud: se mantiene un único registro por cliente con el mayor porcentaje completado y se eliminan duplicados inferiores)",
     },
-    requiredFields: [
-      "nombre (completo)",
-      "cedula|documento",
-      "telefono|celular",
+    requiredFields: ["nombre", "cedula|documento", "telefono|celular"],
+    optionalFields: [
       "email|correo",
       "tipo_credito|tipoCredito",
       "capital_solicitado|monto",
       "cantidad_cuotas|cuotas",
-      "destino_credito",
-      "tipo_identificacion",
-      "fecha_nacimiento",
-      "fecha_expedicion",
-      "genero",
-      "estado_civil",
-      "departamento",
-      "municipio|ciudad",
-      "direccion",
-      "barrio",
-      "estrato",
-      "ingresos_mensuales",
-      "tipo_cuenta",
-      "entidad_bancaria",
-      "numero_cuenta",
-      "mora_vigente (si/no)",
-      "referencia_familiar_nombre",
-      "referencia_familiar_telefono",
-      "acepta_terminos (true)",
-    ],
-    optionalFields: [
-      "witme_id (ID único de Witme para deduplicación estricta)",
+      "witme_id (ID único de Witme para deduplicación y postback)",
       "utm_source",
       "utm_campaign",
       "utm_medium",
     ],
-    redirectUrlFormat: `${origin}/credito/microcredito_small?nombre={NOMBRE}&cedula={CEDULA}&telefono={TELEFONO}&email={EMAIL}&monto={MONTO}&utm_source=witme&utm_medium=api_redirect&ref=witme`,
+    redirectUrlFormat: `${origin}/credito/microcredito_small?witme_id={WITME_ID}&nombre={NOMBRE}&cedula={CEDULA}&telefono={TELEFONO}&email={EMAIL}&monto={MONTO}&utm_source=witme&utm_medium=api_redirect&ref=witme`,
   });
 }
-
