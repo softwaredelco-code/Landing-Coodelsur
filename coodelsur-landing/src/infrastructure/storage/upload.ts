@@ -241,7 +241,11 @@ async function persistAttachment(
     };
   }
 
-  const uploaded = await uploadBase64File(dataUrl, `${field}-${fileName}`, mimeType);
+  let uploaded = await uploadBase64File(dataUrl, `${field}-${fileName}`, mimeType);
+  if (!uploaded) {
+    await new Promise((r) => setTimeout(r, 800));
+    uploaded = await uploadBase64File(dataUrl, `${field}-${fileName}`, mimeType);
+  }
 
   if (uploaded) {
     return {
@@ -254,9 +258,9 @@ async function persistAttachment(
     };
   }
 
-  // Sin Storage o upload fallido: conservar preview para archivos livianos (< 1MB)
-  // Para archivos mayores a 1MB (videos sin Storage), evitar colapsar la columna JSON de PostgreSQL
-  const isTooHeavyForInline = size > 1_000_000;
+  // Sin Storage o upload fallido: conservar preview solo para archivos muy livianos (< 80KB, ej. firma comprimida)
+  // Para videos o fotos pesadas, evitar colapsar la columna JSON de PostgreSQL y los workers de cPanel
+  const isTooHeavyForInline = size > 80_000 || mimeType.startsWith("video/");
   return {
     fileName,
     mimeType,
