@@ -14,6 +14,7 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
+      ".prisma/client/default": ["./node_modules/.prisma/client/index.d.ts"],
       "@/*": ["./src/*"],
       "@/domain/*": ["./src/domain/*"],
       "@/application/*": ["./src/application/*"],

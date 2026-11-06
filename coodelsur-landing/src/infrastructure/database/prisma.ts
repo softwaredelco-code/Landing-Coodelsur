@@ -58,18 +58,45 @@ export interface UsuarioDelegate {
   delete(args: any): Promise<UsuarioDb>;
 }
 
-export type AppPrismaClient = Omit<PrismaClient, "usuario"> & {
+export interface LeadDelegateFallback {
+  count(args?: any): Promise<number>;
+  groupBy(args: any): Promise<Array<{ estado: string; _count: { id: number } }>>;
+  findUnique(args: any): Promise<any>;
+  findFirst(args?: any): Promise<any>;
+  findMany(args?: any): Promise<any[]>;
+  create(args: any): Promise<any>;
+  update(args: any): Promise<any>;
+  delete(args: any): Promise<any>;
+  deleteMany(args?: any): Promise<{ count: number }>;
+}
+
+export interface CreditoParametrosDelegateFallback {
+  findUnique(args: any): Promise<any>;
+  findMany(args?: any): Promise<any[]>;
+  upsert(args: any): Promise<any>;
+  deleteMany(args?: any): Promise<{ count: number }>;
+}
+
+export type AppPrismaClient = PrismaClient & {
+  lead: LeadDelegateFallback;
+  creditoParametros: CreditoParametrosDelegateFallback;
   usuario: UsuarioDelegate;
+  $queryRaw(strings: TemplateStringsArray, ...values: any[]): Promise<any>;
+  $executeRawUnsafe(query: string, ...values: any[]): Promise<any>;
 };
 
 const globalForPrisma = globalThis as unknown as {
   prisma: AppPrismaClient | undefined;
 };
 
+const PrismaClientCtor = PrismaClient as unknown as new (options?: {
+  log?: Array<"error" | "warn" | "info" | "query">;
+}) => AppPrismaClient;
+
 export const prisma: AppPrismaClient =
-  (globalForPrisma.prisma ??
-    new PrismaClient({
-      log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
-    })) as unknown as AppPrismaClient;
+  globalForPrisma.prisma ??
+  new PrismaClientCtor({
+    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+  });
 
 globalForPrisma.prisma = prisma;
