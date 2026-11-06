@@ -60,7 +60,11 @@ model Lead {
   @@index([origen])
   @@index([estado])
   @@index([cedula])
+  @@index([telefono])
   @@index([fechaCreacion])
+  @@index([fechaActualizacion(sort: Desc)])
+  @@index([estado, fechaActualizacion(sort: Desc)])
+  @@index([fechaCreacion, estado])
   @@index([utmSource])
 }
 

@@ -288,6 +288,8 @@ export default function AdminLeadsPage() {
   const [isResumenModalOpen, setIsResumenModalOpen] = useState(false);
   const requestSeqRef = useRef(0);
   const hasLoadedOnceRef = useRef(false);
+  const inFlightRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const exportingRef = useRef<"selected" | "report" | null>(null);
   exportingRef.current = exporting;
 
@@ -298,10 +300,18 @@ export default function AdminLeadsPage() {
   }, [appliedMes, monthOptions]);
 
   const load = useCallback(async (showLoading = true) => {
-    // Evitar que el polling en segundo plano compita con una descarga de Excel en curso
-    if (!showLoading && exportingRef.current !== null) {
+    // Evitar solapar peticiones de polling en segundo plano o durante una exportación de Excel
+    if (!showLoading && (exportingRef.current !== null || inFlightRef.current)) {
       return;
     }
+
+    if (showLoading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    inFlightRef.current = true;
 
     const seq = ++requestSeqRef.current;
     if (showLoading) {
@@ -320,22 +330,32 @@ export default function AdminLeadsPage() {
     if (appliedMes) params.set("mes", appliedMes);
 
     const requestUrl = `/api/admin/leads?${params.toString()}`;
+    const maxAttempts = showLoading ? 2 : 1;
 
     try {
       let res: Response | null = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const timeoutId = setTimeout(() => controller.abort(), 12_000);
         try {
-          res = await fetch(requestUrl, { cache: "no-store" });
+          res = await fetch(requestUrl, {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
           if (res.status === 401 || res.ok) {
             break;
           }
-          if (attempt < 3 && (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504)) {
+          if (
+            attempt < maxAttempts &&
+            (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504)
+          ) {
             await new Promise((r) => setTimeout(r, 900 * attempt));
             continue;
           }
           break;
         } catch (fetchErr) {
-          if (attempt === 3) throw fetchErr;
+          clearTimeout(timeoutId);
+          if (controller.signal.aborted || attempt === maxAttempts) throw fetchErr;
           await new Promise((r) => setTimeout(r, 900 * attempt));
         }
       }
@@ -352,7 +372,7 @@ export default function AdminLeadsPage() {
       if (res.status === 401) {
         setLoading(false);
         setRefreshing(false);
-        router.replace("/admin");
+        window.location.href = "/admin";
         return;
       }
 
@@ -384,21 +404,25 @@ export default function AdminLeadsPage() {
       }
     } finally {
       if (seq === requestSeqRef.current) {
+        inFlightRef.current = false;
         setLoading(false);
         setRefreshing(false);
       }
     }
-  }, [appliedQ, appliedOrigen, estado, appliedMes, page, router]);
+  }, [appliedQ, appliedOrigen, estado, appliedMes, page]);
 
   useEffect(() => {
     void load(true);
-    // Polling en tiempo real cada 12 segundos para mostrar solicitudes de inmediato sin recargar
+    // Polling controlado cada 30 segundos sin solapar peticiones pendientes
     const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && !inFlightRef.current) {
         void load(false);
       }
-    }, 12_000);
-    return () => clearInterval(interval);
+    }, 30_000);
+    return () => {
+      clearInterval(interval);
+      abortControllerRef.current?.abort();
+    };
   }, [load]);
 
   const applyFilters = () => {

@@ -16,7 +16,9 @@ const estadoCountsCache = new Map<
   string,
   { counts: Record<string, number>; timestamp: number }
 >();
-const CACHE_TTL_MS = 15_000;
+const inFlightEstadoCounts = new Map<string, Promise<Record<string, number>>>();
+const CACHE_TTL_MS = 30_000;
+const DB_QUERY_TIMEOUT_MS = 10_000;
 
 function getEstadosForFilter(estado: string): string[] {
   if (estado === "completo") return ["completo", "recibido"];
@@ -36,13 +38,31 @@ function computeTotalFromCounts(
   return matchingEstados.reduce((acc, key) => acc + (estadoCounts[key] ?? 0), 0);
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Database query timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise.then(
+      (val) => {
+        clearTimeout(timer);
+        resolve(val);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 async function withDbRetry<T>(fn: () => Promise<T>): Promise<T> {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      return await fn();
+      return await withTimeout(fn(), DB_QUERY_TIMEOUT_MS);
     } catch (err) {
       if (attempt === 1 && isTransientDbError(err)) {
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, 350));
         continue;
       }
       throw err;
@@ -103,20 +123,30 @@ export async function GET(request: Request) {
     if (cached && now - cached.timestamp < CACHE_TTL_MS) {
       estadoCounts = cached.counts;
     } else {
-      const estadoGroups = await withDbRetry(() =>
-        prisma.lead.groupBy({
-          by: ["estado"],
-          where: whereWithoutEstado,
-          _count: { id: true },
-        }),
-      );
-      estadoCounts = Object.fromEntries(
-        estadoGroups.map((row) => [row.estado, row._count.id]),
-      );
-      if (estadoCountsCache.size > 30) {
-        estadoCountsCache.clear();
+      let pending = inFlightEstadoCounts.get(cacheKey);
+      if (!pending) {
+        pending = (async () => {
+          const estadoGroups = await withDbRetry(() =>
+            prisma.lead.groupBy({
+              by: ["estado"],
+              where: whereWithoutEstado,
+              _count: { id: true },
+            }),
+          );
+          const counts = Object.fromEntries(
+            estadoGroups.map((row) => [row.estado, row._count.id]),
+          );
+          if (estadoCountsCache.size > 30) {
+            estadoCountsCache.clear();
+          }
+          estadoCountsCache.set(cacheKey, { counts, timestamp: Date.now() });
+          return counts;
+        })().finally(() => {
+          inFlightEstadoCounts.delete(cacheKey);
+        });
+        inFlightEstadoCounts.set(cacheKey, pending);
       }
-      estadoCountsCache.set(cacheKey, { counts: estadoCounts, timestamp: now });
+      estadoCounts = await pending;
     }
 
     const leads = await withDbRetry(() =>

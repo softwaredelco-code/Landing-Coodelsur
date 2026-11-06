@@ -84,27 +84,45 @@ export default function UsuariosPage() {
 
   // Cargar usuario actual
   useEffect(() => {
-    fetch("/api/admin/login", { cache: "no-store" })
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12_000);
+    fetch("/api/admin/login", { cache: "no-store", signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.authenticated && data?.user) {
           setCurrentUser(data.user);
         } else {
-          router.replace("/admin");
+          window.location.href = "/admin";
         }
       })
-      .catch(() => router.replace("/admin"))
-      .finally(() => setAuthLoading(false));
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          window.location.href = "/admin";
+        }
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        setAuthLoading(false);
+      });
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [router]);
 
   // Cargar lista de usuarios
   const loadUsuarios = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12_000);
     try {
-      const res = await fetch("/api/admin/usuarios", { cache: "no-store" });
+      const res = await fetch("/api/admin/usuarios", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       if (res.status === 401) {
-        router.replace("/admin");
+        window.location.href = "/admin";
         return;
       }
       if (res.status === 403) {
@@ -119,9 +137,10 @@ export default function UsuariosPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error de conexión");
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     if (currentUser?.rol === "sistemas") {

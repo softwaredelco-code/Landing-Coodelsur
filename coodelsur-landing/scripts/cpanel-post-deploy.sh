@@ -90,21 +90,12 @@ EOF
       echo ">> Reglas de HTTPS y LimitRequestBody agregadas en $ht_dir/.htaccess"
     fi
 
-    if ! grep -q "noconntimeout" "$ht_dir/.htaccess"; then
-      cat << 'EOF' >> "$ht_dir/.htaccess"
-
-# Coodelsur: Prevenir timeouts 503 en LiteSpeed para exportaciones y peticiones pesadas
-<IfModule Litespeed>
-  RewriteEngine On
-  RewriteRule .* - [E=noconntimeout:1]
-  RewriteRule .* - [E=noabort:1]
-</IfModule>
-<IfModule mod_env.c>
-  SetEnv noabort 1
-  SetEnv noconntimeout 1
-</IfModule>
-EOF
-      echo ">> Reglas LiteSpeed noconntimeout agregadas en $ht_dir/.htaccess"
+    # Eliminar cualquier regla previa de noconntimeout/noabort global que dejaba conexiones zombie abiertas por 500+ segundos
+    if grep -q "noconntimeout\|noabort" "$ht_dir/.htaccess" 2>/dev/null; then
+      sed -i '/Prevenir timeouts 503 en LiteSpeed/d' "$ht_dir/.htaccess" 2>/dev/null || true
+      sed -i '/noconntimeout/d' "$ht_dir/.htaccess" 2>/dev/null || true
+      sed -i '/noabort/d' "$ht_dir/.htaccess" 2>/dev/null || true
+      echo ">> Reglas globales noconntimeout/noabort eliminadas de $ht_dir/.htaccess"
     fi
   fi
 done
