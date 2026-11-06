@@ -103,7 +103,7 @@ export async function uploadBase64File(
         "Content-Type": contentType,
         "x-upsert": "true",
       }),
-      body: new Uint8Array(buffer),
+      body: new Uint8Array(buffer) as unknown as BodyInit,
       signal: AbortSignal.timeout(STORAGE_UPLOAD_TIMEOUT_MS),
     });
 
