@@ -74,6 +74,8 @@ export async function POST(request: Request) {
     const leadIdsRaw = formData.get("leadIds") as string | null;
     const apiKey = (formData.get("apiKey") as string | null) || undefined;
     const pdfPassword = (formData.get("pdfPassword") as string | null) || undefined;
+    const mode = (formData.get("mode") as string | null) || undefined;
+    const extractedPdfsJson = (formData.get("extractedPdfsJson") as string | null) || undefined;
     const isStream = formData.get("stream") !== "false";
 
     // Recoger todos los archivos PDF enviados
@@ -85,7 +87,45 @@ export async function POST(request: Request) {
       }
     }
 
-    if (pdfFiles.length === 0) {
+    // Modo extracción individual por archivo (óptimo para cPanel: procesa 1 PDF por petición JSON sin SSE buffering ni saturar 512MB RAM)
+    if (mode === "extract-single") {
+      if (pdfFiles.length === 0) {
+        return NextResponse.json(
+          { error: "No se adjuntó archivo PDF válido para analizar." },
+          { status: 400 },
+        );
+      }
+      const pdf = pdfFiles[0];
+      const bytes = new Uint8Array(await pdf.arrayBuffer());
+      const extracted = await extractDataCreditoFromPdf(bytes, pdf.name, {
+        openaiApiKey: apiKey,
+        pdfPassword,
+      });
+      return NextResponse.json({
+        extracted,
+        filename: pdf.name,
+      });
+    }
+
+    let preExtractedPdfs: Array<{ extracted: DataCreditoExtracted; filename: string }> | null = null;
+    if (extractedPdfsJson) {
+      try {
+        const parsed = JSON.parse(extractedPdfsJson) as Array<{
+          extracted: DataCreditoExtracted;
+          filename: string;
+        }>;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          preExtractedPdfs = parsed;
+        }
+      } catch {
+        return NextResponse.json(
+          { error: "Datos de extracción previa inválidos." },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (!preExtractedPdfs && pdfFiles.length === 0) {
       return NextResponse.json(
         { error: "No se adjuntaron archivos PDF de DataCrédito válidos." },
         { status: 400 },
@@ -134,17 +174,20 @@ export async function POST(request: Request) {
       excelBuffer = buildCoodelsurTemplateExcelBuffer(targetLeads);
     }
 
-    // Si no se pide stream, procesar sincrónicamente
-    if (!isStream) {
-      const extractedPdfs: Array<{ extracted: DataCreditoExtracted; filename: string }> = [];
+    // Si ya vienen los PDFs pre-extraídos (cruce rápido JSON) o si no se pide stream
+    if (preExtractedPdfs || !isStream) {
+      const extractedPdfs: Array<{ extracted: DataCreditoExtracted; filename: string }> =
+        preExtractedPdfs ? [...preExtractedPdfs] : [];
 
-      for (const pdf of pdfFiles) {
-        const bytes = new Uint8Array(await pdf.arrayBuffer());
-        const extracted = await extractDataCreditoFromPdf(bytes, pdf.name, {
-          openaiApiKey: apiKey,
-          pdfPassword,
-        });
-        extractedPdfs.push({ extracted, filename: pdf.name });
+      if (!preExtractedPdfs) {
+        for (const pdf of pdfFiles) {
+          const bytes = new Uint8Array(await pdf.arrayBuffer());
+          const extracted = await extractDataCreditoFromPdf(bytes, pdf.name, {
+            openaiApiKey: apiKey,
+            pdfPassword,
+          });
+          extractedPdfs.push({ extracted, filename: pdf.name });
+        }
       }
 
       const cruce = processCruceData(excelBuffer, extractedPdfs);

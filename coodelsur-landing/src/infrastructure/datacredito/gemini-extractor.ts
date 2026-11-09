@@ -8,6 +8,23 @@ import { DataCreditoExtracted } from "@/domain/datacredito/types";
 import jpeg from "jpeg-js";
 import { extractImages, extractText, getDocumentProxy } from "unpdf";
 
+/**
+ * En Node.js, `DecompressionStream("deflate")` dentro de `pdfjs-dist` (usado por `unpdf`)
+ * provoca dos fallos críticos al extraer imágenes FlateDecode de PDFs:
+ * 1) Lanza una promesa rechazada no manejada (`ERR_TRAILING_JUNK_AFTER_STREAM_END` / `Z_DATA_ERROR`)
+ *    en `writer.write()` que tumba el proceso Node.js completo (causando 503 en cPanel).
+ * 2) Hace que `page.objs.get(imageKey)` sea asíncrono y falle con `Requesting object that isn't resolved yet`.
+ * Al desactivar `globalThis.DecompressionStream`, `pdfjs` usa automáticamente su decodificador
+ * `FlateStream` síncrono en JavaScript puro (`this.getBytes()`), que es 100% estable en Node.js.
+ */
+if (typeof globalThis.DecompressionStream !== "undefined") {
+  try {
+    delete (globalThis as Record<string, unknown>).DecompressionStream;
+  } catch {
+    (globalThis as Record<string, unknown>).DecompressionStream = undefined;
+  }
+}
+
 /** Extrae posibles contraseñas a partir del nombre del archivo (cédula con o sin ceros iniciales) */
 export function extractCandidatePasswords(filename: string): string[] {
   const clean = filename.replace(/\.[^/.]+$/, "");
@@ -25,12 +42,12 @@ export function extractCandidatePasswords(filename: string): string[] {
 
 /**
  * Extrae las imágenes rasterizadas de las páginas del PDF (para documentos escaneados o sin capa de texto).
- * Convierte a JPEG codificado en Base64 usando jpeg-js (100% JavaScript, sin dependencias nativas).
+ * Redimensiona a máx 1200px para proteger el límite de 512MB RAM en cPanel y convierte a JPEG en Base64.
  */
 export async function extractPdfImagesAsJpegs(
   buffer: Uint8Array,
   filename: string,
-  maxPages = 4,
+  maxPages = 3,
   userPassword?: string,
 ): Promise<string[]> {
   const candidates = extractCandidatePasswords(filename);
@@ -56,41 +73,76 @@ export async function extractPdfImagesAsJpegs(
     }
   }
 
-  const pagesToExtract = Math.min(doc.numPages, maxPages);
   const jpegsBase64: string[] = [];
+  const MAX_DIMENSION = 1200;
 
-  for (let pageNum = 1; pageNum <= pagesToExtract; pageNum++) {
-    try {
-      const rawImages = await extractImages(doc, pageNum);
-      if (rawImages && rawImages.length > 0) {
-        const img = rawImages[0];
-        const numPixels = img.width * img.height;
-        const rgba = Buffer.alloc(numPixels * 4);
+  try {
+    const pagesToExtract = Math.min(doc.numPages, maxPages);
 
-        if (img.channels === 3) {
-          for (let i = 0; i < numPixels; i++) {
-            rgba[i * 4] = img.data[i * 3];
-            rgba[i * 4 + 1] = img.data[i * 3 + 1];
-            rgba[i * 4 + 2] = img.data[i * 3 + 2];
-            rgba[i * 4 + 3] = 255;
+    for (let pageNum = 1; pageNum <= pagesToExtract; pageNum++) {
+      try {
+        const rawImages = await extractImages(doc, pageNum);
+        if (rawImages && rawImages.length > 0) {
+          // Seleccionar la imagen de mayor área en la página (evita tomar logos pequeños del encabezado)
+          const img = rawImages.reduce((best, cur) =>
+            cur.width * cur.height > best.width * best.height ? cur : best,
+          rawImages[0]);
+
+          const srcW = img.width;
+          const srcH = img.height;
+          const scale = Math.min(1, MAX_DIMENSION / Math.max(srcW, srcH, 1));
+          const dstW = Math.max(1, Math.round(srcW * scale));
+          const dstH = Math.max(1, Math.round(srcH * scale));
+          const rgba = Buffer.allocUnsafe(dstW * dstH * 4);
+
+          const srcData = img.data;
+          const channels = img.channels;
+
+          for (let y = 0; y < dstH; y++) {
+            const srcY = Math.min(srcH - 1, Math.floor(y / scale));
+            const srcRowOffset = srcY * srcW;
+            const dstRowOffset = y * dstW;
+
+            for (let x = 0; x < dstW; x++) {
+              const srcX = Math.min(srcW - 1, Math.floor(x / scale));
+              const srcPixel = srcRowOffset + srcX;
+              const dstIdx = (dstRowOffset + x) * 4;
+
+              if (channels === 3) {
+                const sIdx = srcPixel * 3;
+                rgba[dstIdx] = srcData[sIdx];
+                rgba[dstIdx + 1] = srcData[sIdx + 1];
+                rgba[dstIdx + 2] = srcData[sIdx + 2];
+                rgba[dstIdx + 3] = 255;
+              } else if (channels === 4) {
+                const sIdx = srcPixel * 4;
+                rgba[dstIdx] = srcData[sIdx];
+                rgba[dstIdx + 1] = srcData[sIdx + 1];
+                rgba[dstIdx + 2] = srcData[sIdx + 2];
+                rgba[dstIdx + 3] = srcData[sIdx + 3];
+              } else {
+                const g = srcData[srcPixel];
+                rgba[dstIdx] = g;
+                rgba[dstIdx + 1] = g;
+                rgba[dstIdx + 2] = g;
+                rgba[dstIdx + 3] = 255;
+              }
+            }
           }
-        } else if (img.channels === 4) {
-          rgba.set(img.data);
-        } else if (img.channels === 1) {
-          for (let i = 0; i < numPixels; i++) {
-            const g = img.data[i];
-            rgba[i * 4] = g;
-            rgba[i * 4 + 1] = g;
-            rgba[i * 4 + 2] = g;
-            rgba[i * 4 + 3] = 255;
-          }
+
+          const jpegData = jpeg.encode({ data: rgba, width: dstW, height: dstH }, 75);
+          jpegsBase64.push(jpegData.data.toString("base64"));
         }
-
-        const jpegData = jpeg.encode({ data: rgba, width: img.width, height: img.height }, 80);
-        jpegsBase64.push(jpegData.data.toString("base64"));
+      } catch (err) {
+        console.warn(`[extractPdfImagesAsJpegs] Advertencia extrayendo imagen página ${pageNum}:`, err);
       }
-    } catch (err) {
-      console.warn(`[extractPdfImagesAsJpegs] Advertencia extrayendo imagen página ${pageNum}:`, err);
+    }
+  } finally {
+    try {
+      await doc.cleanup();
+      await doc.destroy();
+    } catch {
+      // ignore cleanup errors
     }
   }
 
@@ -113,27 +165,47 @@ export async function extractPdfText(
   let lastError: unknown = null;
 
   for (const pwd of candidates) {
+    let doc: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
     try {
-      const doc = await getDocumentProxy(buffer.slice(), pwd ? { password: pwd } : undefined);
+      doc = await getDocumentProxy(buffer.slice(), pwd ? { password: pwd } : undefined);
       const res = await extractText(doc, { mergePages: true });
       const text = typeof res.text === "string" ? res.text : String(res.text || "");
       return { text: text.trim(), unlockedPassword: pwd || undefined };
     } catch (err) {
       lastError = err;
       // Continuar con la siguiente contraseña candidata
+    } finally {
+      if (doc) {
+        try {
+          await doc.cleanup();
+          await doc.destroy();
+        } catch {
+          // ignore cleanup errors
+        }
+      }
     }
   }
 
   // Intento final directo
+  let fallbackDoc: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
   try {
-    const doc = await getDocumentProxy(buffer.slice());
-    const res = await extractText(doc, { mergePages: true });
+    fallbackDoc = await getDocumentProxy(buffer.slice());
+    const res = await extractText(fallbackDoc, { mergePages: true });
     const text = typeof res.text === "string" ? res.text : String(res.text || "");
     return { text: text.trim() };
   } catch {
     throw new Error(
       `No fue posible abrir el PDF "${filename}". Verifique si está protegido con contraseña. (${(lastError as Error)?.message || "Error al desencriptar"})`,
     );
+  } finally {
+    if (fallbackDoc) {
+      try {
+        await fallbackDoc.cleanup();
+        await fallbackDoc.destroy();
+      } catch {
+        // ignore cleanup errors
+      }
+    }
   }
 }
 
@@ -310,7 +382,7 @@ async function callOpenAI(
 
   // Si no hay texto (PDF escaneado o imagen), extraer páginas como imágenes y usar GPT-4o-mini Visión
   onProgress?.("PDF escaneado. Extrayendo imágenes para OpenAI Visión...");
-  const imagesBase64 = await extractPdfImagesAsJpegs(buffer, filename, 4, pdfPassword);
+  const imagesBase64 = await extractPdfImagesAsJpegs(buffer, filename, 3, pdfPassword);
   if (imagesBase64.length === 0) {
     throw new Error(`El PDF "${filename}" no contiene texto seleccionable ni imágenes legibles.`);
   }
@@ -499,14 +571,15 @@ export async function extractDataCreditoFromPdf(
   },
 ): Promise<DataCreditoExtracted> {
   options?.onProgress?.("Desencriptando y leyendo páginas del PDF...");
-  const { text } = await extractPdfText(buffer.slice(), filename, options?.pdfPassword);
+  const { text, unlockedPassword } = await extractPdfText(buffer.slice(), filename, options?.pdfPassword);
+  const resolvedPassword = unlockedPassword || options?.pdfPassword;
 
   const openAiKey = options?.openaiApiKey?.trim() || process.env.OPENAI_API_KEY?.trim();
 
   if (openAiKey) {
     try {
       options?.onProgress?.(`Texto extraído (${text.length} caracteres). Consultando OpenAI...`);
-      return await callOpenAI(text, buffer.slice(), openAiKey, filename, options?.pdfPassword, options?.onProgress);
+      return await callOpenAI(text, buffer.slice(), openAiKey, filename, resolvedPassword, options?.onProgress);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[extractDataCreditoFromPdf] OpenAI fallo para ${filename}:`, msg);

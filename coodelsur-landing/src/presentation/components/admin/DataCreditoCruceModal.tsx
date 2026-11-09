@@ -5,7 +5,7 @@ import {
   CruceItemResult,
   CruceKPIs,
   CruceLogEvent,
-  CruceStreamMessage,
+  DataCreditoExtracted,
   formatMoney,
 } from "@/domain/datacredito/types";
 import { Button } from "@/presentation/components/ui/Button";
@@ -335,7 +335,8 @@ export function DataCreditoCruceModal({
     }
   };
 
-  // Ejecución del cruce con Server-Sent Events (SSE)
+  // Ejecución del cruce por pasos JSON (1 petición por PDF + 1 petición final de cruce)
+  // Evita buffering de SSE y límites de memoria/tiempo (503) en LiteSpeed/Passenger de cPanel
   const handleStartCruce = async () => {
     if (sourceMode === "excel" && !excelFile) {
       setErrorMsg("Debe seleccionar un archivo Excel de solicitudes (.xlsx o .xls).");
@@ -350,28 +351,6 @@ export function DataCreditoCruceModal({
     setProgressPercent(5);
     setLogs([]);
     setErrorMsg(null);
-
-    const formData = new FormData();
-    if (sourceMode === "excel" && excelFile) {
-      formData.append("excel", excelFile);
-    } else {
-      if (selectedPersonIds.length > 0) {
-        formData.append("leadIds", selectedPersonIds.join(","));
-      } else {
-        formData.append("allLeads", "true");
-      }
-    }
-
-    for (const pdf of pdfFiles) {
-      formData.append("pdfs", pdf);
-    }
-    if (openaiApiKey.trim()) {
-      formData.append("apiKey", openaiApiKey.trim());
-    }
-    if (pdfPassword.trim()) {
-      formData.append("pdfPassword", pdfPassword.trim());
-    }
-    formData.append("stream", "true");
 
     const addLog = (message: string, type: CruceLogEvent["type"] = "info") => {
       const now = new Date().toLocaleTimeString("es-CO");
@@ -392,80 +371,136 @@ export function DataCreditoCruceModal({
     }
 
     try {
+      const extractedPdfs: Array<{ extracted: DataCreditoExtracted; filename: string }> = [];
+
+      for (let i = 0; i < pdfFiles.length; i++) {
+        const pdf = pdfFiles[i];
+        const currentIdx = i + 1;
+        const pct = Math.max(10, Math.round((currentIdx / (pdfFiles.length + 1)) * 85));
+        setProgressPercent(pct);
+        setCurrentFileMsg(`Analizando [${currentIdx}/${pdfFiles.length}]: ${pdf.name}...`);
+        addLog(`Analizando [${currentIdx}/${pdfFiles.length}]: ${pdf.name}...`, "info");
+
+        const singleForm = new FormData();
+        singleForm.append("mode", "extract-single");
+        singleForm.append("pdfs", pdf);
+        if (openaiApiKey.trim()) {
+          singleForm.append("apiKey", openaiApiKey.trim());
+        }
+        if (pdfPassword.trim()) {
+          singleForm.append("pdfPassword", pdfPassword.trim());
+        }
+
+        try {
+          const singleRes = await fetch("/api/admin/datacredito/cruce", {
+            method: "POST",
+            body: singleForm,
+          });
+
+          if (!singleRes.ok) {
+            const errText = await singleRes.text().catch(() => "");
+            let cleanErr = errText || `HTTP ${singleRes.status}`;
+            try {
+              const errJson = JSON.parse(errText) as { error?: string };
+              if (errJson.error) cleanErr = errJson.error;
+            } catch {
+              if (cleanErr.includes("<!DOCTYPE html>")) {
+                cleanErr = `El servidor tardó demasiado o rechazó la petición (HTTP ${singleRes.status})`;
+              }
+            }
+            throw new Error(cleanErr);
+          }
+
+          const singleData = (await singleRes.json()) as {
+            extracted?: DataCreditoExtracted;
+            filename?: string;
+            error?: string;
+          };
+
+          if (!singleData.extracted) {
+            throw new Error(singleData.error || "No fue posible extraer datos del PDF");
+          }
+
+          const ext = singleData.extracted;
+          extractedPdfs.push({ extracted: ext, filename: singleData.filename || pdf.name });
+          addLog(
+            `[OK] ${pdf.name} -> C.C. ${ext.documento_identidad || "S/D"} | ${ext.nombre_titular} | Score: ${ext.puntaje} (${ext.nivel_riesgo})`,
+            "success",
+          );
+        } catch (fileErr) {
+          const errMsg = fileErr instanceof Error ? fileErr.message : "Error desconocido";
+          addLog(`[AVISO] Error procesando ${pdf.name}: ${errMsg}`, "warn");
+        }
+      }
+
+      if (extractedPdfs.length === 0) {
+        throw new Error(
+          "No se pudo procesar ninguno de los archivos PDF adjuntos. Verifica que no estén dañados o protegidos con una clave diferente.",
+        );
+      }
+
+      setProgressPercent(90);
+      setCurrentFileMsg("Cruzando información y generando plantilla Excel...");
+      addLog("Cruzando información con las solicitudes y generando archivo Excel...", "info");
+
+      const cruceForm = new FormData();
+      cruceForm.append("stream", "false");
+      cruceForm.append("extractedPdfsJson", JSON.stringify(extractedPdfs));
+
+      if (sourceMode === "excel" && excelFile) {
+        cruceForm.append("excel", excelFile);
+      } else if (selectedPersonIds.length > 0) {
+        cruceForm.append("leadIds", selectedPersonIds.join(","));
+      } else {
+        cruceForm.append("allLeads", "true");
+      }
+
       const res = await fetch("/api/admin/datacredito/cruce", {
         method: "POST",
-        body: formData,
+        body: cruceForm,
       });
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(text || `Error del servidor HTTP ${res.status}`);
-      }
-
-      if (!res.body) {
-        throw new Error("El servidor no retornó un canal de datos en vivo");
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let doneReceived = false;
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          const jsonStr = trimmed.slice(5).trim();
-          if (!jsonStr) continue;
-
-          try {
-            const data = JSON.parse(jsonStr) as CruceStreamMessage;
-
-            if (data.type === "start") {
-              setCurrentFileMsg(data.message || "Iniciando...");
-              addLog(data.message || "Procesamiento iniciado", "info");
-            } else if (data.type === "progress") {
-              const current = data.current || 1;
-              const total = data.total || 1;
-              const pct = Math.round((current / (total + 1)) * 90);
-              setProgressPercent(pct);
-              setCurrentFileMsg(data.message || `Procesando archivo ${current} de ${total}`);
-            } else if (data.type === "log") {
-              const msg = data.message || "";
-              const type = msg.startsWith("[OK]") ? "success" : msg.startsWith("[AVISO]") ? "warn" : "info";
-              addLog(msg, type);
-            } else if (data.type === "done") {
-              doneReceived = true;
-              setProgressPercent(100);
-              setCurrentFileMsg("Cruce completado con éxito");
-              addLog(data.message || "Proceso finalizado.", "success");
-              if (data.kpis) setKpis(data.kpis);
-              if (data.records) setRecords(data.records);
-              if (data.excelBase64) setExcelBase64(data.excelBase64);
-              if (data.downloadFilename) setDownloadFilename(data.downloadFilename);
-
-              setTimeout(() => {
-                setStep("results");
-              }, 1200);
-            } else if (data.type === "error") {
-              throw new Error(data.error || "Ocurrió un error en el servidor");
-            }
-          } catch (jsonErr) {
-            console.error("Error al parsear evento SSE:", jsonErr);
+        let cleanErr = text || `Error del servidor HTTP ${res.status}`;
+        try {
+          const errJson = JSON.parse(text) as { error?: string };
+          if (errJson.error) cleanErr = errJson.error;
+        } catch {
+          if (cleanErr.includes("<!DOCTYPE html>")) {
+            cleanErr = `Error temporal del servidor (HTTP ${res.status})`;
           }
         }
+        throw new Error(cleanErr);
       }
 
-      if (!doneReceived) {
-        throw new Error("La conexión con el servidor finalizó antes de completar el cruce. Si el archivo es muy pesado, intenta procesarlo individualmente.");
+      const data = (await res.json()) as {
+        kpis?: CruceKPIs;
+        records?: CruceItemResult[];
+        excelBase64?: string;
+        downloadFilename?: string;
+        error?: string;
+      };
+
+      if (data.error) {
+        throw new Error(data.error);
       }
+
+      setProgressPercent(100);
+      setCurrentFileMsg("Cruce completado con éxito");
+      addLog(
+        `Cruce completado con éxito. ${data.kpis?.coincidencias ?? 0} coincidencias encontradas (${data.kpis?.tasaCoincidencia ?? 0}%).`,
+        "success",
+      );
+
+      if (data.kpis) setKpis(data.kpis);
+      if (data.records) setRecords(data.records);
+      if (data.excelBase64) setExcelBase64(data.excelBase64);
+      if (data.downloadFilename) setDownloadFilename(data.downloadFilename);
+
+      setTimeout(() => {
+        setStep("results");
+      }, 900);
     } catch (err) {
       console.error("[DataCreditoCruceModal] Error:", err);
       const msg = err instanceof Error ? err.message : "Error durante el cruce de datos";
