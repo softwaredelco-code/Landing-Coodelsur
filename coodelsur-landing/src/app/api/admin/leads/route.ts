@@ -57,7 +57,14 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const take = Math.min(Number(searchParams.get("take") ?? 50), 100);
+  const idsParam = searchParams.get("ids")?.trim() || null;
+  const ids = idsParam
+    ? idsParam
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : null;
+  const take = Math.min(Number(searchParams.get("take") ?? (ids ? Math.max(ids.length, 50) : 50)), 200);
   const skip = Math.max(Number(searchParams.get("skip") ?? 0), 0);
   const estado = searchParams.get("estado")?.trim() || null;
   const tipo = searchParams.get("tipoCredito")?.trim() || null;
@@ -75,6 +82,7 @@ export async function GET(request: Request) {
       : undefined;
 
     const whereWithoutEstado = {
+      ...(ids && ids.length ? { id: { in: ids } } : {}),
       ...(tipo ? { tipoCredito: tipo } : {}),
       ...(origen ? { origen } : {}),
       ...(fechaCreacionRange ? { fechaCreacion: fechaCreacionRange } : {}),
@@ -95,7 +103,7 @@ export async function GET(request: Request) {
       ...(estadoFilter ? { estado: estadoFilter } : {}),
     };
 
-    const cacheKey = `${mes ?? ""}|${tipo ?? ""}|${origen ?? ""}|${q ?? ""}`;
+    const cacheKey = `${idsParam ?? ""}|${mes ?? ""}|${tipo ?? ""}|${origen ?? ""}|${q ?? ""}`;
     let estadoCounts: Record<string, number>;
     const now = Date.now();
     const cached = estadoCountsCache.get(cacheKey);
@@ -172,6 +180,7 @@ export async function GET(request: Request) {
     }
 
     let leads = listLeadsFromFile();
+    if (ids && ids.length) leads = leads.filter((l) => ids.includes(l.id));
     if (tipo) leads = leads.filter((l) => l.tipoCredito === tipo);
     if (origen) leads = leads.filter((l) => l.origen === origen);
     if (fechaCreacionRange) {

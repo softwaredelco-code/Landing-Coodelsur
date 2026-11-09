@@ -2,6 +2,7 @@
 
 import { AdminShell } from "@/presentation/components/admin/AdminShell";
 import { ResumenInformeModal } from "@/presentation/components/admin/ResumenInformeModal";
+import { DataCreditoCruceModal } from "@/presentation/components/admin/DataCreditoCruceModal";
 import { StatusBadge } from "@/presentation/components/admin/StatusBadge";
 import { Button } from "@/presentation/components/ui/Button";
 import { formatLeadOrigen, LEAD_ORIGEN_FILTER_OPTIONS } from "@/domain/lead/lead-origin";
@@ -282,10 +283,12 @@ export default function AdminLeadsPage() {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedLeadsMap, setSelectedLeadsMap] = useState<Map<string, LeadRow>>(new Map());
   const [selectedAllInScope, setSelectedAllInScope] = useState(false);
   const [exporting, setExporting] = useState<"selected" | "report" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isResumenModalOpen, setIsResumenModalOpen] = useState(false);
+  const [isDataCreditoModalOpen, setIsDataCreditoModalOpen] = useState(false);
   const requestSeqRef = useRef(0);
   const hasLoadedOnceRef = useRef(false);
   const exportingRef = useRef<"selected" | "report" | null>(null);
@@ -406,8 +409,7 @@ export default function AdminLeadsPage() {
     setAppliedQ(q.trim());
     setAppliedOrigen(origen);
     setAppliedMes(mes);
-    setSelectedIds(new Set());
-    setSelectedAllInScope(false);
+    // Conserva las selecciones activas para no borrar personas cuando el usuario busca otras
   };
 
   const clearFilters = () => {
@@ -419,8 +421,13 @@ export default function AdminLeadsPage() {
     setMes("");
     setAppliedMes("");
     setPage(1);
+    // Conserva las selecciones activas
+  };
+
+  const clearSelection = () => {
     setSelectedIds(new Set());
     setSelectedAllInScope(false);
+    setSelectedLeadsMap(new Map());
   };
 
   const hasActiveFilters = Boolean(appliedQ || estado || appliedOrigen || appliedMes);
@@ -448,11 +455,37 @@ export default function AdminLeadsPage() {
 
   const toggleSelectAllVisible = () => {
     if (allVisibleSelected || selectedAllInScope) {
-      setSelectedIds(new Set());
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const lead of leads) {
+          next.delete(lead.id);
+        }
+        return next;
+      });
+      setSelectedLeadsMap((prev) => {
+        const next = new Map(prev);
+        for (const lead of leads) {
+          next.delete(lead.id);
+        }
+        return next;
+      });
       setSelectedAllInScope(false);
       return;
     }
-    setSelectedIds(new Set(leads.map((lead) => lead.id)));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const lead of leads) {
+        next.add(lead.id);
+      }
+      return next;
+    });
+    setSelectedLeadsMap((prev) => {
+      const next = new Map(prev);
+      for (const lead of leads) {
+        next.set(lead.id, lead);
+      }
+      return next;
+    });
   };
 
   const toggleSelectOne = (id: string) => {
@@ -461,6 +494,16 @@ export default function AdminLeadsPage() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+    setSelectedLeadsMap((prev) => {
+      const next = new Map(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        const found = leads.find((l) => l.id === id);
+        if (found) next.set(id, found);
+      }
       return next;
     });
   };
@@ -633,8 +676,16 @@ export default function AdminLeadsPage() {
         <p className="text-sm text-gray-500">
           {total} solicitud(es) {activeMonthLabel ? `en ${activeMonthLabel}` : "en total"}
           {(selectedAllInScope || selectedIds.size > 0) && (
-            <span className="ml-2 font-medium text-coodel-primary">
-              · {selectedAllInScope ? `${total} seleccionada(s)` : `${selectedIds.size} seleccionada(s)`}
+            <span className="ml-2 font-medium text-coodel-primary inline-flex items-center gap-1.5">
+              <span>· {selectedAllInScope ? `${total} seleccionada(s)` : `${selectedIds.size} seleccionada(s)`}</span>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="text-xs text-gray-400 hover:text-red-600 underline font-normal transition-colors"
+                title="Quitar todas las solicitudes seleccionadas"
+              >
+                (Deseleccionar)
+              </button>
             </span>
           )}
         </p>
@@ -709,6 +760,36 @@ export default function AdminLeadsPage() {
             </svg>
             <span>Informe por Estado</span>
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsDataCreditoModalOpen(true)}
+            title="Cruce automatizado de solicitudes y reportes de DataCrédito con IA"
+            className="flex items-center gap-1.5 border-coodel-primary text-coodel-primary hover:bg-coodel-primary hover:text-white"
+          >
+            <svg
+              className="h-3.5 w-3.5 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <span>
+              Cruce DataCrédito
+              {selectedIds.size > 0 && !selectedAllInScope
+                ? ` (${selectedIds.size})`
+                : selectedAllInScope
+                ? ` (${total})`
+                : ""}
+            </span>
+          </Button>
         </div>
       </div>
 
@@ -744,10 +825,7 @@ export default function AdminLeadsPage() {
               </span>
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedAllInScope(false);
-                  setSelectedIds(new Set());
-                }}
+                onClick={clearSelection}
                 className="font-bold underline text-red-600 hover:text-red-800 ml-2"
               >
                 Desmarcar todas
@@ -946,6 +1024,25 @@ export default function AdminLeadsPage() {
         initialOrigen={appliedOrigen}
         initialMes={appliedMes}
         monthOptions={monthOptions}
+      />
+
+      <DataCreditoCruceModal
+        isOpen={isDataCreditoModalOpen}
+        onClose={() => setIsDataCreditoModalOpen(false)}
+        selectedLeadIds={Array.from(selectedIds)}
+        selectedAllInScope={selectedAllInScope}
+        appliedFilters={{
+          q: appliedQ,
+          estado,
+          origen: appliedOrigen,
+          mes: appliedMes,
+        }}
+        availableLeads={Array.from(
+          new Map([
+            ...leads.map((l) => [l.id, l] as const),
+            ...Array.from(selectedLeadsMap.entries()),
+          ]).values(),
+        )}
       />
     </AdminShell>
   );
