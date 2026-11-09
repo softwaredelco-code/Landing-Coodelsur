@@ -17,6 +17,104 @@ function getTimestampedFilename(): string {
   return `cruce-datacredito-coodelsur-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}.xlsx`;
 }
 
+/**
+ * Desencripta y extrae el texto (o renderiza páginas escaneadas a JPEG con HTML5 Canvas)
+ * directamente en el navegador del usuario. Así el servidor cPanel (límite 512MB RAM)
+ * no tiene que cargar `unpdf`/`pdfjs-dist` (1.7MB) ni decodificar binarios PDF en Node 18.
+ */
+async function extractPdfInBrowser(
+  file: File,
+  userPassword?: string,
+  extraCedulas: string[] = [],
+): Promise<{ text: string; imagesBase64: string[] }> {
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const buffer = new Uint8Array(await file.arrayBuffer());
+
+  const cleanName = file.name.replace(/\.[^/.]+$/, "");
+  const matches = cleanName.match(/\d{6,12}/g) || [];
+  const candidateSet = new Set<string>();
+  if (userPassword && userPassword.trim()) {
+    candidateSet.add(userPassword.trim());
+  }
+  candidateSet.add("");
+  for (const m of matches) {
+    candidateSet.add(m);
+    const noZero = m.replace(/^0+/, "");
+    if (noZero) candidateSet.add(noZero);
+  }
+  for (const ced of extraCedulas) {
+    const digits = (ced || "").replace(/\D/g, "");
+    if (digits.length >= 5) {
+      candidateSet.add(digits);
+      candidateSet.add(digits.padStart(11, "0"));
+    }
+  }
+
+  const candidates = Array.from(candidateSet);
+  let doc: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
+  let lastErr: unknown = null;
+
+  for (const pwd of candidates) {
+    try {
+      doc = await getDocumentProxy(buffer.slice(), pwd ? { password: pwd } : undefined);
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  if (!doc) {
+    throw new Error(
+      `No se pudo abrir "${file.name}". Verifica la contraseña del PDF (${(lastErr as Error)?.message || " protegido con clave"}).`,
+    );
+  }
+
+  try {
+    const res = await extractText(doc, { mergePages: true });
+    const text = (typeof res.text === "string" ? res.text : String(res.text || "")).trim();
+
+    if (text.length >= 50) {
+      return { text, imagesBase64: [] };
+    }
+
+    // Si es un PDF escaneado (sin capa de texto), renderizar hasta 3 páginas en HTML5 Canvas a JPEG
+    const imagesBase64: string[] = [];
+    const maxPages = Math.min(doc.numPages, 3);
+    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+      try {
+        const page = await doc.getPage(pageNum);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = Math.min(1.5, 1100 / Math.max(baseViewport.width, baseViewport.height, 1));
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(viewport.width));
+        canvas.height = Math.max(1, Math.round(viewport.height));
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          await page.render({
+            canvasContext: ctx as unknown as CanvasRenderingContext2D,
+            viewport,
+          }).promise;
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.76);
+          const b64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
+          if (b64) imagesBase64.push(b64);
+        }
+      } catch (renderErr) {
+        console.warn(`[extractPdfInBrowser] Advertencia renderizando página ${pageNum}:`, renderErr);
+      }
+    }
+
+    return { text, imagesBase64 };
+  } finally {
+    try {
+      await doc.cleanup();
+      await doc.destroy();
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+}
+
 export interface LeadSummaryItem {
   id: string;
   nombre: string;
@@ -383,7 +481,7 @@ export function DataCreditoCruceModal({
 
         const singleForm = new FormData();
         singleForm.append("mode", "extract-single");
-        singleForm.append("pdfs", pdf);
+        singleForm.append("filename", pdf.name);
         if (openaiApiKey.trim()) {
           singleForm.append("apiKey", openaiApiKey.trim());
         }
@@ -392,6 +490,27 @@ export function DataCreditoCruceModal({
         }
 
         try {
+          // 1. Desencriptar y extraer texto/imágenes directamente en el navegador (0 MB de RAM en cPanel)
+          const extraCedulas = selectedPersonsList.map((p) => p.cedula).filter(Boolean);
+          try {
+            const localExtracted = await extractPdfInBrowser(pdf, pdfPassword, extraCedulas);
+            singleForm.append("pdfText", localExtracted.text);
+            if (localExtracted.imagesBase64.length > 0) {
+              singleForm.append("pdfImagesJson", JSON.stringify(localExtracted.imagesBase64));
+            }
+            addLog(
+              `[${currentIdx}/${pdfFiles.length}] PDF leído en navegador (${localExtracted.text.length >= 50 ? `${localExtracted.text.length} caracteres` : `${localExtracted.imagesBase64.length} página(s) en imagen`}). Consultando IA...`,
+              "info",
+            );
+          } catch (localErr) {
+            const localMsg = localErr instanceof Error ? localErr.message : "";
+            if (localMsg.startsWith("No se pudo abrir")) {
+              throw localErr;
+            }
+            // Respaldo: enviar archivo al servidor si falló extracción local
+            singleForm.append("pdfs", pdf);
+          }
+
           const singleRes = await fetch("/api/admin/datacredito/cruce", {
             method: "POST",
             body: singleForm,

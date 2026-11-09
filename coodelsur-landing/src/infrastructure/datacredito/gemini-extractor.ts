@@ -5,8 +5,6 @@
  */
 
 import { DataCreditoExtracted } from "@/domain/datacredito/types";
-import jpeg from "jpeg-js";
-import { extractImages, extractText, getDocumentProxy } from "unpdf";
 
 /**
  * En Node.js, `DecompressionStream("deflate")` dentro de `pdfjs-dist` (usado por `unpdf`)
@@ -50,6 +48,12 @@ export async function extractPdfImagesAsJpegs(
   maxPages = 3,
   userPassword?: string,
 ): Promise<string[]> {
+  const [{ extractImages, getDocumentProxy }, jpegMod] = await Promise.all([
+    import("unpdf"),
+    import("jpeg-js"),
+  ]);
+  const jpeg = jpegMod.default || jpegMod;
+
   const candidates = extractCandidatePasswords(filename);
   if (userPassword && userPassword.trim()) {
     candidates.unshift(userPassword.trim());
@@ -157,6 +161,7 @@ export async function extractPdfText(
   filename: string,
   userPassword?: string,
 ): Promise<{ text: string; unlockedPassword?: string }> {
+  const { extractText, getDocumentProxy } = await import("unpdf");
   const candidates = extractCandidatePasswords(filename);
   if (userPassword && userPassword.trim()) {
     candidates.unshift(userPassword.trim());
@@ -329,11 +334,12 @@ async function callGemini(
  */
 async function callOpenAI(
   text: string,
-  buffer: Uint8Array,
+  buffer: Uint8Array | null,
   apiKey: string,
   filename = "",
   pdfPassword?: string,
   onProgress?: (message: string) => void,
+  preExtractedImagesBase64?: string[],
 ): Promise<DataCreditoExtracted> {
   const url = "https://api.openai.com/v1/chat/completions";
 
@@ -382,7 +388,12 @@ async function callOpenAI(
 
   // Si no hay texto (PDF escaneado o imagen), extraer páginas como imágenes y usar GPT-4o-mini Visión
   onProgress?.("PDF escaneado. Extrayendo imágenes para OpenAI Visión...");
-  const imagesBase64 = await extractPdfImagesAsJpegs(buffer, filename, 3, pdfPassword);
+  const imagesBase64 =
+    preExtractedImagesBase64 && preExtractedImagesBase64.length > 0
+      ? preExtractedImagesBase64
+      : buffer
+        ? await extractPdfImagesAsJpegs(buffer, filename, 3, pdfPassword)
+        : [];
   if (imagesBase64.length === 0) {
     throw new Error(`El PDF "${filename}" no contiene texto seleccionable ni imágenes legibles.`);
   }
@@ -608,4 +619,56 @@ export async function extractDataCreditoFromPdf(
   // Si no se proporciono ninguna clave, usar el parser heuristico de respaldo
   options?.onProgress?.("Extrayendo datos crediticios directamente del documento...");
   return regexFallbackParser(text, filename);
+}
+
+/**
+ * Extrae los datos crediticios a partir del texto y/o imágenes JPEG ya extraídos en el navegador.
+ * Evita cargar `unpdf`/`pdfjs-dist` (1.7MB JS) y `jpeg-js` en el proceso Node.js de cPanel (límite 512MB RAM).
+ */
+export async function extractDataCreditoFromPreExtracted(
+  filename: string,
+  options: {
+    text: string;
+    imagesBase64?: string[];
+    openaiApiKey?: string;
+    geminiApiKey?: string;
+  },
+): Promise<DataCreditoExtracted> {
+  const cleanText = (options.text || "").trim();
+  const openAiKey = options.openaiApiKey?.trim() || process.env.OPENAI_API_KEY?.trim();
+
+  if (openAiKey) {
+    try {
+      return await callOpenAI(
+        cleanText,
+        null,
+        openAiKey,
+        filename,
+        undefined,
+        undefined,
+        options.imagesBase64,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[extractDataCreditoFromPreExtracted] OpenAI fallo para ${filename}:`, msg);
+      return regexFallbackParser(cleanText, filename);
+    }
+  }
+
+  const geminiKey =
+    options.geminiApiKey?.trim() ||
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_API_KEY?.trim();
+
+  if (geminiKey && cleanText.length >= 50) {
+    try {
+      return await callGemini(cleanText, new Uint8Array(0), geminiKey);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[extractDataCreditoFromPreExtracted] Gemini fallo para ${filename}:`, msg);
+      return regexFallbackParser(cleanText, filename);
+    }
+  }
+
+  return regexFallbackParser(cleanText, filename);
 }

@@ -12,7 +12,10 @@ import { LeadExportRecord } from "@/application/lead/export-leads-excel";
 import { fetchLeadsForExport } from "@/application/lead/fetch-leads-for-export";
 import { CruceStreamMessage, DataCreditoExtracted } from "@/domain/datacredito/types";
 import { adminUnauthorizedResponse, isAdminRequest } from "@/infrastructure/auth/require-admin";
-import { extractDataCreditoFromPdf } from "@/infrastructure/datacredito/gemini-extractor";
+import {
+  extractDataCreditoFromPdf,
+  extractDataCreditoFromPreExtracted,
+} from "@/infrastructure/datacredito/gemini-extractor";
 import { File as NodeFile } from "node:buffer";
 import { NextResponse } from "next/server";
 
@@ -89,6 +92,32 @@ export async function POST(request: Request) {
 
     // Modo extracción individual por archivo (óptimo para cPanel: procesa 1 PDF por petición JSON sin SSE buffering ni saturar 512MB RAM)
     if (mode === "extract-single") {
+      const pdfText = formData.get("pdfText");
+      const pdfImagesJson = formData.get("pdfImagesJson");
+      const filenameField = (formData.get("filename") as string | null) || "reporte.pdf";
+
+      // Si el navegador ya extrajo el texto o las imágenes JPEG del PDF (0 MB de RAM de unpdf en cPanel)
+      if (typeof pdfText === "string" || typeof pdfImagesJson === "string") {
+        let imagesBase64: string[] | undefined;
+        if (typeof pdfImagesJson === "string" && pdfImagesJson.trim()) {
+          try {
+            const parsedImgs = JSON.parse(pdfImagesJson) as string[];
+            if (Array.isArray(parsedImgs)) imagesBase64 = parsedImgs;
+          } catch {
+            // ignore invalid images JSON
+          }
+        }
+        const extracted = await extractDataCreditoFromPreExtracted(filenameField, {
+          text: typeof pdfText === "string" ? pdfText : "",
+          imagesBase64,
+          openaiApiKey: apiKey,
+        });
+        return NextResponse.json({
+          extracted,
+          filename: filenameField,
+        });
+      }
+
       if (pdfFiles.length === 0) {
         return NextResponse.json(
           { error: "No se adjuntó archivo PDF válido para analizar." },
