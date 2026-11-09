@@ -409,6 +409,7 @@ export function DataCreditoCruceModal({
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let doneReceived = false;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -441,6 +442,7 @@ export function DataCreditoCruceModal({
               const type = msg.startsWith("[OK]") ? "success" : msg.startsWith("[AVISO]") ? "warn" : "info";
               addLog(msg, type);
             } else if (data.type === "done") {
+              doneReceived = true;
               setProgressPercent(100);
               setCurrentFileMsg("Cruce completado con éxito");
               addLog(data.message || "Proceso finalizado.", "success");
@@ -459,6 +461,10 @@ export function DataCreditoCruceModal({
             console.error("Error al parsear evento SSE:", jsonErr);
           }
         }
+      }
+
+      if (!doneReceived) {
+        throw new Error("La conexión con el servidor finalizó antes de completar el cruce. Si el archivo es muy pesado, intenta procesarlo individualmente.");
       }
     } catch (err) {
       console.error("[DataCreditoCruceModal] Error:", err);

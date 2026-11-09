@@ -204,35 +204,43 @@ async function callGemini(
         ];
       }
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: "application/json",
-          },
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        throw new Error(`Gemini API (${model}) HTTP ${res.status}: ${errText.slice(0, 200)}`);
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: "application/json",
+            },
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          throw new Error(`Gemini API (${model}) HTTP ${res.status}: ${errText.slice(0, 200)}`);
+        }
+
+        const data = (await res.json()) as {
+          candidates?: Array<{
+            content?: { parts?: Array<{ text?: string }> };
+          }>;
+        };
+
+        const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawJson) {
+          throw new Error(`Respuesta vacía de Gemini (${model})`);
+        }
+
+        return parseExtractedJson(rawJson);
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const data = (await res.json()) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> };
-        }>;
-      };
-
-      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawJson) {
-        throw new Error(`Respuesta vacía de Gemini (${model})`);
-      }
-
-      return parseExtractedJson(rawJson);
     } catch (err) {
       lastErr = err;
       // Probar siguiente modelo si este falló
@@ -253,44 +261,55 @@ async function callOpenAI(
   apiKey: string,
   filename = "",
   pdfPassword?: string,
+  onProgress?: (message: string) => void,
 ): Promise<DataCreditoExtracted> {
   const url = "https://api.openai.com/v1/chat/completions";
 
   // Si hay suficiente texto extraído (PDF digital), usar extracción directa de texto
   if (text.length >= 50) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: PROMPT_EXTRACCION },
-          { role: "user", content: `A continuación se adjunta el texto extraído del reporte de crédito de DataCrédito:\n\n${text.slice(0, 45000)}` },
-        ],
-      }),
-    });
+    onProgress?.("Enviando texto a OpenAI (gpt-4o-mini)...");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(`OpenAI HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0.1,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: PROMPT_EXTRACCION },
+            { role: "user", content: `A continuación se adjunta el texto extraído del reporte de crédito de DataCrédito:\n\n${text.slice(0, 35000)}` },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`OpenAI HTTP ${res.status}: ${errText.slice(0, 200)}`);
+      }
+
+      const data = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+
+      const raw = data.choices?.[0]?.message?.content;
+      if (!raw) throw new Error("Respuesta vacía de OpenAI");
+
+      return parseExtractedJson(raw, filename);
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const raw = data.choices?.[0]?.message?.content;
-    if (!raw) throw new Error("Respuesta vacía de OpenAI");
-
-    return parseExtractedJson(raw, filename);
   }
 
   // Si no hay texto (PDF escaneado o imagen), extraer páginas como imágenes y usar GPT-4o-mini Visión
+  onProgress?.("PDF escaneado. Extrayendo imágenes para OpenAI Visión...");
   const imagesBase64 = await extractPdfImagesAsJpegs(buffer, filename, 4, pdfPassword);
   if (imagesBase64.length === 0) {
     throw new Error(`El PDF "${filename}" no contiene texto seleccionable ni imágenes legibles.`);
@@ -313,36 +332,45 @@ async function callOpenAI(
     });
   }
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: PROMPT_EXTRACCION },
-        { role: "user", content: contentItems },
-      ],
-    }),
-  });
+  onProgress?.("Enviando imágenes a OpenAI Visión...");
+  const visionController = new AbortController();
+  const visionTimeoutId = setTimeout(() => visionController.abort(), 35000);
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`OpenAI Visión HTTP ${res.status}: ${errText.slice(0, 200)}`);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.1,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: PROMPT_EXTRACCION },
+          { role: "user", content: contentItems },
+        ],
+      }),
+      signal: visionController.signal,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`OpenAI Visión HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const data = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+
+    const raw = data.choices?.[0]?.message?.content;
+    if (!raw) throw new Error("Respuesta vacía de OpenAI Visión");
+
+    return parseExtractedJson(raw, filename);
+  } finally {
+    clearTimeout(visionTimeoutId);
   }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-
-  const raw = data.choices?.[0]?.message?.content;
-  if (!raw) throw new Error("Respuesta vacía de OpenAI Visión");
-
-  return parseExtractedJson(raw, filename);
 }
 
 /**
@@ -467,17 +495,22 @@ export async function extractDataCreditoFromPdf(
     geminiApiKey?: string;
     openaiApiKey?: string;
     pdfPassword?: string;
+    onProgress?: (message: string) => void;
   },
 ): Promise<DataCreditoExtracted> {
+  options?.onProgress?.("Desencriptando y leyendo páginas del PDF...");
   const { text } = await extractPdfText(buffer.slice(), filename, options?.pdfPassword);
 
   const openAiKey = options?.openaiApiKey?.trim() || process.env.OPENAI_API_KEY?.trim();
 
   if (openAiKey) {
     try {
-      return await callOpenAI(text, buffer.slice(), openAiKey, filename, options?.pdfPassword);
+      options?.onProgress?.(`Texto extraído (${text.length} caracteres). Consultando OpenAI...`);
+      return await callOpenAI(text, buffer.slice(), openAiKey, filename, options?.pdfPassword, options?.onProgress);
     } catch (err) {
-      console.warn(`[extractDataCreditoFromPdf] OpenAI fallo para ${filename}:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[extractDataCreditoFromPdf] OpenAI fallo para ${filename}:`, msg);
+      options?.onProgress?.(`OpenAI no respondió a tiempo. Aplicando extracción de respaldo...`);
       return regexFallbackParser(text, filename);
     }
   }
@@ -489,13 +522,17 @@ export async function extractDataCreditoFromPdf(
 
   if (geminiKey) {
     try {
+      options?.onProgress?.(`Texto extraído (${text.length} caracteres). Consultando Gemini...`);
       return await callGemini(text, buffer, geminiKey);
     } catch (err) {
-      console.warn(`[extractDataCreditoFromPdf] Gemini fallo para ${filename}:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[extractDataCreditoFromPdf] Gemini fallo para ${filename}:`, msg);
+      options?.onProgress?.(`Gemini no respondió a tiempo. Aplicando extracción de respaldo...`);
       return regexFallbackParser(text, filename);
     }
   }
 
   // Si no se proporciono ninguna clave, usar el parser heuristico de respaldo
+  options?.onProgress?.("Extrayendo datos crediticios directamente del documento...");
   return regexFallbackParser(text, filename);
 }

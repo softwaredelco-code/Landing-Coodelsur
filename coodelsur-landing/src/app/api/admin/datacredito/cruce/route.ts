@@ -172,6 +172,9 @@ export async function POST(request: Request) {
         };
 
         try {
+          // Flush inicial de 2KB para desbordar y omitir buffering de Apache/LiteSpeed/Nginx en cPanel
+          controller.enqueue(encoder.encode(`: ${" ".repeat(2048)}\n\n`));
+
           send({
             type: "start",
             total: pdfFiles.length,
@@ -197,6 +200,12 @@ export async function POST(request: Request) {
               const extracted = await extractDataCreditoFromPdf(bytes, pdf.name, {
                 openaiApiKey: apiKey,
                 pdfPassword,
+                onProgress: (stepMsg) => {
+                  send({
+                    type: "log",
+                    message: `[${currentIdx}/${pdfFiles.length}] ${stepMsg}`,
+                  });
+                },
               });
 
               extractedPdfs.push({ extracted, filename: pdf.name });
@@ -248,6 +257,7 @@ export async function POST(request: Request) {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
       },
     });
   } catch (err) {
