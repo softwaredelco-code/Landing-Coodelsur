@@ -94,9 +94,9 @@ export async function POST(request: Request) {
       }
 
       if (targetLeads.length === 0) {
-        // Cruce global contra todas las solicitudes registradas en Coodelsur
+        // Cruce contra las solicitudes recientes registradas en Coodelsur (acotado para proteger RAM en cPanel)
         targetLeads = await fetchLeadsForExport({
-          take: 5000,
+          take: 500,
         });
       }
 
