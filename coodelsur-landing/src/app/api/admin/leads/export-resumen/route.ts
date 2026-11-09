@@ -109,7 +109,7 @@ export async function GET(request: Request) {
 
     const buffer = buildResumenExcelBuffer(data);
 
-    return new Response(new Uint8Array(buffer), {
+    return new Response(new Uint8Array(buffer) as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type":

@@ -52,7 +52,7 @@ export async function GET(
     );
   }
 
-  return new NextResponse(new Uint8Array(file.buffer), {
+  return new NextResponse(new Uint8Array(file.buffer) as unknown as BodyInit, {
     status: 200,
     headers: {
       "Content-Type": file.contentType,
