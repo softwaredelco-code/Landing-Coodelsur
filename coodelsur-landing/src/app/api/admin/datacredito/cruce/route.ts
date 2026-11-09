@@ -13,7 +13,26 @@ import { fetchLeadsForExport } from "@/application/lead/fetch-leads-for-export";
 import { CruceStreamMessage, DataCreditoExtracted } from "@/domain/datacredito/types";
 import { adminUnauthorizedResponse, isAdminRequest } from "@/infrastructure/auth/require-admin";
 import { extractDataCreditoFromPdf } from "@/infrastructure/datacredito/gemini-extractor";
+import { File as NodeFile } from "node:buffer";
 import { NextResponse } from "next/server";
+
+// Polyfill seguro de File en Node.js 18
+if (typeof globalThis.File === "undefined" && typeof NodeFile !== "undefined") {
+  (globalThis as unknown as { File: typeof NodeFile }).File = NodeFile;
+}
+
+interface UploadedFileLike {
+  name: string;
+  size?: number;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+}
+
+function isUploadedFile(entry: unknown): entry is UploadedFileLike {
+  if (!entry || typeof entry !== "object") return false;
+  if (typeof File !== "undefined" && entry instanceof File) return true;
+  const item = entry as { name?: unknown; arrayBuffer?: unknown };
+  return typeof item.name === "string" && typeof item.arrayBuffer === "function";
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -50,17 +69,18 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
 
-    const excelFile = formData.get("excel") as File | null;
+    const rawExcel = formData.get("excel");
+    const excelFile = isUploadedFile(rawExcel) ? rawExcel : null;
     const leadIdsRaw = formData.get("leadIds") as string | null;
     const apiKey = (formData.get("apiKey") as string | null) || undefined;
     const pdfPassword = (formData.get("pdfPassword") as string | null) || undefined;
     const isStream = formData.get("stream") !== "false";
 
     // Recoger todos los archivos PDF enviados
-    const pdfFiles: File[] = [];
+    const pdfFiles: UploadedFileLike[] = [];
     const allEntries = formData.getAll("pdfs");
     for (const entry of allEntries) {
-      if (entry instanceof File && entry.name.toLowerCase().endsWith(".pdf")) {
+      if (isUploadedFile(entry) && entry.name.toLowerCase().endsWith(".pdf")) {
         pdfFiles.push(entry);
       }
     }
@@ -76,7 +96,7 @@ export async function POST(request: Request) {
     let excelBuffer: Uint8Array;
     let leadsSourceDescription = "Archivo Excel adjunto";
 
-    if (excelFile && excelFile.size > 0) {
+    if (excelFile && (typeof excelFile.size === "number" ? excelFile.size > 0 : true)) {
       const arrayBuf = await excelFile.arrayBuffer();
       excelBuffer = new Uint8Array(arrayBuf);
     } else {
