@@ -11,6 +11,19 @@ mkdir -p "$APP_DIR"
 cd "$APP_DIR"
 echo ">> Post-deploy en: $APP_DIR"
 
+# 0. Prevenir y limpiar archivos core.* (volcados de memoria de Node/V8 de 2-4GB cada uno), papelera y cachés
+ulimit -c 0 2>/dev/null || true
+if [[ -f "$HOME/.bashrc" ]] && ! grep -q "ulimit -c 0" "$HOME/.bashrc" 2>/dev/null; then
+  echo "ulimit -c 0" >> "$HOME/.bashrc"
+fi
+echo ">> Limpiando volcados de memoria (core.*), logs gigantes y caches temporales..."
+rm -f "$HOME"/core.* "$HOME"/core "$APP_DIR"/core.* "$APP_DIR"/core "$HOME/public_html"/core.* "$HOME/solicitar-credito.coodelsursas.com.co"/core.* 2>/dev/null || true
+find "$HOME" -maxdepth 3 -type f -name 'core.[0-9]*' -delete 2>/dev/null || true
+rm -rf "$HOME/.Trash/"* "$HOME/.npm/_cacache" 2>/dev/null || true
+if [[ -f "$APP_DIR/stderr.log" ]]; then
+  tail -c 1048576 "$APP_DIR/stderr.log" > "$APP_DIR/stderr.log.tmp" 2>/dev/null && mv "$APP_DIR/stderr.log.tmp" "$APP_DIR/stderr.log" || rm -f "$APP_DIR/stderr.log"
+fi
+
 if [[ -z "$TAR_FILE" ]]; then
   for candidate in \
     "$APP_DIR/cpanel-deploy.tar.gz" \
@@ -63,6 +76,7 @@ if [[ -d .prisma-bundle ]]; then
   cp -a .prisma-bundle/@prisma node_modules/
   rm -rf .prisma-bundle
 fi
+rm -rf "$APP_DIR/node_modules/@prisma/engines" "$APP_DIR/.next/cache" 2>/dev/null || true
 
 if [[ ! -d node_modules ]] || [[ -z "$(ls -A node_modules 2>/dev/null)" ]]; then
   echo "ERROR: Falta node_modules en el deploy."
@@ -100,7 +114,9 @@ EOF
   fi
 done
 
-echo ">> Reiniciando app Node.js (Passenger restart.txt + cloudlinux-selector) ..."
+echo ">> Reiniciando app Node.js (liberando procesos previos + Passenger restart.txt) ..."
+pkill -9 -f "lsnode" 2>/dev/null || true
+pkill -9 -f "node.*server.js" 2>/dev/null || true
 mkdir -p "$APP_DIR/tmp"
 touch "$APP_DIR/tmp/restart.txt"
 
