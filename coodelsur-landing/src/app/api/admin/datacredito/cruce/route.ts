@@ -12,7 +12,10 @@ import { LeadExportRecord } from "@/application/lead/export-leads-excel";
 import { fetchLeadsForExport } from "@/application/lead/fetch-leads-for-export";
 import { CruceStreamMessage, DataCreditoExtracted } from "@/domain/datacredito/types";
 import { adminUnauthorizedResponse, isAdminRequest } from "@/infrastructure/auth/require-admin";
-import { extractDataCreditoFromPdf } from "@/infrastructure/datacredito/gemini-extractor";
+import {
+  extractDataCreditoFromPdf,
+  extractDataCreditoFromPreExtracted,
+} from "@/infrastructure/datacredito/gemini-extractor";
 import { File as NodeFile } from "node:buffer";
 import { NextResponse } from "next/server";
 
@@ -67,6 +70,115 @@ export async function POST(request: Request) {
   }
 
   try {
+    const contentType = (request.headers.get("content-type") || "").toLowerCase();
+
+    // ─── VÍA PRINCIPAL: JSON PURO (Evita bug de request.formData() / Undici v5 en Node.js 18 cPanel) ───
+    if (contentType.includes("application/json")) {
+      const body = (await request.json()) as {
+        mode?: string;
+        filename?: string;
+        pdfText?: string;
+        pdfImages?: string[];
+        pdfBase64?: string;
+        apiKey?: string;
+        pdfPassword?: string;
+        extractedPdfs?: Array<{ extracted: DataCreditoExtracted; filename: string }>;
+        excelBase64?: string;
+        leadIds?: string | string[];
+      };
+
+      const apiKey = body.apiKey?.trim() || undefined;
+      const pdfPassword = body.pdfPassword?.trim() || undefined;
+
+      if (body.mode === "extract-single") {
+        const filenameField = body.filename || "reporte.pdf";
+        if (typeof body.pdfText === "string" || Array.isArray(body.pdfImages)) {
+          const extracted = await extractDataCreditoFromPreExtracted(filenameField, {
+            text: typeof body.pdfText === "string" ? body.pdfText : "",
+            imagesBase64: Array.isArray(body.pdfImages) ? body.pdfImages : undefined,
+            openaiApiKey: apiKey,
+          });
+          return NextResponse.json({
+            extracted,
+            filename: filenameField,
+          });
+        }
+
+        if (typeof body.pdfBase64 === "string" && body.pdfBase64.trim()) {
+          const rawB64 = body.pdfBase64.includes(",")
+            ? body.pdfBase64.split(",")[1] || ""
+            : body.pdfBase64;
+          const bytes = new Uint8Array(Buffer.from(rawB64, "base64"));
+          const extracted = await extractDataCreditoFromPdf(bytes, filenameField, {
+            openaiApiKey: apiKey,
+            pdfPassword,
+          });
+          return NextResponse.json({
+            extracted,
+            filename: filenameField,
+          });
+        }
+
+        return NextResponse.json(
+          { error: "No se recibieron datos del PDF para analizar." },
+          { status: 400 },
+        );
+      }
+
+      // Cruce final por JSON
+      const preExtracted = Array.isArray(body.extractedPdfs) ? body.extractedPdfs : [];
+      if (preExtracted.length === 0) {
+        return NextResponse.json(
+          { error: "No se recibieron reportes extraídos para el cruce." },
+          { status: 400 },
+        );
+      }
+
+      let excelBuffer: Uint8Array;
+      if (typeof body.excelBase64 === "string" && body.excelBase64.trim()) {
+        const rawB64 = body.excelBase64.includes(",")
+          ? body.excelBase64.split(",")[1] || ""
+          : body.excelBase64;
+        excelBuffer = new Uint8Array(Buffer.from(rawB64, "base64"));
+      } else {
+        let targetLeads: LeadExportRecord[] = [];
+        const rawIds = Array.isArray(body.leadIds)
+          ? body.leadIds
+          : typeof body.leadIds === "string"
+            ? body.leadIds.split(",")
+            : [];
+        const ids = rawIds.map((id) => String(id).trim()).filter(Boolean);
+
+        if (ids.length > 0) {
+          targetLeads = await fetchLeadsForExport({ ids });
+        }
+        if (targetLeads.length === 0) {
+          targetLeads = await fetchLeadsForExport({ take: 500 });
+        }
+        if (targetLeads.length === 0) {
+          return NextResponse.json(
+            {
+              error:
+                "No se encontraron solicitudes registradas en Coodelsur para realizar el cruce. Selecciona personas en la tabla o adjunta un archivo Excel.",
+            },
+            { status: 400 },
+          );
+        }
+        excelBuffer = buildCoodelsurTemplateExcelBuffer(targetLeads);
+      }
+
+      const cruce = processCruceData(excelBuffer, preExtracted);
+      const downloadFilename = generateCruceFilename();
+
+      return NextResponse.json({
+        kpis: cruce.kpis,
+        records: cruce.records,
+        excelBase64: Buffer.from(cruce.excelBuffer).toString("base64"),
+        downloadFilename,
+      });
+    }
+
+    // ─── VÍA LEGACY: MULTIPART FORMDATA ───
     const formData = await request.formData();
 
     const rawExcel = formData.get("excel");

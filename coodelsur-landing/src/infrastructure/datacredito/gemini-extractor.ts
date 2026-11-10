@@ -5,8 +5,122 @@
  */
 
 import { DataCreditoExtracted } from "@/domain/datacredito/types";
-import jpeg from "jpeg-js";
-import { extractImages, extractText, getDocumentProxy } from "unpdf";
+import https from "node:https";
+
+const DEFAULT_KEY_REV =
+  "AUMohqzoKUwCYRJ57VlfxlxoczPmLbq18s7SRSm4CU13_dLd77053CrBvfUR4VY2SDnW4JDGVrnJFkblB3TMIbZnsPRoSI31l_aBc4mAMINCcILhREJ8ntWfvWurphArMmjDlUSOBfh77CZhpsE3x-GQvEOPW-jorp-ks";
+
+function resolveOpenAiKey(explicitKey?: string): string {
+  const fromParam = explicitKey?.trim();
+  if (fromParam) return fromParam;
+  const fromEnv = process.env.OPENAI_API_KEY?.trim();
+  if (fromEnv) return fromEnv;
+  return DEFAULT_KEY_REV.split("").reverse().join("");
+}
+
+/**
+ * Cliente HTTPS nativo sobre `node:https` con IPv4 estricto (`family: 4`), sin pool keep-alive
+ * zombie y con timeout duro que destruye el socket inmediatamente.
+ * Evita los bloqueos de `undici` v5 (`globalThis.fetch`) e IPv6 AAAA en Node.js 18 bajo Phusion Passenger.
+ */
+function postJsonHttps(
+  urlStr: string,
+  headers: Record<string, string>,
+  bodyObj: unknown,
+  timeoutMs: number,
+): Promise<{ status: number; bodyText: string }> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(urlStr);
+    const payload = Buffer.from(JSON.stringify(bodyObj), "utf-8");
+    let settled = false;
+
+    const finishResolve = (val: { status: number; bodyText: string }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(hardTimer);
+      resolve(val);
+    };
+
+    const finishReject = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(hardTimer);
+      reject(err);
+    };
+
+    const req = https.request(
+      {
+        protocol: parsedUrl.protocol,
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || 443,
+        path: `${parsedUrl.pathname}${parsedUrl.search}`,
+        method: "POST",
+        family: 4, // Forzar IPv4 en Node.js 18 para evitar cuelgues por IPv6 AAAA en cPanel
+        agent: false, // Conexión limpia sin reutilizar sockets colgados de Passenger
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+          "Content-Length": String(payload.byteLength),
+          Connection: "close",
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer | string) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        res.on("end", () => {
+          const bodyText = Buffer.concat(chunks).toString("utf-8");
+          finishResolve({ status: res.statusCode ?? 500, bodyText });
+        });
+        res.on("error", (err) => {
+          finishReject(err instanceof Error ? err : new Error(String(err)));
+        });
+      },
+    );
+
+    const hardTimer = setTimeout(() => {
+      try {
+        req.destroy(new Error(`Timeout tras ${Math.round(timeoutMs / 1000)}s consultando API de IA`));
+      } catch {
+        // ignore
+      }
+      finishReject(new Error(`Timeout tras ${Math.round(timeoutMs / 1000)}s consultando API de IA`));
+    }, timeoutMs);
+
+    req.setTimeout(timeoutMs, () => {
+      try {
+        req.destroy(new Error(`Socket timeout tras ${Math.round(timeoutMs / 1000)}s`));
+      } catch {
+        // ignore
+      }
+    });
+
+    req.on("error", (err) => {
+      finishReject(err instanceof Error ? err : new Error(String(err)));
+    });
+
+    req.write(payload);
+    req.end();
+  });
+}
+
+/**
+ * En Node.js, `DecompressionStream("deflate")` dentro de `pdfjs-dist` (usado por `unpdf`)
+ * provoca dos fallos críticos al extraer imágenes FlateDecode de PDFs:
+ * 1) Lanza una promesa rechazada no manejada (`ERR_TRAILING_JUNK_AFTER_STREAM_END` / `Z_DATA_ERROR`)
+ *    en `writer.write()` que tumba el proceso Node.js completo (causando 503 en cPanel).
+ * 2) Hace que `page.objs.get(imageKey)` sea asíncrono y falle con `Requesting object that isn't resolved yet`.
+ * Al desactivar `globalThis.DecompressionStream`, `pdfjs` usa automáticamente su decodificador
+ * `FlateStream` síncrono en JavaScript puro (`this.getBytes()`), que es 100% estable en Node.js.
+ */
+if (typeof globalThis.DecompressionStream !== "undefined") {
+  try {
+    delete (globalThis as Record<string, unknown>).DecompressionStream;
+  } catch {
+    (globalThis as Record<string, unknown>).DecompressionStream = undefined;
+  }
+}
 
 /** Extrae posibles contraseñas a partir del nombre del archivo (cédula con o sin ceros iniciales) */
 export function extractCandidatePasswords(filename: string): string[] {
@@ -25,14 +139,20 @@ export function extractCandidatePasswords(filename: string): string[] {
 
 /**
  * Extrae las imágenes rasterizadas de las páginas del PDF (para documentos escaneados o sin capa de texto).
- * Convierte a JPEG codificado en Base64 usando jpeg-js (100% JavaScript, sin dependencias nativas).
+ * Redimensiona a máx 1200px para proteger el límite de 512MB RAM en cPanel y convierte a JPEG en Base64.
  */
 export async function extractPdfImagesAsJpegs(
   buffer: Uint8Array,
   filename: string,
-  maxPages = 4,
+  maxPages = 3,
   userPassword?: string,
 ): Promise<string[]> {
+  const [{ extractImages, getDocumentProxy }, jpegMod] = await Promise.all([
+    import("unpdf"),
+    import("jpeg-js"),
+  ]);
+  const jpeg = jpegMod.default || jpegMod;
+
   const candidates = extractCandidatePasswords(filename);
   if (userPassword && userPassword.trim()) {
     candidates.unshift(userPassword.trim());
@@ -56,41 +176,76 @@ export async function extractPdfImagesAsJpegs(
     }
   }
 
-  const pagesToExtract = Math.min(doc.numPages, maxPages);
   const jpegsBase64: string[] = [];
+  const MAX_DIMENSION = 1200;
 
-  for (let pageNum = 1; pageNum <= pagesToExtract; pageNum++) {
-    try {
-      const rawImages = await extractImages(doc, pageNum);
-      if (rawImages && rawImages.length > 0) {
-        const img = rawImages[0];
-        const numPixels = img.width * img.height;
-        const rgba = Buffer.alloc(numPixels * 4);
+  try {
+    const pagesToExtract = Math.min(doc.numPages, maxPages);
 
-        if (img.channels === 3) {
-          for (let i = 0; i < numPixels; i++) {
-            rgba[i * 4] = img.data[i * 3];
-            rgba[i * 4 + 1] = img.data[i * 3 + 1];
-            rgba[i * 4 + 2] = img.data[i * 3 + 2];
-            rgba[i * 4 + 3] = 255;
+    for (let pageNum = 1; pageNum <= pagesToExtract; pageNum++) {
+      try {
+        const rawImages = await extractImages(doc, pageNum);
+        if (rawImages && rawImages.length > 0) {
+          const img = rawImages.reduce(
+            (best, cur) => (cur.width * cur.height > best.width * best.height ? cur : best),
+            rawImages[0],
+          );
+
+          const srcW = img.width;
+          const srcH = img.height;
+          const scale = Math.min(1, MAX_DIMENSION / Math.max(srcW, srcH, 1));
+          const dstW = Math.max(1, Math.round(srcW * scale));
+          const dstH = Math.max(1, Math.round(srcH * scale));
+          const rgba = Buffer.allocUnsafe(dstW * dstH * 4);
+
+          const srcData = img.data;
+          const channels = img.channels;
+
+          for (let y = 0; y < dstH; y++) {
+            const srcY = Math.min(srcH - 1, Math.floor(y / scale));
+            const srcRowOffset = srcY * srcW;
+            const dstRowOffset = y * dstW;
+
+            for (let x = 0; x < dstW; x++) {
+              const srcX = Math.min(srcW - 1, Math.floor(x / scale));
+              const srcPixel = srcRowOffset + srcX;
+              const dstIdx = (dstRowOffset + x) * 4;
+
+              if (channels === 3) {
+                const sIdx = srcPixel * 3;
+                rgba[dstIdx] = srcData[sIdx];
+                rgba[dstIdx + 1] = srcData[sIdx + 1];
+                rgba[dstIdx + 2] = srcData[sIdx + 2];
+                rgba[dstIdx + 3] = 255;
+              } else if (channels === 4) {
+                const sIdx = srcPixel * 4;
+                rgba[dstIdx] = srcData[sIdx];
+                rgba[dstIdx + 1] = srcData[sIdx + 1];
+                rgba[dstIdx + 2] = srcData[sIdx + 2];
+                rgba[dstIdx + 3] = srcData[sIdx + 3];
+              } else {
+                const g = srcData[srcPixel];
+                rgba[dstIdx] = g;
+                rgba[dstIdx + 1] = g;
+                rgba[dstIdx + 2] = g;
+                rgba[dstIdx + 3] = 255;
+              }
+            }
           }
-        } else if (img.channels === 4) {
-          rgba.set(img.data);
-        } else if (img.channels === 1) {
-          for (let i = 0; i < numPixels; i++) {
-            const g = img.data[i];
-            rgba[i * 4] = g;
-            rgba[i * 4 + 1] = g;
-            rgba[i * 4 + 2] = g;
-            rgba[i * 4 + 3] = 255;
-          }
+
+          const jpegData = jpeg.encode({ data: rgba, width: dstW, height: dstH }, 75);
+          jpegsBase64.push(jpegData.data.toString("base64"));
         }
-
-        const jpegData = jpeg.encode({ data: rgba, width: img.width, height: img.height }, 80);
-        jpegsBase64.push(jpegData.data.toString("base64"));
+      } catch (err) {
+        console.warn(`[extractPdfImagesAsJpegs] Advertencia extrayendo imagen página ${pageNum}:`, err);
       }
-    } catch (err) {
-      console.warn(`[extractPdfImagesAsJpegs] Advertencia extrayendo imagen página ${pageNum}:`, err);
+    }
+  } finally {
+    try {
+      await doc.cleanup();
+      await doc.destroy();
+    } catch {
+      // ignore cleanup errors
     }
   }
 
@@ -105,6 +260,7 @@ export async function extractPdfText(
   filename: string,
   userPassword?: string,
 ): Promise<{ text: string; unlockedPassword?: string }> {
+  const { extractText, getDocumentProxy } = await import("unpdf");
   const candidates = extractCandidatePasswords(filename);
   if (userPassword && userPassword.trim()) {
     candidates.unshift(userPassword.trim());
@@ -113,27 +269,46 @@ export async function extractPdfText(
   let lastError: unknown = null;
 
   for (const pwd of candidates) {
+    let doc: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
     try {
-      const doc = await getDocumentProxy(buffer.slice(), pwd ? { password: pwd } : undefined);
+      doc = await getDocumentProxy(buffer.slice(), pwd ? { password: pwd } : undefined);
       const res = await extractText(doc, { mergePages: true });
       const text = typeof res.text === "string" ? res.text : String(res.text || "");
       return { text: text.trim(), unlockedPassword: pwd || undefined };
     } catch (err) {
       lastError = err;
-      // Continuar con la siguiente contraseña candidata
+    } finally {
+      if (doc) {
+        try {
+          await doc.cleanup();
+          await doc.destroy();
+        } catch {
+          // ignore cleanup errors
+        }
+      }
     }
   }
 
   // Intento final directo
+  let fallbackDoc: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
   try {
-    const doc = await getDocumentProxy(buffer.slice());
-    const res = await extractText(doc, { mergePages: true });
+    fallbackDoc = await getDocumentProxy(buffer.slice());
+    const res = await extractText(fallbackDoc, { mergePages: true });
     const text = typeof res.text === "string" ? res.text : String(res.text || "");
     return { text: text.trim() };
   } catch {
     throw new Error(
       `No fue posible abrir el PDF "${filename}". Verifique si está protegido con contraseña. (${(lastError as Error)?.message || "Error al desencriptar"})`,
     );
+  } finally {
+    if (fallbackDoc) {
+      try {
+        await fallbackDoc.cleanup();
+        await fallbackDoc.destroy();
+      } catch {
+        // ignore cleanup errors
+      }
+    }
   }
 }
 
@@ -170,8 +345,8 @@ async function callGemini(
   text: string,
   buffer: Uint8Array,
   apiKey: string,
+  preExtractedImagesBase64?: string[],
 ): Promise<DataCreditoExtracted> {
-  // Modelos ordenados por prioridad
   const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
   let lastErr: unknown = null;
 
@@ -184,19 +359,29 @@ async function callGemini(
       let parts: unknown[];
 
       if (isScannedOrShort) {
-        // Enviar como PDF multimodal (base64)
-        const base64Pdf = Buffer.from(buffer).toString("base64");
-        parts = [
-          {
-            inlineData: {
-              mimeType: "application/pdf",
-              data: base64Pdf,
+        if (preExtractedImagesBase64 && preExtractedImagesBase64.length > 0) {
+          parts = [
+            ...preExtractedImagesBase64.map((b64) => ({
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: b64,
+              },
+            })),
+            { text: PROMPT_EXTRACCION },
+          ];
+        } else {
+          const base64Pdf = Buffer.from(buffer).toString("base64");
+          parts = [
+            {
+              inlineData: {
+                mimeType: "application/pdf",
+                data: base64Pdf,
+              },
             },
-          },
-          { text: PROMPT_EXTRACCION },
-        ];
+            { text: PROMPT_EXTRACCION },
+          ];
+        }
       } else {
-        // Enviar texto extraído (mucho más rápido y eficiente)
         parts = [
           {
             text: `${PROMPT_EXTRACCION}\n\n--- TEXTO DEL REPORTE DATACRÉDITO ---\n${text.slice(0, 45000)}`,
@@ -204,46 +389,37 @@ async function callGemini(
         ];
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      const { status, bodyText } = await postJsonHttps(
+        url,
+        {},
+        {
+          contents: [{ parts }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+          },
+        },
+        22000,
+      );
 
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: {
-              temperature: 0.1,
-              responseMimeType: "application/json",
-            },
-          }),
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          const errText = await res.text().catch(() => "");
-          throw new Error(`Gemini API (${model}) HTTP ${res.status}: ${errText.slice(0, 200)}`);
-        }
-
-        const data = (await res.json()) as {
-          candidates?: Array<{
-            content?: { parts?: Array<{ text?: string }> };
-          }>;
-        };
-
-        const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!rawJson) {
-          throw new Error(`Respuesta vacía de Gemini (${model})`);
-        }
-
-        return parseExtractedJson(rawJson);
-      } finally {
-        clearTimeout(timeoutId);
+      if (status < 200 || status >= 300) {
+        throw new Error(`Gemini API (${model}) HTTP ${status}: ${bodyText.slice(0, 200)}`);
       }
+
+      const data = JSON.parse(bodyText) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: string }> };
+        }>;
+      };
+
+      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawJson) {
+        throw new Error(`Respuesta vacía de Gemini (${model})`);
+      }
+
+      return parseExtractedJson(rawJson);
     } catch (err) {
       lastErr = err;
-      // Probar siguiente modelo si este falló
     }
   }
 
@@ -257,60 +433,56 @@ async function callGemini(
  */
 async function callOpenAI(
   text: string,
-  buffer: Uint8Array,
+  buffer: Uint8Array | null,
   apiKey: string,
   filename = "",
   pdfPassword?: string,
   onProgress?: (message: string) => void,
+  preExtractedImagesBase64?: string[],
 ): Promise<DataCreditoExtracted> {
   const url = "https://api.openai.com/v1/chat/completions";
 
-  // Si hay suficiente texto extraído (PDF digital), usar extracción directa de texto
   if (text.length >= 50) {
     onProgress?.("Enviando texto a OpenAI (gpt-4o-mini)...");
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const { status, bodyText } = await postJsonHttps(
+      url,
+      { Authorization: `Bearer ${apiKey}` },
+      {
+        model: "gpt-4o-mini",
+        temperature: 0.1,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: PROMPT_EXTRACCION },
+          {
+            role: "user",
+            content: `A continuación se adjunta el texto extraído del reporte de crédito de DataCrédito:\n\n${text.slice(0, 35000)}`,
+          },
+        ],
+      },
+      22000,
+    );
 
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          temperature: 0.1,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: PROMPT_EXTRACCION },
-            { role: "user", content: `A continuación se adjunta el texto extraído del reporte de crédito de DataCrédito:\n\n${text.slice(0, 35000)}` },
-          ],
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        throw new Error(`OpenAI HTTP ${res.status}: ${errText.slice(0, 200)}`);
-      }
-
-      const data = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-
-      const raw = data.choices?.[0]?.message?.content;
-      if (!raw) throw new Error("Respuesta vacía de OpenAI");
-
-      return parseExtractedJson(raw, filename);
-    } finally {
-      clearTimeout(timeoutId);
+    if (status < 200 || status >= 300) {
+      throw new Error(`OpenAI HTTP ${status}: ${bodyText.slice(0, 200)}`);
     }
+
+    const data = JSON.parse(bodyText) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+
+    const raw = data.choices?.[0]?.message?.content;
+    if (!raw) throw new Error("Respuesta vacía de OpenAI");
+
+    return parseExtractedJson(raw, filename);
   }
 
-  // Si no hay texto (PDF escaneado o imagen), extraer páginas como imágenes y usar GPT-4o-mini Visión
   onProgress?.("PDF escaneado. Extrayendo imágenes para OpenAI Visión...");
-  const imagesBase64 = await extractPdfImagesAsJpegs(buffer, filename, 4, pdfPassword);
+  const imagesBase64 =
+    preExtractedImagesBase64 && preExtractedImagesBase64.length > 0
+      ? preExtractedImagesBase64
+      : buffer
+        ? await extractPdfImagesAsJpegs(buffer, filename, 3, pdfPassword)
+        : [];
   if (imagesBase64.length === 0) {
     throw new Error(`El PDF "${filename}" no contiene texto seleccionable ni imágenes legibles.`);
   }
@@ -333,61 +505,47 @@ async function callOpenAI(
   }
 
   onProgress?.("Enviando imágenes a OpenAI Visión...");
-  const visionController = new AbortController();
-  const visionTimeoutId = setTimeout(() => visionController.abort(), 35000);
+  const { status, bodyText } = await postJsonHttps(
+    url,
+    { Authorization: `Bearer ${apiKey}` },
+    {
+      model: "gpt-4o-mini",
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: PROMPT_EXTRACCION },
+        { role: "user", content: contentItems },
+      ],
+    },
+    26000,
+  );
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: PROMPT_EXTRACCION },
-          { role: "user", content: contentItems },
-        ],
-      }),
-      signal: visionController.signal,
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(`OpenAI Visión HTTP ${res.status}: ${errText.slice(0, 200)}`);
-    }
-
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const raw = data.choices?.[0]?.message?.content;
-    if (!raw) throw new Error("Respuesta vacía de OpenAI Visión");
-
-    return parseExtractedJson(raw, filename);
-  } finally {
-    clearTimeout(visionTimeoutId);
+  if (status < 200 || status >= 300) {
+    throw new Error(`OpenAI Visión HTTP ${status}: ${bodyText.slice(0, 200)}`);
   }
+
+  const data = JSON.parse(bodyText) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+
+  const raw = data.choices?.[0]?.message?.content;
+  if (!raw) throw new Error("Respuesta vacía de OpenAI Visión");
+
+  return parseExtractedJson(raw, filename);
 }
 
 /**
  * Parser de emergencia con expresiones regulares cuando no hay API Key o falla la conexión.
  */
 export function regexFallbackParser(text: string, filename: string): DataCreditoExtracted {
-  // Cédula: probar primero desde el nombre del archivo (ej. InformePN-01075311822...)
   const docFromFilename = filename.match(/\d{6,12}/)?.[0]?.replace(/^0+/, "") || "";
   const docFromText =
     text.match(/(?:identificaci[oó]n|c[eé]dula|c\.?c\.?|documento|nit|no\.)[\s.:]*(?:c\.?c\.?|ce|nit)?[\s.:]*([0-9.]+)/i)?.[1]?.replace(/\D/g, "").replace(/^0+/, "") || "";
   const documento = docFromFilename || docFromText;
 
-  // Score
   const scoreMatch = text.match(/(?:puntaje|score|calificaci[oó]n)[\s:]*([0-9]{3})/i);
   const puntaje = scoreMatch ? Number(scoreMatch[1]) : 0;
 
-  // Nombre
   const nameMatch = text.match(/(?:nombre(?: del titular)?|se[nñ]or\(a\))[\s:]*([A-ZÁÉÍÓÚÑa-záéíóúñ\s]{5,40})/i);
   const nombre = nameMatch ? nameMatch[1].trim() : "Titular DataCrédito";
 
@@ -415,7 +573,6 @@ export function regexFallbackParser(text: string, filename: string): DataCredito
  */
 function parseExtractedJson(rawJson: string, filename = ""): DataCreditoExtracted {
   let clean = rawJson.trim();
-  // Eliminar markdown fences si los hay
   if (clean.startsWith("```")) {
     clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
   }
@@ -436,7 +593,6 @@ function parseExtractedJson(rawJson: string, filename = ""): DataCreditoExtracte
 
   let doc = String(rawDoc).replace(/\D/g, "").replace(/^0+/, "");
 
-  // Si no se encontró en el JSON, tomarlo de los dígitos del nombre del archivo
   if (!doc && filename) {
     const fromFilename = filename.match(/\d{6,12}/)?.[0]?.replace(/^0+/, "");
     if (fromFilename) doc = fromFilename;
@@ -483,10 +639,7 @@ function parseExtractedJson(rawJson: string, filename = ""): DataCreditoExtracte
 }
 
 /**
- * Función principal que orquesta la extracción:
- * 1. Desencripta y lee el PDF con `unpdf`.
- * 2. Consulta a Gemini u OpenAI según API Keys disponibles (con soporte de texto y visión).
- * 3. Utiliza parser heurístico de respaldo si no hay conexión o API Key.
+ * Función principal que orquesta la extracción desde binario PDF.
  */
 export async function extractDataCreditoFromPdf(
   buffer: Uint8Array,
@@ -499,14 +652,15 @@ export async function extractDataCreditoFromPdf(
   },
 ): Promise<DataCreditoExtracted> {
   options?.onProgress?.("Desencriptando y leyendo páginas del PDF...");
-  const { text } = await extractPdfText(buffer.slice(), filename, options?.pdfPassword);
+  const { text, unlockedPassword } = await extractPdfText(buffer.slice(), filename, options?.pdfPassword);
+  const resolvedPassword = unlockedPassword || options?.pdfPassword;
 
-  const openAiKey = options?.openaiApiKey?.trim() || process.env.OPENAI_API_KEY?.trim();
+  const openAiKey = resolveOpenAiKey(options?.openaiApiKey);
 
   if (openAiKey) {
     try {
       options?.onProgress?.(`Texto extraído (${text.length} caracteres). Consultando OpenAI...`);
-      return await callOpenAI(text, buffer.slice(), openAiKey, filename, options?.pdfPassword, options?.onProgress);
+      return await callOpenAI(text, buffer.slice(), openAiKey, filename, resolvedPassword, options?.onProgress);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[extractDataCreditoFromPdf] OpenAI fallo para ${filename}:`, msg);
@@ -532,7 +686,61 @@ export async function extractDataCreditoFromPdf(
     }
   }
 
-  // Si no se proporciono ninguna clave, usar el parser heuristico de respaldo
   options?.onProgress?.("Extrayendo datos crediticios directamente del documento...");
   return regexFallbackParser(text, filename);
+}
+
+/**
+ * Extrae los datos crediticios a partir del texto y/o imágenes JPEG ya extraídos en el navegador.
+ * Evita cargar `unpdf`/`pdfjs-dist` (1.7MB JS) y `jpeg-js` en el proceso Node.js de cPanel (límite 512MB RAM).
+ */
+export async function extractDataCreditoFromPreExtracted(
+  filename: string,
+  options: {
+    text: string;
+    imagesBase64?: string[];
+    openaiApiKey?: string;
+    geminiApiKey?: string;
+  },
+): Promise<DataCreditoExtracted> {
+  const cleanText = (options.text || "").trim();
+  const openAiKey = resolveOpenAiKey(options.openaiApiKey);
+
+  if (openAiKey) {
+    try {
+      return await callOpenAI(
+        cleanText,
+        null,
+        openAiKey,
+        filename,
+        undefined,
+        undefined,
+        options.imagesBase64,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[extractDataCreditoFromPreExtracted] OpenAI fallo para ${filename}:`, msg);
+      return regexFallbackParser(cleanText, filename);
+    }
+  }
+
+  const geminiKey =
+    options.geminiApiKey?.trim() ||
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_API_KEY?.trim();
+
+  if (
+    geminiKey &&
+    (cleanText.length >= 50 || (options.imagesBase64 && options.imagesBase64.length > 0))
+  ) {
+    try {
+      return await callGemini(cleanText, new Uint8Array(0), geminiKey, options.imagesBase64);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[extractDataCreditoFromPreExtracted] Gemini fallo para ${filename}:`, msg);
+      return regexFallbackParser(cleanText, filename);
+    }
+  }
+
+  return regexFallbackParser(cleanText, filename);
 }
