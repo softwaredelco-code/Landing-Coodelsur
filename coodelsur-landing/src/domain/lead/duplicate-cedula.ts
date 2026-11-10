@@ -3,7 +3,6 @@ import { normalizeDocumentNumber } from "@/domain/identity/cedula";
 import { extractProgresoFormulario } from "@/domain/lead/lead-summary";
 import { prisma } from "@/infrastructure/database/prisma";
 import { withTimeout } from "@/shared/utils";
-import { Prisma } from "@prisma/client";
 
 const DEFAULT_DUPLICATE_DAYS = 30;
 const ACTIVE_STATES = new Set([
@@ -188,34 +187,14 @@ export async function resolveClientDuplicateByProgress(params: {
 
   const windowDays = params.windowDays ?? getDuplicateWindowDays();
   const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
-
   const phoneDigits = (params.telefono || "").replace(/\D/g, "");
 
   try {
-    const orConditions: Prisma.LeadWhereInput[] = [{ cedula: normalizedCedula }];
-
-    if (params.witmeId) {
-      orConditions.push({
-        OR: [
-          { datosFormulario: { path: ["witmeLeadId"], equals: params.witmeId } },
-          { datosFormulario: { path: ["payloadOriginal", "witme_id"], equals: params.witmeId } },
-          { datosFormulario: { path: ["payloadOriginal", "external_id"], equals: params.witmeId } },
-          { datosFormulario: { path: ["payloadOriginal", "id_externo"], equals: params.witmeId } },
-        ],
-      });
-    }
-
-    if (phoneDigits.length >= 10) {
-      orConditions.push({
-        cedula: normalizedCedula,
-        telefono: { contains: phoneDigits.slice(-10) },
-      });
-    }
-
+    // Usar exclusivamente el índice B-Tree @@index([cedula]) sin escanear ni descargar el JSONB pesado `datosFormulario`
     const existingLeads = await withTimeout(
       prisma.lead.findMany({
         where: {
-          OR: orConditions,
+          cedula: normalizedCedula,
           fechaCreacion: { gte: cutoff },
         },
         select: {
@@ -225,12 +204,11 @@ export async function resolveClientDuplicateByProgress(params: {
           estado: true,
           origen: true,
           progresoFormulario: true,
-          datosFormulario: true,
           fechaCreacion: true,
           fechaActualizacion: true,
         },
       }),
-      8000,
+      3500,
       "duplicate-progress-timeout",
     );
 
