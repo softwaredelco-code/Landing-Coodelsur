@@ -17,6 +17,19 @@ function getTimestampedFilename(): string {
   return `cruce-datacredito-coodelsur-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}.xlsx`;
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, i + chunkSize)),
+    );
+  }
+  return btoa(binary);
+}
+
 /**
  * Desencripta y extrae el texto (o renderiza páginas escaneadas a JPEG con HTML5 Canvas)
  * directamente en el navegador del usuario. Así el servidor cPanel (límite 512MB RAM)
@@ -27,7 +40,16 @@ async function extractPdfInBrowser(
   userPassword?: string,
   extraCedulas: string[] = [],
 ): Promise<{ text: string; imagesBase64: string[] }> {
-  const { extractText, getDocumentProxy } = await import("unpdf");
+  // Desactivar temporalmente DecompressionStream para que pdfjs dentro de unpdf
+  // decodifique FlateStream sincrónicamente sin fallar con "Dependent image isn't ready yet"
+  const savedDecompressionStream = (globalThis as Record<string, unknown>).DecompressionStream;
+  try {
+    delete (globalThis as Record<string, unknown>).DecompressionStream;
+  } catch {
+    (globalThis as Record<string, unknown>).DecompressionStream = undefined;
+  }
+
+  const { extractImages, extractText, getDocumentProxy } = await import("unpdf");
   const buffer = new Uint8Array(await file.arrayBuffer());
 
   const cleanName = file.name.replace(/\.[^/.]+$/, "");
@@ -64,8 +86,11 @@ async function extractPdfInBrowser(
   }
 
   if (!doc) {
+    if (savedDecompressionStream !== undefined) {
+      (globalThis as Record<string, unknown>).DecompressionStream = savedDecompressionStream;
+    }
     throw new Error(
-      `No se pudo abrir "${file.name}". Verifica la contraseña del PDF (${(lastErr as Error)?.message || " protegido con clave"}).`,
+      `No se pudo abrir "${file.name}". Verifica la contraseña del PDF (${(lastErr as Error)?.message || "protegido con clave"}).`,
     );
   }
 
@@ -77,27 +102,95 @@ async function extractPdfInBrowser(
       return { text, imagesBase64: [] };
     }
 
-    // Si es un PDF escaneado (sin capa de texto), renderizar hasta 3 páginas en HTML5 Canvas a JPEG
+    // Si es un PDF escaneado (sin capa de texto), extraer/renderizar hasta 3 páginas en HTML5 Canvas a JPEG
     const imagesBase64: string[] = [];
     const maxPages = Math.min(doc.numPages, 3);
+    const MAX_DIM = 960;
+
     for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
       try {
-        const page = await doc.getPage(pageNum);
-        const baseViewport = page.getViewport({ scale: 1 });
-        const scale = Math.min(1.5, 1100 / Math.max(baseViewport.width, baseViewport.height, 1));
-        const viewport = page.getViewport({ scale });
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(viewport.width));
-        canvas.height = Math.max(1, Math.round(viewport.height));
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          await page.render({
-            canvasContext: ctx as unknown as CanvasRenderingContext2D,
-            viewport,
-          }).promise;
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.76);
-          const b64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
-          if (b64) imagesBase64.push(b64);
+        let addedPageImage = false;
+
+        // 1. Intentar extraer la imagen incrustada directamente y escalarla en Canvas
+        try {
+          const rawImages = await extractImages(doc, pageNum);
+          if (rawImages && rawImages.length > 0) {
+            const img = rawImages.reduce(
+              (best, cur) => (cur.width * cur.height > best.width * best.height ? cur : best),
+              rawImages[0],
+            );
+            const srcW = img.width;
+            const srcH = img.height;
+            const rgbaClamped = new Uint8ClampedArray(srcW * srcH * 4);
+            const srcData = img.data;
+            const ch = img.channels;
+
+            if (ch === 4) {
+              rgbaClamped.set(srcData.subarray(0, srcW * srcH * 4));
+            } else if (ch === 3) {
+              for (let p = 0, s = 0, d = 0; p < srcW * srcH; p++, s += 3, d += 4) {
+                rgbaClamped[d] = srcData[s];
+                rgbaClamped[d + 1] = srcData[s + 1];
+                rgbaClamped[d + 2] = srcData[s + 2];
+                rgbaClamped[d + 3] = 255;
+              }
+            } else {
+              for (let p = 0, d = 0; p < srcW * srcH; p++, d += 4) {
+                const g = srcData[p];
+                rgbaClamped[d] = g;
+                rgbaClamped[d + 1] = g;
+                rgbaClamped[d + 2] = g;
+                rgbaClamped[d + 3] = 255;
+              }
+            }
+
+            const srcCanvas = document.createElement("canvas");
+            srcCanvas.width = srcW;
+            srcCanvas.height = srcH;
+            const srcCtx = srcCanvas.getContext("2d");
+            if (srcCtx) {
+              srcCtx.putImageData(new ImageData(rgbaClamped, srcW, srcH), 0, 0);
+              const scale = Math.min(1, MAX_DIM / Math.max(srcW, srcH, 1));
+              const dstW = Math.max(1, Math.round(srcW * scale));
+              const dstH = Math.max(1, Math.round(srcH * scale));
+              const dstCanvas = document.createElement("canvas");
+              dstCanvas.width = dstW;
+              dstCanvas.height = dstH;
+              const dstCtx = dstCanvas.getContext("2d");
+              if (dstCtx) {
+                dstCtx.drawImage(srcCanvas, 0, 0, dstW, dstH);
+                const dataUrl = dstCanvas.toDataURL("image/jpeg", 0.68);
+                const b64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
+                if (b64) {
+                  imagesBase64.push(b64);
+                  addedPageImage = true;
+                }
+              }
+            }
+          }
+        } catch {
+          // Respaldo: renderizar página completa abajo
+        }
+
+        // 2. Respaldo: renderizar la página con page.render()
+        if (!addedPageImage) {
+          const page = await doc.getPage(pageNum);
+          const baseViewport = page.getViewport({ scale: 1 });
+          const scale = Math.min(1.3, MAX_DIM / Math.max(baseViewport.width, baseViewport.height, 1));
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(viewport.width));
+          canvas.height = Math.max(1, Math.round(viewport.height));
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            await page.render({
+              canvasContext: ctx as unknown as CanvasRenderingContext2D,
+              viewport,
+            }).promise;
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.68);
+            const b64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
+            if (b64) imagesBase64.push(b64);
+          }
         }
       } catch (renderErr) {
         console.warn(`[extractPdfInBrowser] Advertencia renderizando página ${pageNum}:`, renderErr);
@@ -106,6 +199,9 @@ async function extractPdfInBrowser(
 
     return { text, imagesBase64 };
   } finally {
+    if (savedDecompressionStream !== undefined) {
+      (globalThis as Record<string, unknown>).DecompressionStream = savedDecompressionStream;
+    }
     try {
       await doc.cleanup();
       await doc.destroy();
@@ -479,14 +575,15 @@ export function DataCreditoCruceModal({
         setCurrentFileMsg(`Analizando [${currentIdx}/${pdfFiles.length}]: ${pdf.name}...`);
         addLog(`Analizando [${currentIdx}/${pdfFiles.length}]: ${pdf.name}...`, "info");
 
-        const singleForm = new FormData();
-        singleForm.append("mode", "extract-single");
-        singleForm.append("filename", pdf.name);
+        const singlePayload: Record<string, unknown> = {
+          mode: "extract-single",
+          filename: pdf.name,
+        };
         if (openaiApiKey.trim()) {
-          singleForm.append("apiKey", openaiApiKey.trim());
+          singlePayload.apiKey = openaiApiKey.trim();
         }
         if (pdfPassword.trim()) {
-          singleForm.append("pdfPassword", pdfPassword.trim());
+          singlePayload.pdfPassword = pdfPassword.trim();
         }
 
         try {
@@ -494,9 +591,9 @@ export function DataCreditoCruceModal({
           const extraCedulas = selectedPersonsList.map((p) => p.cedula).filter(Boolean);
           try {
             const localExtracted = await extractPdfInBrowser(pdf, pdfPassword, extraCedulas);
-            singleForm.append("pdfText", localExtracted.text);
+            singlePayload.pdfText = localExtracted.text;
             if (localExtracted.imagesBase64.length > 0) {
-              singleForm.append("pdfImagesJson", JSON.stringify(localExtracted.imagesBase64));
+              singlePayload.pdfImages = localExtracted.imagesBase64;
             }
             addLog(
               `[${currentIdx}/${pdfFiles.length}] PDF leído en navegador (${localExtracted.text.length >= 50 ? `${localExtracted.text.length} caracteres` : `${localExtracted.imagesBase64.length} página(s) en imagen`}). Consultando IA...`,
@@ -507,14 +604,23 @@ export function DataCreditoCruceModal({
             if (localMsg.startsWith("No se pudo abrir")) {
               throw localErr;
             }
-            // Respaldo: enviar archivo al servidor si falló extracción local
-            singleForm.append("pdfs", pdf);
+            // Respaldo: enviar archivo en Base64 dentro de JSON (sin multipart/form-data en Node 18)
+            singlePayload.pdfBase64 = arrayBufferToBase64(await pdf.arrayBuffer());
           }
 
-          const singleRes = await fetch("/api/admin/datacredito/cruce", {
-            method: "POST",
-            body: singleForm,
-          });
+          const reqController = new AbortController();
+          const reqTimeout = setTimeout(() => reqController.abort(), 40000);
+          let singleRes: Response;
+          try {
+            singleRes = await fetch("/api/admin/datacredito/cruce", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(singlePayload),
+              signal: reqController.signal,
+            });
+          } finally {
+            clearTimeout(reqTimeout);
+          }
 
           if (!singleRes.ok) {
             const errText = await singleRes.text().catch(() => "");
@@ -523,7 +629,7 @@ export function DataCreditoCruceModal({
               const errJson = JSON.parse(errText) as { error?: string };
               if (errJson.error) cleanErr = errJson.error;
             } catch {
-              if (cleanErr.includes("<!DOCTYPE html>")) {
+              if (cleanErr.includes("<html") || cleanErr.includes("<!DOCTYPE html>")) {
                 cleanErr = `El servidor tardó demasiado o rechazó la petición (HTTP ${singleRes.status})`;
               }
             }
@@ -550,6 +656,7 @@ export function DataCreditoCruceModal({
           const errMsg = fileErr instanceof Error ? fileErr.message : "Error desconocido";
           addLog(`[AVISO] Error procesando ${pdf.name}: ${errMsg}`, "warn");
         }
+        throw new Error(cleanErr);
       }
 
       if (extractedPdfs.length === 0) {
@@ -562,22 +669,29 @@ export function DataCreditoCruceModal({
       setCurrentFileMsg("Cruzando información y generando plantilla Excel...");
       addLog("Cruzando información con las solicitudes y generando archivo Excel...", "info");
 
-      const cruceForm = new FormData();
-      cruceForm.append("stream", "false");
-      cruceForm.append("extractedPdfsJson", JSON.stringify(extractedPdfs));
+      const crucePayload: Record<string, unknown> = {
+        extractedPdfs,
+      };
 
       if (sourceMode === "excel" && excelFile) {
-        cruceForm.append("excel", excelFile);
+        crucePayload.excelBase64 = arrayBufferToBase64(await excelFile.arrayBuffer());
       } else if (selectedPersonIds.length > 0) {
-        cruceForm.append("leadIds", selectedPersonIds.join(","));
-      } else {
-        cruceForm.append("allLeads", "true");
+        crucePayload.leadIds = selectedPersonIds;
       }
 
-      const res = await fetch("/api/admin/datacredito/cruce", {
-        method: "POST",
-        body: cruceForm,
-      });
+      const finalController = new AbortController();
+      const finalTimeout = setTimeout(() => finalController.abort(), 40000);
+      let res: Response;
+      try {
+        res = await fetch("/api/admin/datacredito/cruce", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(crucePayload),
+          signal: finalController.signal,
+        });
+      } finally {
+        clearTimeout(finalTimeout);
+      }
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
@@ -586,7 +700,7 @@ export function DataCreditoCruceModal({
           const errJson = JSON.parse(text) as { error?: string };
           if (errJson.error) cleanErr = errJson.error;
         } catch {
-          if (cleanErr.includes("<!DOCTYPE html>")) {
+          if (cleanErr.includes("<html") || cleanErr.includes("<!DOCTYPE html>")) {
             cleanErr = `Error temporal del servidor (HTTP ${res.status})`;
           }
         }
