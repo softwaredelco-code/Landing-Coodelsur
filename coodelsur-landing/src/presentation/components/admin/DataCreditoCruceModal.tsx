@@ -656,7 +656,6 @@ export function DataCreditoCruceModal({
           const errMsg = fileErr instanceof Error ? fileErr.message : "Error desconocido";
           addLog(`[AVISO] Error procesando ${pdf.name}: ${errMsg}`, "warn");
         }
-        throw new Error(cleanErr);
       }
 
       if (extractedPdfs.length === 0) {
