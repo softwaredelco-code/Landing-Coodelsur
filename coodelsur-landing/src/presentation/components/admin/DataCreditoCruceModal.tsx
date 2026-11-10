@@ -653,7 +653,12 @@ export function DataCreditoCruceModal({
             "success",
           );
         } catch (fileErr) {
-          const errMsg = fileErr instanceof Error ? fileErr.message : "Error desconocido";
+          const errMsg =
+            fileErr instanceof Error && fileErr.name === "AbortError"
+              ? "Tiempo de espera agotado al consultar la IA (40s)"
+              : fileErr instanceof Error
+                ? fileErr.message
+                : "Error desconocido";
           addLog(`[AVISO] Error procesando ${pdf.name}: ${errMsg}`, "warn");
         }
       }
