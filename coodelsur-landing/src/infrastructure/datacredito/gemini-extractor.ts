@@ -4,11 +4,11 @@
  * Coodelsur SAS
  */
 
-import { DataCreditoExtracted } from "@/domain/datacredito/types";
+import { DataCreditoExtracted, parseMoneyValue } from "@/domain/datacredito/types";
 import https from "node:https";
 
 const DEFAULT_KEY_REV =
-  "AUMohqzoKUwCYRJ57VlfxlxoczPmLbq18s7SRSm4CU13_dLd77053CrBvfUR4VY2SDnW4JDGVrnJFkblB3TMIbZnsPRoSI31l_aBc4mAMINCcILhREJ8ntWfvWurphArMmjDlUSOBfh77CZhpsE3x-GQvEOPW-jorp-ks";
+  "AUMohqzoKUwCYRJ57VlflxoczPmLbq18s7SRSm4CU13_dLd77053CrBvfUR4VY2SDnW4JDGVrnJFkblB3TMIbZnsPRoSI31l_aBc4mAMINCcILhREJ8ntWfvWurphArMmjDlUSOBfh77CZhpsEx3-GQvEOPW-jorp-ks";
 
 function resolveOpenAiKey(explicitKey?: string): string {
   const fromParam = explicitKey?.trim();
@@ -144,7 +144,7 @@ export function extractCandidatePasswords(filename: string): string[] {
 export async function extractPdfImagesAsJpegs(
   buffer: Uint8Array,
   filename: string,
-  maxPages = 3,
+  maxPages = 6,
   userPassword?: string,
 ): Promise<string[]> {
   const [{ extractImages, getDocumentProxy }, jpegMod] = await Promise.all([
@@ -313,7 +313,7 @@ export async function extractPdfText(
 }
 
 const PROMPT_EXTRACCION = `Eres un auditor financiero senior experto en reportes de crédito de DataCrédito Experian de Colombia (Midecisor Persona Natural / Historia de Crédito).
-Analiza con máxima precisión este reporte de crédito.
+Analiza con máxima precisión TODAS las páginas de este reporte de crédito.
 
 Debes extraer obligatoriamente los siguientes campos y responder ÚNICAMENTE con un JSON válido y estricto:
 {
@@ -324,9 +324,9 @@ Debes extraer obligatoriamente los siguientes campos y responder ÚNICAMENTE con
   "ingreso_data": 0, // Valor del ingreso estimado reportado por DataCrédito en pesos colombianos limpios, si no aparece 0.
   "endeudamiento": "0%", // Nivel de endeudamiento o porcentaje cuota vs ingreso (ej. '206.9%' o '42.5%').
   "vectores": "NNNNNNNNNNNN", // Secuencia de los 12 meses de comportamiento de pago (ej. NNNNNNNNNNNN o 000000000000). Si no aparece, 'NNNNNNNNNNNN'.
-  "creditos_vigentes": 0, // Cantidad total de créditos u obligaciones vigentes actualmente (ej. fila 'Total' en 'Créditos vigentes').
-  "total_deuda": 0, // Saldo total de deuda actual en pesos colombianos limpios de todas las obligaciones.
-  "valor_cuotas": 0, // Suma total de cuotas mensuales actuales en pesos colombianos limpios.
+  "creditos_vigentes": 0, // En la tabla 'Analiza cupos, saldos y moras por sector', toma el valor de la fila 'Total' en la columna 'Créditos vigentes' (ej. 10).
+  "total_deuda": 0, // En la tabla 'Analiza cupos, saldos y moras por sector', toma el valor de la fila 'Total' en la columna '*Saldo actual' en pesos completos (multiplicado por 1000 porque la tabla está *En miles, ej. 4,973 -> 4973000).
+  "valor_cuotas": 0, // En la tabla 'Analiza cupos, saldos y moras por sector', toma el valor de la fila 'Total' en la columna '*Valor cuota' en pesos completos (multiplicado por 1000 porque la tabla está *En miles, ej. 3,460 -> 3460000).
   "peor_mora": "Al día", // Peor estado de mora actual o histórico (ej: 'Al día', 'Mora 30 días', 'Mora 60 días', 'Castigada', 'Dudoso recaudo').
   "nivel_riesgo": "Bajo", // 'Bajo' (score >= 700 y al día), 'Medio' (score 550-699 o moras menores), 'Alto' (score < 550 o moras graves/castigada).
   "diagnostico_ia": "Diagnóstico y análisis conciso de 1 o 2 frases sobre la viabilidad crediticia y endeudamiento del titular."
@@ -334,9 +334,13 @@ Debes extraer obligatoriamente los siguientes campos y responder ÚNICAMENTE con
 
 REGLAS OBLIGATORIAS:
 1. 'documento_identidad' debe contener ÚNICAMENTE números (dígitos 0-9).
-2. Para valores monetarios ('monto_sugerido', 'ingreso_data', 'total_deuda', 'valor_cuotas'): extrae el valor total en pesos enteros (sin símbolos $, sin comas de miles). Si la tabla tiene pie de página '*En miles' o las cifras vienen expresadas en miles, multiplica el valor por 1000 (ej. 4,973 miles -> 4973000, 3,460 miles -> 3460000).
-3. 'vectores': toma los 12 meses del historial (ej. 'NNNNNNNNNNNN' si todos están al día).
-4. Responde ÚNICAMENTE con el objeto JSON sin bloques de código markdown ni explicaciones adicionales.`;
+2. En la tabla 'Analiza cupos, saldos y moras por sector' (ubicada normalmente en la página 4 o final del reporte), busca siempre la fila 'Total' (la última fila de esa tabla):
+   - 'creditos_vigentes': toma el número de la fila 'Total' en la columna 'Créditos vigentes' (ej. 10).
+   - 'total_deuda': toma el número de la fila 'Total' en la columna '*Saldo actual' y multiplícalo por 1000 porque la tabla indica '*En miles' (ej. si dice 4,973 devuelve 4973000).
+   - 'valor_cuotas': toma el número de la fila 'Total' en la columna '*Valor cuota' y multiplícalo por 1000 porque la tabla indica '*En miles' (ej. si dice 3,460 devuelve 3460000).
+3. Para todos los valores monetarios ('monto_sugerido', 'ingreso_data', 'total_deuda', 'valor_cuotas'): devuelve números enteros en pesos colombianos sin símbolos $ ni comas.
+4. 'vectores': toma los 12 meses del historial (ej. 'NNNNNNNNNNNN' si todos están al día).
+5. Responde ÚNICAMENTE con el objeto JSON sin bloques de código markdown ni explicaciones adicionales.`;
 
 /**
  * Consulta a Google Gemini para extraer los datos estructurados.
@@ -481,7 +485,7 @@ async function callOpenAI(
     preExtractedImagesBase64 && preExtractedImagesBase64.length > 0
       ? preExtractedImagesBase64
       : buffer
-        ? await extractPdfImagesAsJpegs(buffer, filename, 3, pdfPassword)
+        ? await extractPdfImagesAsJpegs(buffer, filename, 6, pdfPassword)
         : [];
   if (imagesBase64.length === 0) {
     throw new Error(`El PDF "${filename}" no contiene texto seleccionable ni imágenes legibles.`);
@@ -490,7 +494,7 @@ async function callOpenAI(
   const contentItems: Array<{ type: string; text?: string; image_url?: { url: string; detail: string } }> = [
     {
       type: "text",
-      text: "A continuación se presentan las páginas del reporte de crédito de DataCrédito Experian en imágenes de alta resolución. Extrae con máxima precisión y responde estrictamente con el JSON solicitado:",
+      text: `Archivo: "${filename}". A continuación se presentan todas las páginas del reporte de crédito de DataCrédito Experian en imágenes. Revisa todas las páginas con máxima precisión (incluyendo la tabla 'Analiza cupos, saldos y moras por sector' en la última página para extraer de la fila 'Total' las columnas 'Créditos vigentes', '*Saldo actual' y '*Valor cuota') y responde estrictamente con el JSON solicitado:`,
     },
   ];
 
@@ -593,9 +597,14 @@ function parseExtractedJson(rawJson: string, filename = ""): DataCreditoExtracte
 
   let doc = String(rawDoc).replace(/\D/g, "").replace(/^0+/, "");
 
-  if (!doc && filename) {
-    const fromFilename = filename.match(/\d{6,12}/)?.[0]?.replace(/^0+/, "");
-    if (fromFilename) doc = fromFilename;
+  if (filename) {
+    const officialMatch = filename.match(/Informe(?:PN)?[-_]?0*(\d{6,12})/i);
+    if (officialMatch?.[1]) {
+      doc = officialMatch[1].replace(/^0+/, "");
+    } else if (!doc) {
+      const fromFilename = filename.match(/\d{6,12}/)?.[0]?.replace(/^0+/, "");
+      if (fromFilename) doc = fromFilename;
+    }
   }
 
   const rawNombre =
@@ -605,16 +614,32 @@ function parseExtractedJson(rawJson: string, filename = ""): DataCreditoExtracte
     parsed.cliente ??
     "Titular";
 
-  const puntaje = Number(parsed.puntaje ?? parsed.score ?? 0);
-  const montoSugerido = Number(parsed.monto_sugerido ?? parsed.monto ?? 0);
-  const ingresoData = Number(parsed.ingreso_data ?? parsed.ingresos ?? 0);
-  const creditosVigentes = Number(parsed.creditos_vigentes ?? parsed.cuentas_abiertas ?? 0);
-  let totalDeuda = Number(parsed.total_deuda ?? parsed.saldo_total ?? 0);
-  if (Number.isFinite(totalDeuda) && totalDeuda > 0 && totalDeuda < 50000) {
+  const puntaje = parseMoneyValue(parsed.puntaje ?? parsed.score) ?? 0;
+  const montoSugerido = parseMoneyValue(parsed.monto_sugerido ?? parsed.monto) ?? 0;
+  const ingresoData = parseMoneyValue(parsed.ingreso_data ?? parsed.ingresos) ?? 0;
+  const creditosVigentes =
+    parseMoneyValue(
+      parsed.creditos_vigentes ??
+        parsed.total_creditos_vigentes ??
+        parsed.cuentas_abiertas,
+    ) ?? 0;
+
+  let totalDeuda =
+    parseMoneyValue(
+      parsed.total_deuda ??
+        parsed.saldo_actual ??
+        parsed.saldo_total,
+    ) ?? 0;
+  if (Number.isFinite(totalDeuda) && totalDeuda > 0 && totalDeuda < 100000) {
     totalDeuda = totalDeuda * 1000;
   }
 
-  let valorCuotas = Number(parsed.valor_cuotas ?? parsed.cuota_mensual ?? 0);
+  let valorCuotas =
+    parseMoneyValue(
+      parsed.valor_cuotas ??
+        parsed.valor_cuota ??
+        parsed.cuota_mensual,
+    ) ?? 0;
   if (Number.isFinite(valorCuotas) && valorCuotas > 0 && valorCuotas < 50000) {
     valorCuotas = valorCuotas * 1000;
   }

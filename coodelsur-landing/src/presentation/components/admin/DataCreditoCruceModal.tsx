@@ -102,9 +102,9 @@ async function extractPdfInBrowser(
       return { text, imagesBase64: [] };
     }
 
-    // Si es un PDF escaneado (sin capa de texto), extraer/renderizar hasta 3 páginas en HTML5 Canvas a JPEG
+    // Si es un PDF escaneado (sin capa de texto), extraer/renderizar hasta 6 páginas en HTML5 Canvas a JPEG
     const imagesBase64: string[] = [];
-    const maxPages = Math.min(doc.numPages, 3);
+    const maxPages = Math.min(doc.numPages, 6);
     const MAX_DIM = 960;
 
     for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
@@ -286,33 +286,51 @@ export function DataCreditoCruceModal({
   const [selectedPersonsCache, setSelectedPersonsCache] = useState<Record<string, LeadSummaryItem>>({});
   const wasOpenRef = useRef(false);
 
-  // Búsqueda en vivo en TODAS las solicitudes del sistema (nombre, cédula, teléfono o email)
+  // Búsqueda en vivo en TODAS las solicitudes del sistema (por nombre o cédula)
   useEffect(() => {
-    const query = personSearchQuery.trim();
-    if (!query || query.length < 2) {
+    const rawQuery = personSearchQuery.trim();
+    const isNumeric = /^[\d.\-\s]+$/.test(rawQuery);
+    const effectiveQuery = isNumeric ? rawQuery.replace(/\D/g, "").replace(/^0+/, "") : rawQuery;
+
+    if (!effectiveQuery || effectiveQuery.length < 2) {
       setRemoteSearchResults([]);
       setIsSearchingRemote(false);
       return;
     }
 
+    const abortController = new AbortController();
     setIsSearchingRemote(true);
+
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/admin/leads?q=${encodeURIComponent(query)}&take=15`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/admin/leads?q=${encodeURIComponent(effectiveQuery)}&take=80`,
+          {
+            cache: "no-store",
+            signal: abortController.signal,
+          },
+        );
         if (!res.ok) throw new Error("Search failed");
         const data = (await res.json()) as { leads?: LeadSummaryItem[] };
-        const fetched = Array.isArray(data.leads) ? data.leads : [];
-        setRemoteSearchResults(fetched);
+        if (!abortController.signal.aborted) {
+          const fetched = Array.isArray(data.leads) ? data.leads : [];
+          setRemoteSearchResults(fetched);
+        }
       } catch (err) {
-        console.warn("[DataCreditoCruceModal] Error buscando solicitudes remotas:", err);
+        if ((err as Error)?.name !== "AbortError") {
+          console.warn("[DataCreditoCruceModal] Error buscando solicitudes remotas:", err);
+        }
       } finally {
-        setIsSearchingRemote(false);
+        if (!abortController.signal.aborted) {
+          setIsSearchingRemote(false);
+        }
       }
-    }, 260);
+    }, 200);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
   }, [personSearchQuery]);
 
   // Sincronizar selección de personas al abrir el modal fusionando sin sobreescribir personas agregadas
@@ -392,44 +410,95 @@ export function DataCreditoCruceModal({
     });
   }, [availableLeads, selectedPersonIds, selectedPersonsCache]);
 
-  // Búsqueda interactiva de personas que busca en TODAS las solicitudes del sistema
+  // Búsqueda interactiva de personas con filtrado estricto y priorización por prefijo de cédula o nombre
   const searchResults = useMemo(() => {
-    const query = personSearchQuery.toLowerCase().trim();
-    if (!query) return [];
+    const rawQuery = personSearchQuery.trim();
+    if (!rawQuery) return [];
 
-    const map = new Map<string, LeadSummaryItem>();
-
-    // 1. Coincidencias en availableLeads y cache local (instantáneas)
+    // Reunir candidatos únicos (locales + cache + remotos) que no estén ya seleccionados
+    const candidatesMap = new Map<string, LeadSummaryItem>();
     for (const lead of availableLeads ?? []) {
-      if (
-        !selectedPersonIds.includes(lead.id) &&
-        (lead.nombre.toLowerCase().includes(query) ||
-          lead.cedula.includes(query) ||
-          (lead.telefono && lead.telefono.includes(query)))
-      ) {
-        map.set(lead.id, lead);
+      if (lead?.id && !selectedPersonIds.includes(lead.id)) {
+        candidatesMap.set(lead.id, lead);
       }
     }
     for (const lead of Object.values(selectedPersonsCache)) {
-      if (
-        lead &&
-        !selectedPersonIds.includes(lead.id) &&
-        (lead.nombre.toLowerCase().includes(query) ||
-          lead.cedula.includes(query) ||
-          (lead.telefono && lead.telefono.includes(query)))
-      ) {
-        map.set(lead.id, lead);
+      if (lead?.id && !selectedPersonIds.includes(lead.id)) {
+        candidatesMap.set(lead.id, lead);
       }
     }
-
-    // 2. Coincidencias remotas globales de la base de datos (todas las solicitudes)
     for (const lead of remoteSearchResults) {
-      if (lead && !selectedPersonIds.includes(lead.id)) {
-        map.set(lead.id, lead);
+      if (lead?.id && !selectedPersonIds.includes(lead.id)) {
+        candidatesMap.set(lead.id, lead);
       }
     }
 
-    return Array.from(map.values()).slice(0, 8);
+    const candidates = Array.from(candidatesMap.values());
+    const isNumericQuery = /^[\d.\-\s]+$/.test(rawQuery);
+
+    if (isNumericQuery) {
+      const qDigits = rawQuery.replace(/\D/g, "").replace(/^0+/, "") || rawQuery.replace(/\D/g, "");
+      if (!qDigits) return [];
+
+      const prefixMatches: Array<{ lead: LeadSummaryItem; score: number }> = [];
+      const substringMatches: Array<{ lead: LeadSummaryItem; score: number }> = [];
+
+      for (const lead of candidates) {
+        const rawCed = (lead.cedula || "").replace(/\D/g, "");
+        const cedNoZero = rawCed.replace(/^0+/, "") || rawCed;
+        if (!cedNoZero) continue;
+
+        if (cedNoZero === qDigits || rawCed === qDigits) {
+          prefixMatches.push({ lead, score: 100 });
+        } else if (cedNoZero.startsWith(qDigits) || rawCed.startsWith(qDigits)) {
+          prefixMatches.push({ lead, score: 85 - Math.min(20, Math.abs(cedNoZero.length - qDigits.length)) });
+        } else if (cedNoZero.includes(qDigits)) {
+          substringMatches.push({ lead, score: 40 });
+        }
+      }
+
+      // Si hay cédulas que empiezan por los dígitos buscados (ej. "1075"), mostrar ÚNICAMENTE esas
+      // y nunca mezclar con cédulas que empiecen por otros números (ej. "1234...")
+      const finalPool = prefixMatches.length > 0 ? prefixMatches : substringMatches;
+      return finalPool
+        .sort((a, b) => b.score - a.score || a.lead.cedula.localeCompare(b.lead.cedula))
+        .slice(0, 10)
+        .map((item) => item.lead);
+    }
+
+    // Búsqueda por nombre (insensible a tildes y mayúsculas, soporta nombre + apellido)
+    const normalizeText = (s: string) =>
+      s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+
+    const normQuery = normalizeText(rawQuery);
+    const queryWords = normQuery.split(/\s+/).filter(Boolean);
+    if (queryWords.length === 0) return [];
+
+    const scored: Array<{ lead: LeadSummaryItem; score: number }> = [];
+
+    for (const lead of candidates) {
+      const normName = normalizeText(lead.nombre || "");
+      const normCed = (lead.cedula || "").replace(/\D/g, "");
+
+      const allWordsMatch = queryWords.every((w) => normName.includes(w) || normCed.startsWith(w));
+      if (!allWordsMatch) continue;
+
+      let score = 50;
+      if (normName === normQuery) score = 100;
+      else if (normName.startsWith(normQuery)) score = 85;
+      else if (normName.split(/\s+/).some((part) => part.startsWith(queryWords[0]))) score = 70;
+
+      scored.push({ lead, score });
+    }
+
+    return scored
+      .sort((a, b) => b.score - a.score || a.lead.nombre.localeCompare(b.lead.nombre))
+      .slice(0, 10)
+      .map((item) => item.lead);
   }, [personSearchQuery, availableLeads, selectedPersonsCache, remoteSearchResults, selectedPersonIds]);
 
   // Cargar clave guardada en localStorage si existe
@@ -759,16 +828,34 @@ export function DataCreditoCruceModal({
       list = list.filter((r) => r.estadoCruce === "no_en_formulario");
     }
 
-    // Buscador
+    // Buscador de la tabla de resultados
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(
-        (r) =>
-          r.cedula.toLowerCase().includes(q) ||
-          r.nombre.toLowerCase().includes(q) ||
-          String(r.puntaje).toLowerCase().includes(q) ||
-          String(r.peorMora).toLowerCase().includes(q),
-      );
+      const rawQ = searchQuery.trim();
+      const isNumeric = /^[\d.\-\s]+$/.test(rawQ);
+      if (isNumeric) {
+        const qDigits = rawQ.replace(/\D/g, "").replace(/^0+/, "") || rawQ.replace(/\D/g, "");
+        const prefixList = list.filter((r) => {
+          const ced = (r.cedula || "").replace(/\D/g, "").replace(/^0+/, "");
+          return ced.startsWith(qDigits) || (r.cedula || "").replace(/\D/g, "").startsWith(qDigits);
+        });
+        list =
+          prefixList.length > 0
+            ? prefixList
+            : list.filter((r) => (r.cedula || "").replace(/\D/g, "").includes(qDigits));
+      } else {
+        const normText = (s: string) =>
+          s
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim();
+        const words = normText(rawQ).split(/\s+/).filter(Boolean);
+        list = list.filter((r) => {
+          const name = normText(r.nombre || "");
+          const ced = (r.cedula || "").toLowerCase();
+          return words.every((w) => name.includes(w) || ced.includes(w));
+        });
+      }
     }
 
     return list;
@@ -1425,6 +1512,7 @@ export function DataCreditoCruceModal({
                       <th className="px-3 py-2.5 text-center">Riesgo</th>
                       <th className="px-3 py-2.5 text-center">Mora</th>
                       <th className="px-3 py-2.5 text-center">Vectores</th>
+                      <th className="px-3 py-2.5 text-center">Créd. Vigentes</th>
                       <th className="px-3 py-2.5 text-right">Deuda Total</th>
                       <th className="px-3 py-2.5 text-right">Cuotas</th>
                       <th className="px-3 py-2.5 text-center">Estado Cruce</th>
@@ -1434,7 +1522,7 @@ export function DataCreditoCruceModal({
                   <tbody className="divide-y divide-gray-100">
                     {filteredRecords.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
+                        <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
                           No se encontraron registros con los filtros seleccionados
                         </td>
                       </tr>
@@ -1521,6 +1609,9 @@ export function DataCreditoCruceModal({
                               ) : (
                                 <span className="text-gray-400 text-[10px] font-mono">Pendiente</span>
                               )}
+                            </td>
+                            <td className="px-3 py-2 text-center font-mono text-gray-800 font-semibold">
+                              {r.creditosVigentes ?? "—"}
                             </td>
                             <td className="px-3 py-2 text-right font-mono text-gray-800 font-medium">
                               {formatMoney(r.totalDeuda)}
@@ -1690,6 +1781,12 @@ export function DataCreditoCruceModal({
                   <span className="text-gray-500 block text-[10px] uppercase font-bold">Ingreso DataCrédito</span>
                   <span className="text-sm font-semibold text-gray-900 font-mono">
                     {formatMoney(selectedRecordForDetail.ingresoData)}
+                  </span>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-2.5">
+                  <span className="text-gray-500 block text-[10px] uppercase font-bold">Créditos Vigentes</span>
+                  <span className="text-sm font-semibold text-gray-900 font-mono">
+                    {selectedRecordForDetail.creditosVigentes ?? "—"}
                   </span>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-2.5">

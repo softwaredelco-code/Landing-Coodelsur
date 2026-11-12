@@ -86,24 +86,6 @@ export function buildCoodelsurTemplateExcelBuffer(leads: LeadExportRecord[]): Ui
     const tasa = String(datos.tasa || datos.tasaInteres || "2.1").trim();
     const plazo = String(datos.cantidadCuotas || datos.plazo || "2").trim();
 
-    let salud = "Cotizante";
-    if (datos.regimenSalud) salud = String(datos.regimenSalud);
-    else if (datos.salud) salud = String(datos.salud);
-    else if (datos.tipoAfiliacion) salud = String(datos.tipoAfiliacion);
-
-    let propiedades = "No tiene nada";
-    const tieneVivienda = String(datos.tieneVivienda || "").toLowerCase() === "si";
-    const tieneVehiculo = String(datos.tieneVehiculo || "").toLowerCase() === "si";
-    if (tieneVivienda && tieneVehiculo) {
-      propiedades = "Vivienda y vehículo propios";
-    } else if (tieneVivienda) {
-      propiedades = "Vivienda propia";
-    } else if (tieneVehiculo) {
-      propiedades = "Vehículo propio";
-    } else if (datos.propiedades) {
-      propiedades = String(datos.propiedades);
-    }
-
     rows.push([
       lead.cedula,
       lead.nombre,
@@ -122,9 +104,9 @@ export function buildCoodelsurTemplateExcelBuffer(leads: LeadExportRecord[]): Ui
       "", // creditos vigentes
       "", // total deuda
       "", // valor cuotas
-      "", // capacidad de pago (regla de negocio: vacía)
-      salud,
-      propiedades,
+      "", // capacidad de pago (regla de negocio: vacía siempre)
+      "", // salud cotizante, beneficiario, subsidido (regla de negocio: vacía siempre)
+      "", // propiedades (regla de negocio: vacía siempre)
     ]);
   }
 
@@ -319,6 +301,25 @@ export function processCruceData(
 
   const finalHeaders = [...rawHeaders, ...newColumnsToAdd];
 
+  // Columnas que por regla de negocio deben quedar SIEMPRE vacías:
+  // "capacidad de pago", "salud cotizante, beneficiario, subsidido", "propiedades"
+  const alwaysEmptyColIndices: number[] = [];
+  for (let i = 0; i < finalHeaders.length; i++) {
+    const hNorm = finalHeaders[i]
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+    if (
+      hNorm === "capacidad de pago" ||
+      hNorm.startsWith("salud cotizante") ||
+      hNorm === "salud" ||
+      hNorm === "propiedades"
+    ) {
+      alwaysEmptyColIndices.push(i);
+    }
+  }
+
   const matchedCedulas = new Set<string>();
   const records: CruceItemResult[] = [];
   const updatedRows: unknown[][] = [];
@@ -459,6 +460,10 @@ export function processCruceData(
         estadoCruce: "sin_reporte",
         estadoCruceLabel: "Pendiente reporte",
       });
+    }
+
+    for (const emptyColIdx of alwaysEmptyColIndices) {
+      originalRow[emptyColIdx] = "";
     }
 
     updatedRows.push(originalRow);
