@@ -2,6 +2,7 @@
 
 import { AdminShell } from "@/presentation/components/admin/AdminShell";
 import { AprobarMontoModal } from "@/presentation/components/admin/AprobarMontoModal";
+import { ConfirmacionBancariaSection } from "@/presentation/components/admin/ConfirmacionBancariaSection";
 import { LeadAttachmentGallery } from "@/presentation/components/admin/LeadAttachmentGallery";
 import { LeadInfoGrid, LeadSummaryCard } from "@/presentation/components/admin/LeadInfoGrid";
 import { LeadUbicacionSection } from "@/presentation/components/admin/LeadUbicacionSection";
@@ -632,6 +633,13 @@ export default function AdminLeadDetailPage() {
             >
               <h2 className="mb-4 text-lg font-semibold text-coodel-dark">{section.title}</h2>
               <LeadInfoGrid fields={section.fields} />
+              {section.id === "bancarios" && (
+                <ConfirmacionBancariaSection
+                  leadId={lead.id}
+                  datosBancarios={lead.datosBancarios}
+                  onUpdated={(updatedLead) => setLead(updatedLead)}
+                />
+              )}
             </section>
           ))}
         </div>

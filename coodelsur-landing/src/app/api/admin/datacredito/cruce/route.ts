@@ -6,6 +6,7 @@
 
 import {
   buildCoodelsurTemplateExcelBuffer,
+  normalizeCedula,
   processCruceData,
 } from "@/application/datacredito/cruce-service";
 import { LeadExportRecord } from "@/application/lead/export-leads-excel";
@@ -62,6 +63,61 @@ function generateCruceFilename(): string {
   const minute = getPart("minute");
   const second = getPart("second");
   return `cruce-datacredito-coodelsur-${year}-${month}-${day}_${hour}-${minute}-${second}.xlsx`;
+}
+
+/**
+ * Cuando el usuario no selecciona solicitantes manualmente, busca en la base de datos
+ * directamente por los números de cédula extraídos de los PDFs (o del nombre del archivo).
+ */
+async function findLeadsByExtractedPdfs(
+  extractedList: Array<{ extracted?: DataCreditoExtracted; filename: string }>,
+): Promise<LeadExportRecord[]> {
+  const targetCedulas = new Set<string>();
+  for (const item of extractedList) {
+    const fromDoc = normalizeCedula(item.extracted?.documento_identidad);
+    if (fromDoc) targetCedulas.add(fromDoc);
+
+    const officialFromName = item.filename.match(/Informe(?:PN)?[-_]?0*(\d{6,12})/i)?.[1];
+    if (officialFromName) {
+      const normOfficial = normalizeCedula(officialFromName);
+      if (normOfficial) targetCedulas.add(normOfficial);
+    } else {
+      const anyDigits = item.filename.match(/\d{6,12}/)?.[0];
+      if (anyDigits) {
+        const normAny = normalizeCedula(anyDigits);
+        if (normAny) targetCedulas.add(normAny);
+      }
+    }
+  }
+
+  const cedulaList = Array.from(targetCedulas);
+  if (cedulaList.length === 0) return [];
+
+  const matchedByCedula = new Map<string, LeadExportRecord>();
+
+  await Promise.all(
+    cedulaList.map(async (ced) => {
+      try {
+        const results = await fetchLeadsForExport({ q: ced, take: 25 });
+        for (const lead of results) {
+          const leadCed = normalizeCedula(lead.cedula);
+          if (leadCed && targetCedulas.has(leadCed) && !matchedByCedula.has(leadCed)) {
+            matchedByCedula.set(leadCed, lead);
+          }
+        }
+      } catch {
+        // ignore individual lookup errors
+      }
+    }),
+  );
+
+  // Preservar el orden de los PDFs cargados
+  const ordered: LeadExportRecord[] = [];
+  for (const ced of cedulaList) {
+    const found = matchedByCedula.get(ced);
+    if (found) ordered.push(found);
+  }
+  return ordered;
 }
 
 export async function POST(request: Request) {
@@ -153,16 +209,8 @@ export async function POST(request: Request) {
           targetLeads = await fetchLeadsForExport({ ids });
         }
         if (targetLeads.length === 0) {
-          targetLeads = await fetchLeadsForExport({ take: 500 });
-        }
-        if (targetLeads.length === 0) {
-          return NextResponse.json(
-            {
-              error:
-                "No se encontraron solicitudes registradas en Coodelsur para realizar el cruce. Selecciona personas en la tabla o adjunta un archivo Excel.",
-            },
-            { status: 400 },
-          );
+          // Búsqueda quirúrgica por número de cédula de cada PDF cargado
+          targetLeads = await findLeadsByExtractedPdfs(preExtracted);
         }
         excelBuffer = buildCoodelsurTemplateExcelBuffer(targetLeads);
       }
@@ -291,24 +339,20 @@ export async function POST(request: Request) {
         }
       }
 
-      if (targetLeads.length === 0) {
-        // Cruce contra las solicitudes recientes registradas en Coodelsur (acotado para proteger RAM en cPanel)
-        targetLeads = await fetchLeadsForExport({
-          take: 500,
-        });
+      if (targetLeads.length === 0 && preExtractedPdfs && preExtractedPdfs.length > 0) {
+        targetLeads = await findLeadsByExtractedPdfs(preExtractedPdfs);
       }
 
-      if (targetLeads.length === 0) {
-        return NextResponse.json(
-          {
-            error:
-              "No se encontraron solicitudes registradas en Coodelsur para realizar el cruce. Selecciona personas en la tabla o adjunta un archivo Excel.",
-          },
-          { status: 400 },
+      if (targetLeads.length === 0 && pdfFiles.length > 0) {
+        targetLeads = await findLeadsByExtractedPdfs(
+          pdfFiles.map((f) => ({ filename: f.name })),
         );
       }
 
-      leadsSourceDescription = `${targetLeads.length} solicitud(es) seleccionada(s) de Coodelsur`;
+      leadsSourceDescription =
+        targetLeads.length > 0
+          ? `${targetLeads.length} solicitud(es) encontrada(s) en Coodelsur`
+          : `Búsqueda directa por cédula de los PDFs en Coodelsur`;
       excelBuffer = buildCoodelsurTemplateExcelBuffer(targetLeads);
     }
 
@@ -325,6 +369,10 @@ export async function POST(request: Request) {
             pdfPassword,
           });
           extractedPdfs.push({ extracted, filename: pdf.name });
+        }
+        if (!excelFile && (!leadIdsRaw || !leadIdsRaw.trim())) {
+          const autoLeads = await findLeadsByExtractedPdfs(extractedPdfs);
+          excelBuffer = buildCoodelsurTemplateExcelBuffer(autoLeads);
         }
       }
 
@@ -402,6 +450,12 @@ export async function POST(request: Request) {
                 message: `[AVISO] Error procesando ${pdf.name}: ${errMsg}`,
               });
             }
+          }
+
+          if (!excelFile && (!leadIdsRaw || !leadIdsRaw.trim()) && extractedPdfs.length > 0) {
+            const autoLeads = await findLeadsByExtractedPdfs(extractedPdfs);
+            excelBuffer = buildCoodelsurTemplateExcelBuffer(autoLeads);
+            leadsSourceDescription = `${autoLeads.length} solicitud(es) encontrada(s) por cédula en Coodelsur`;
           }
 
           send({

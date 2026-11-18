@@ -32,6 +32,19 @@ export interface AdminLeadGeoPoint {
   lng: number;
 }
 
+export interface AdminLeadDatosBancarios {
+  /** Datos diligenciados por el cliente en el formulario */
+  tipoCuentaCliente: string | null;
+  entidadBancariaCliente: string | null;
+  numeroCuentaCliente: string | null;
+  /** Datos confirmados por Cartera en llamada para desembolso */
+  cuentaConfirmada: boolean;
+  tipoCuentaConfirmada: string | null;
+  entidadBancariaConfirmada: string | null;
+  numeroCuentaConfirmada: string | null;
+  fechaConfirmacionCuenta: string | null;
+}
+
 export interface AdminLeadDetail {
   id: string;
   tipoCredito: string;
@@ -60,6 +73,7 @@ export interface AdminLeadDetail {
   domicilio: AdminLeadDomicilio;
   /** GPS capturado en el formulario (permiso del navegador) */
   geoFormulario: AdminLeadGeoPoint | null;
+  datosBancarios: AdminLeadDatosBancarios;
   secciones: AdminLeadSection[];
   adjuntos: AdminAttachment[];
   witmeLeadId: string | null;
@@ -203,6 +217,16 @@ export function mapLeadToAdminDetail(
     pasoActualFormulario: lead.pasoActualFormulario ?? extractPasoActualFormulario(datos),
     domicilio: extractDomicilio(datos),
     geoFormulario: extractGeoFormulario(datos),
+    datosBancarios: {
+      tipoCuentaCliente: readDatosString(datos, "tipoCuenta"),
+      entidadBancariaCliente: readDatosString(datos, "entidadBancaria"),
+      numeroCuentaCliente: readDatosString(datos, "numeroCuenta"),
+      cuentaConfirmada: Boolean(datos.cuentaConfirmada),
+      tipoCuentaConfirmada: readDatosString(datos, "tipoCuentaConfirmada"),
+      entidadBancariaConfirmada: readDatosString(datos, "entidadBancariaConfirmada"),
+      numeroCuentaConfirmada: readDatosString(datos, "numeroCuentaConfirmada"),
+      fechaConfirmacionCuenta: readDatosString(datos, "fechaConfirmacionCuenta"),
+    },
     secciones,
     adjuntos: adjuntos ?? buildAdminAttachments(lead.id, datos),
     witmeLeadId: extractWitmeId(datos),

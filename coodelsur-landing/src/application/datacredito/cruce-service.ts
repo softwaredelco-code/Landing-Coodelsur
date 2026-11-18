@@ -371,10 +371,15 @@ export function processCruceData(
       matchedCedulas.add(normCedula);
       const ext = pdfMatch.extracted;
 
-      const vAnalysis = analyzeVector(ext.vectores);
+      const cleanVector = String(ext.vectores || "NNNNNNNNNNNN")
+        .split("|")[0]
+        .split("(")[0]
+        .trim();
+      const vAnalysis = analyzeVector(cleanVector);
 
       const numMontoSugerido = parseMoneyValue(ext.monto_sugerido) ?? 0;
       const numIngresoData = parseMoneyValue(ext.ingreso_data) ?? 0;
+      const numCreditosVigentes = parseMoneyValue(ext.creditos_vigentes) ?? 0;
       const numTotalDeuda = parseMoneyValue(ext.total_deuda) ?? 0;
       const numValorCuotas = parseMoneyValue(ext.valor_cuotas) ?? 0;
 
@@ -391,8 +396,8 @@ export function processCruceData(
       originalRow[analysisHeadersMap["Endeudamiento"]] = ext.endeudamiento;
       // Regla obligatoria: "Capacidad de pago" COMPLETAMENTE VACÍA
       originalRow[analysisHeadersMap["Capacidad de pago"]] = "";
-      originalRow[analysisHeadersMap["Vectores"]] = ext.vectores ? `${ext.vectores} (${vAnalysis.resumen})` : "";
-      originalRow[analysisHeadersMap["Créditos vigentes"]] = ext.creditos_vigentes;
+      originalRow[analysisHeadersMap["Vectores"]] = `${cleanVector} (${vAnalysis.resumen})`;
+      originalRow[analysisHeadersMap["Créditos vigentes"]] = numCreditosVigentes;
       originalRow[analysisHeadersMap["Total deuda"]] = numTotalDeuda;
       originalRow[analysisHeadersMap["Valor cuotas"]] = numValorCuotas;
       originalRow[analysisHeadersMap["Nivel Riesgo"]] = ext.nivel_riesgo;
@@ -406,15 +411,15 @@ export function processCruceData(
         email: rawEmail,
         montoSolicitado: typeof rawMonto === "number" || typeof rawMonto === "string" ? rawMonto : undefined,
         puntaje: ext.puntaje,
-        montoSugerido: ext.monto_sugerido,
-        ingresoData: ext.ingreso_data,
+        montoSugerido: numMontoSugerido,
+        ingresoData: numIngresoData,
         endeudamiento: ext.endeudamiento,
         capacidadPago: "",
-        vectores: ext.vectores,
+        vectores: cleanVector,
         analisisVectores: vAnalysis.detalle,
-        creditosVigentes: ext.creditos_vigentes,
-        totalDeuda: ext.total_deuda,
-        valorCuotas: ext.valor_cuotas,
+        creditosVigentes: numCreditosVigentes,
+        totalDeuda: numTotalDeuda,
+        valorCuotas: numValorCuotas,
         peorMora: ext.peor_mora,
         nivelRiesgo: ext.nivel_riesgo,
         diagnosticoIA: ext.diagnostico_ia,
@@ -475,7 +480,11 @@ export function processCruceData(
     if (!matchedCedulas.has(normCedula)) {
       noEnFormularioCount++;
       const ext = pdfItem.extracted;
-      const vAnalysis = analyzeVector(ext.vectores);
+      const cleanVector = String(ext.vectores || "NNNNNNNNNNNN")
+        .split("|")[0]
+        .split("(")[0]
+        .trim();
+      const vAnalysis = analyzeVector(cleanVector);
 
       const newRow: unknown[] = new Array(finalHeaders.length).fill("");
       newRow[cedulaCol] = ext.documento_identidad || normCedula;
@@ -485,6 +494,7 @@ export function processCruceData(
 
       const numMontoSugerido = parseMoneyValue(ext.monto_sugerido) ?? 0;
       const numIngresoData = parseMoneyValue(ext.ingreso_data) ?? 0;
+      const numCreditosVigentes = parseMoneyValue(ext.creditos_vigentes) ?? 0;
       const numTotalDeuda = parseMoneyValue(ext.total_deuda) ?? 0;
       const numValorCuotas = parseMoneyValue(ext.valor_cuotas) ?? 0;
 
@@ -494,13 +504,17 @@ export function processCruceData(
       newRow[analysisHeadersMap["Endeudamiento"]] = ext.endeudamiento;
       // Capacidad de pago vacía
       newRow[analysisHeadersMap["Capacidad de pago"]] = "";
-      newRow[analysisHeadersMap["Vectores"]] = ext.vectores ? `${ext.vectores} (${vAnalysis.resumen})` : "";
-      newRow[analysisHeadersMap["Créditos vigentes"]] = ext.creditos_vigentes;
+      newRow[analysisHeadersMap["Vectores"]] = `${cleanVector} (${vAnalysis.resumen})`;
+      newRow[analysisHeadersMap["Créditos vigentes"]] = numCreditosVigentes;
       newRow[analysisHeadersMap["Total deuda"]] = numTotalDeuda;
       newRow[analysisHeadersMap["Valor cuotas"]] = numValorCuotas;
       newRow[analysisHeadersMap["Nivel Riesgo"]] = ext.nivel_riesgo;
       newRow[analysisHeadersMap["Diagnóstico IA"]] = ext.diagnostico_ia;
       newRow[analysisHeadersMap["Estado Cruce"]] = "No registrada en formulario";
+
+      for (const emptyColIdx of alwaysEmptyColIndices) {
+        newRow[emptyColIdx] = "";
+      }
 
       updatedRows.push(newRow);
 
@@ -508,15 +522,15 @@ export function processCruceData(
         cedula: ext.documento_identidad || normCedula,
         nombre: ext.nombre_titular || "No registrada en formulario",
         puntaje: ext.puntaje,
-        montoSugerido: ext.monto_sugerido,
-        ingresoData: ext.ingreso_data,
+        montoSugerido: numMontoSugerido,
+        ingresoData: numIngresoData,
         endeudamiento: ext.endeudamiento,
         capacidadPago: "",
-        vectores: ext.vectores,
+        vectores: cleanVector,
         analisisVectores: vAnalysis.detalle,
-        creditosVigentes: ext.creditos_vigentes,
-        totalDeuda: ext.total_deuda,
-        valorCuotas: ext.valor_cuotas,
+        creditosVigentes: numCreditosVigentes,
+        totalDeuda: numTotalDeuda,
+        valorCuotas: numValorCuotas,
         peorMora: ext.peor_mora,
         nivelRiesgo: ext.nivel_riesgo,
         diagnosticoIA: ext.diagnostico_ia,
@@ -555,6 +569,13 @@ export function processCruceData(
 
   // Estilos de columnas y anchos automáticos
   const colWidths = finalHeaders.map((header) => {
+    const hNorm = header
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+    if (hNorm === "vectores") return { wch: 52 };
+    if (hNorm === "diagnostico ia") return { wch: 48 };
     const isAnalysisCol = standardAnalysisKeys.includes(header);
     return { wch: Math.max(14, header.length + (isAnalysisCol ? 6 : 4)) };
   });
@@ -631,6 +652,8 @@ export function processCruceData(
 
   const nivelRiesgoCol = analysisHeadersMap["Nivel Riesgo"];
   const puntajeCol = analysisHeadersMap["Puntaje"];
+  const vectoresCol = analysisHeadersMap["Vectores"];
+  const creditosVigentesCol = analysisHeadersMap["Créditos vigentes"];
   const estadoCruceCol = analysisHeadersMap["Estado Cruce"];
 
   // Aplicar estilos celda por celda a todas las filas de datos
@@ -688,6 +711,22 @@ export function processCruceData(
           if (cell.v >= 700) fontColor = "15803D"; // Verde
           else if (cell.v >= 550) fontColor = "B45309"; // Ámbar
           else if (cell.v > 0) fontColor = "B91C1C"; // Rojo
+        }
+      }
+
+      // 3.5 Columnas Vectores y Créditos vigentes (separadas y centradas)
+      if (c === vectoresCol) {
+        horizontalAlign = "center";
+        isBold = true;
+      }
+      if (c === creditosVigentesCol) {
+        horizontalAlign = "center";
+        const num = parseMoneyValue(cell.v);
+        if (num !== null) {
+          cell.v = num;
+          cell.t = "n";
+          cell.z = "0";
+          isBold = true;
         }
       }
 

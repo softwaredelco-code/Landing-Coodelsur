@@ -49,6 +49,12 @@ export async function PATCH(
   const body = (await request.json().catch(() => ({}))) as {
     montoAprobado?: number | string | null;
     estado?: string;
+    datosBancariosConfirmados?: {
+      cuentaConfirmada: boolean;
+      tipoCuentaConfirmada?: string | null;
+      entidadBancariaConfirmada?: string | null;
+      numeroCuentaConfirmada?: string | null;
+    } | null;
   };
 
   let parsedMontoAprobado: number | null | undefined = undefined;
@@ -64,6 +70,47 @@ export async function PATCH(
         );
       }
       parsedMontoAprobado = Math.round(num);
+    }
+  }
+
+  let parsedBancarios:
+    | {
+        cuentaConfirmada: boolean;
+        tipoCuentaConfirmada: string | null;
+        entidadBancariaConfirmada: string | null;
+        numeroCuentaConfirmada: string | null;
+        fechaConfirmacionCuenta: string | null;
+      }
+    | undefined = undefined;
+
+  if (body.datosBancariosConfirmados !== undefined) {
+    if (body.datosBancariosConfirmados === null || !body.datosBancariosConfirmados.cuentaConfirmada) {
+      parsedBancarios = {
+        cuentaConfirmada: false,
+        tipoCuentaConfirmada: null,
+        entidadBancariaConfirmada: null,
+        numeroCuentaConfirmada: null,
+        fechaConfirmacionCuenta: null,
+      };
+    } else {
+      const tipo = String(body.datosBancariosConfirmados.tipoCuentaConfirmada ?? "").trim();
+      const entidad = String(body.datosBancariosConfirmados.entidadBancariaConfirmada ?? "").trim();
+      const numero = String(body.datosBancariosConfirmados.numeroCuentaConfirmada ?? "").trim();
+
+      if (!tipo || !entidad || !numero) {
+        return NextResponse.json(
+          { error: "Completa el tipo de cuenta, la entidad bancaria y el número de cuenta o llave para confirmar." },
+          { status: 400 },
+        );
+      }
+
+      parsedBancarios = {
+        cuentaConfirmada: true,
+        tipoCuentaConfirmada: tipo,
+        entidadBancariaConfirmada: entidad,
+        numeroCuentaConfirmada: numero,
+        fechaConfirmacionCuenta: new Date().toISOString(),
+      };
     }
   }
 
@@ -92,6 +139,14 @@ export async function PATCH(
       updatedDatos.montoAprobado = parsedMontoAprobado;
       updatedDatos.fechaAprobacionMonto =
         parsedMontoAprobado !== null ? new Date().toISOString() : null;
+    }
+
+    if (parsedBancarios !== undefined) {
+      updatedDatos.cuentaConfirmada = parsedBancarios.cuentaConfirmada;
+      updatedDatos.tipoCuentaConfirmada = parsedBancarios.tipoCuentaConfirmada;
+      updatedDatos.entidadBancariaConfirmada = parsedBancarios.entidadBancariaConfirmada;
+      updatedDatos.numeroCuentaConfirmada = parsedBancarios.numeroCuentaConfirmada;
+      updatedDatos.fechaConfirmacionCuenta = parsedBancarios.fechaConfirmacionCuenta;
     }
 
     await prisma.lead.update({
@@ -134,6 +189,14 @@ export async function PATCH(
         updatedDatos.montoAprobado = parsedMontoAprobado;
         updatedDatos.fechaAprobacionMonto =
           parsedMontoAprobado !== null ? new Date().toISOString() : null;
+      }
+
+      if (parsedBancarios !== undefined) {
+        updatedDatos.cuentaConfirmada = parsedBancarios.cuentaConfirmada;
+        updatedDatos.tipoCuentaConfirmada = parsedBancarios.tipoCuentaConfirmada;
+        updatedDatos.entidadBancariaConfirmada = parsedBancarios.entidadBancariaConfirmada;
+        updatedDatos.numeroCuentaConfirmada = parsedBancarios.numeroCuentaConfirmada;
+        updatedDatos.fechaConfirmacionCuenta = parsedBancarios.fechaConfirmacionCuenta;
       }
 
       updateLeadInFile(leadId, {

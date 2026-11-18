@@ -13,6 +13,11 @@ const WITME_METADATA_KEYS = new Set([
   "_progreso",
   "resultadoNodos",
   "cedulaVerificacion",
+  "cuentaConfirmada",
+  "tipoCuentaConfirmada",
+  "entidadBancariaConfirmada",
+  "numeroCuentaConfirmada",
+  "fechaConfirmacionCuenta",
 ]);
 
 export interface AdminLeadField {
@@ -48,6 +53,11 @@ const SKIP_FIELDS = new Set([
   "tipoCredito",
   "montoAprobado",
   "fechaAprobacionMonto",
+  "cuentaConfirmada",
+  "tipoCuentaConfirmada",
+  "entidadBancariaConfirmada",
+  "numeroCuentaConfirmada",
+  "fechaConfirmacionCuenta",
 ]);
 
 /** Ya se muestran en la tarjeta de contacto del detalle. */
@@ -105,7 +115,11 @@ export function buildAdminLeadSections(datosFormulario: unknown): AdminLeadSecti
           value: formatFieldValue(field.name, datos[field.name], field.options),
         })),
     }))
-    .filter((section) => section.fields.some((field) => field.value !== "—"));
+    .filter(
+      (section) =>
+        section.id === "bancarios" ||
+        section.fields.some((field) => field.value !== "—"),
+    );
 }
 
 /** Campos de Witme que no coinciden con el catálogo del formulario Small. */

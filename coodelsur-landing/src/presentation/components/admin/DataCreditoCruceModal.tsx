@@ -30,6 +30,69 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+const BROWSER_VECTOR_LEGEND: ReadonlyArray<{ sym: string; r: number; g: number; b: number }> = [
+  { sym: "N", r: 0, g: 158, b: 60 },
+  { sym: "1", r: 153, g: 191, b: 19 },
+  { sym: "2", r: 227, g: 216, b: 40 },
+  { sym: "3", r: 252, g: 218, b: 10 },
+  { sym: "4", r: 251, g: 141, b: 0 },
+  { sym: "5", r: 242, g: 46, b: 130 },
+  { sym: "6", r: 248, g: 6, b: 42 },
+  { sym: "D", r: 0, g: 62, b: 122 },
+  { sym: "C", r: 125, g: 32, b: 115 },
+];
+
+function detectMidecisorVectorInBrowser(
+  rgba: Uint8ClampedArray,
+  w: number,
+  h: number,
+): string | null {
+  if (w < 300 || h < 400) return null;
+  const y = Math.round(h * (835 / 1280));
+  const dy1 = Math.max(2, Math.round(h * (7 / 1280)));
+  const dy2 = Math.max(3, Math.round(h * (9 / 1280)));
+  const dx = Math.max(1, Math.round(w * (3 / 890)));
+
+  const symbols: string[] = [];
+  for (let i = 0; i < 12; i++) {
+    const cx = Math.round(w * ((157 + i * 53.82) / 890));
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let n = 0;
+    for (const dy of [-dy2, -dy1, dy1, dy2]) {
+      const py = y + dy;
+      if (py < 0 || py >= h) continue;
+      for (const ox of [-dx, 0, dx]) {
+        const px = cx + ox;
+        if (px < 0 || px >= w) continue;
+        const idx = (py * w + px) * 4;
+        r += rgba[idx];
+        g += rgba[idx + 1];
+        b += rgba[idx + 2];
+        n++;
+      }
+    }
+    if (n === 0) return null;
+    const avgR = r / n;
+    const avgG = g / n;
+    const avgB = b / n;
+
+    let bestSym: string | null = null;
+    let bestDist = Infinity;
+    for (const c of BROWSER_VECTOR_LEGEND) {
+      const dist = (avgR - c.r) ** 2 + (avgG - c.g) ** 2 + (avgB - c.b) ** 2;
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestSym = c.sym;
+      }
+    }
+    if (!bestSym || bestDist > 6500) return null;
+    symbols.push(bestSym);
+  }
+  return symbols.length === 12 ? symbols.join("") : null;
+}
+
 /**
  * Desencripta y extrae el texto (o renderiza páginas escaneadas a JPEG con HTML5 Canvas)
  * directamente en el navegador del usuario. Así el servidor cPanel (límite 512MB RAM)
@@ -104,8 +167,9 @@ async function extractPdfInBrowser(
 
     // Si es un PDF escaneado (sin capa de texto), extraer/renderizar hasta 6 páginas en HTML5 Canvas a JPEG
     const imagesBase64: string[] = [];
+    let detectedVectorHint = "";
     const maxPages = Math.min(doc.numPages, 6);
-    const MAX_DIM = 960;
+    const MAX_DIM = 1200;
 
     for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
       try {
@@ -144,6 +208,11 @@ async function extractPdfInBrowser(
               }
             }
 
+            if (pageNum === 3 && !detectedVectorHint) {
+              const v = detectMidecisorVectorInBrowser(rgbaClamped, srcW, srcH);
+              if (v) detectedVectorHint = `[VECTOR_PAGINA_3: ${v}]`;
+            }
+
             const srcCanvas = document.createElement("canvas");
             srcCanvas.width = srcW;
             srcCanvas.height = srcH;
@@ -159,7 +228,7 @@ async function extractPdfInBrowser(
               const dstCtx = dstCanvas.getContext("2d");
               if (dstCtx) {
                 dstCtx.drawImage(srcCanvas, 0, 0, dstW, dstH);
-                const dataUrl = dstCanvas.toDataURL("image/jpeg", 0.68);
+                const dataUrl = dstCanvas.toDataURL("image/jpeg", 0.72);
                 const b64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
                 if (b64) {
                   imagesBase64.push(b64);
@@ -176,7 +245,7 @@ async function extractPdfInBrowser(
         if (!addedPageImage) {
           const page = await doc.getPage(pageNum);
           const baseViewport = page.getViewport({ scale: 1 });
-          const scale = Math.min(1.3, MAX_DIM / Math.max(baseViewport.width, baseViewport.height, 1));
+          const scale = Math.min(1.5, MAX_DIM / Math.max(baseViewport.width, baseViewport.height, 1));
           const viewport = page.getViewport({ scale });
           const canvas = document.createElement("canvas");
           canvas.width = Math.max(1, Math.round(viewport.width));
@@ -187,7 +256,16 @@ async function extractPdfInBrowser(
               canvasContext: ctx as unknown as CanvasRenderingContext2D,
               viewport,
             }).promise;
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.68);
+            if (pageNum === 3 && !detectedVectorHint) {
+              try {
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const v = detectMidecisorVectorInBrowser(imgData.data, canvas.width, canvas.height);
+                if (v) detectedVectorHint = `[VECTOR_PAGINA_3: ${v}]`;
+              } catch {
+                // ignore
+              }
+            }
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
             const b64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
             if (b64) imagesBase64.push(b64);
           }
@@ -197,7 +275,7 @@ async function extractPdfInBrowser(
       }
     }
 
-    return { text, imagesBase64 };
+    return { text: detectedVectorHint ? `${text} ${detectedVectorHint}`.trim() : text, imagesBase64 };
   } finally {
     if (savedDecompressionStream !== undefined) {
       (globalThis as Record<string, unknown>).DecompressionStream = savedDecompressionStream;
@@ -1855,14 +1933,48 @@ export function DataCreditoCruceModal({
                         </div>
                         <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5">
                           {vectorInfo.desglose.map((m) => {
+                            const sym = m.simbolo.toUpperCase();
                             const pillBg =
-                              m.estado === "al_dia"
-                                ? "bg-emerald-600 text-white"
-                                : m.estado === "mora_leve"
-                                ? "bg-amber-500 text-white"
-                                : m.estado === "mora_grave"
-                                ? "bg-rose-600 text-white"
-                                : "bg-gray-200 text-gray-700";
+                              sym === "N"
+                                ? "bg-[#009e3c] text-white"
+                                : sym === "1"
+                                ? "bg-[#99bf13] text-white"
+                                : sym === "2"
+                                ? "bg-[#e3d828] text-gray-900"
+                                : sym === "3"
+                                ? "bg-[#fcda0a] text-gray-900"
+                                : sym === "4"
+                                ? "bg-[#fb8d00] text-white"
+                                : sym === "5"
+                                ? "bg-[#f22e82] text-white"
+                                : sym === "6"
+                                ? "bg-[#f8062a] text-white"
+                                : sym === "D"
+                                ? "bg-[#003e7a] text-white"
+                                : sym === "C" || sym === "K"
+                                ? "bg-[#7d2073] text-white"
+                                : "bg-white text-gray-600 border border-gray-400";
+
+                            const shortLabel =
+                              sym === "N"
+                                ? "Al día"
+                                : sym === "1"
+                                ? "Mora 30"
+                                : sym === "2"
+                                ? "Mora 60"
+                                : sym === "3"
+                                ? "Mora 90"
+                                : sym === "4"
+                                ? "Mora 120"
+                                : sym === "5"
+                                ? "Mora 150"
+                                : sym === "6"
+                                ? "Mora 180"
+                                : sym === "D"
+                                ? "Dudoso"
+                                : sym === "C" || sym === "K"
+                                ? "Castigada"
+                                : "Sin info";
 
                             return (
                               <div
@@ -1872,10 +1984,10 @@ export function DataCreditoCruceModal({
                               >
                                 <span className="text-[9px] text-gray-400 font-medium">M{m.mes}</span>
                                 <span className={`h-6 w-6 rounded-full flex items-center justify-center font-mono font-bold text-[11px] my-0.5 ${pillBg}`}>
-                                  {m.simbolo}
+                                  {sym === "0" ? "-" : m.simbolo}
                                 </span>
                                 <span className="text-[8px] text-gray-600 truncate w-full font-medium">
-                                  {m.estado === "al_dia" ? "Al día" : m.estado === "neutro" ? "Sin saldo" : "Mora"}
+                                  {shortLabel}
                                 </span>
                               </div>
                             );
@@ -1885,25 +1997,77 @@ export function DataCreditoCruceModal({
                     )}
 
                     {/* Explicación y Análisis Detallado */}
-                    <div className="rounded-lg bg-emerald-50/60 border border-emerald-100 p-2.5 text-xs">
-                      <span className="text-[11px] font-bold text-emerald-950 block mb-1">
+                    <div
+                      className={`rounded-lg border p-2.5 text-xs ${
+                        vectorInfo.estado === "critico"
+                          ? "bg-rose-50/70 border-rose-200"
+                          : vectorInfo.estado === "alerta"
+                          ? "bg-amber-50/70 border-amber-200"
+                          : "bg-emerald-50/60 border-emerald-100"
+                      }`}
+                    >
+                      <span
+                        className={`text-[11px] font-bold block mb-1 ${
+                          vectorInfo.estado === "critico"
+                            ? "text-rose-950"
+                            : vectorInfo.estado === "alerta"
+                            ? "text-amber-950"
+                            : "text-emerald-950"
+                        }`}
+                      >
                         Explicación y Análisis del Vector:
                       </span>
                       <p className="text-gray-700 leading-relaxed text-[11px]">
-                        {selectedRecordForDetail.analisisVectores || vectorInfo.detalle}
+                        {vectorInfo.detalle}
                       </p>
                     </div>
 
-                    {/* Guía de Simbología */}
-                    <div className="border-t border-gray-100 pt-2 text-[10px] text-gray-500 space-y-1">
-                      <span className="font-semibold text-gray-700 block">Simbología oficial DataCrédito:</span>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2 gap-y-0.5">
-                        <div><strong className="text-emerald-700 font-mono">N:</strong> Normal / Al día (Sin mora)</div>
-                        <div><strong className="text-amber-700 font-mono">1:</strong> Mora de 30 a 59 días</div>
-                        <div><strong className="text-amber-800 font-mono">2:</strong> Mora de 60 a 89 días</div>
-                        <div><strong className="text-rose-700 font-mono">3:</strong> Mora de 90 a 119 días</div>
-                        <div><strong className="text-rose-800 font-mono">C:</strong> Cartera castigada</div>
-                        <div><strong className="text-gray-600 font-mono">0:</strong> Inactiva o saldo cero</div>
+                    {/* Guía de Simbología Oficial DataCrédito (10 criterios oficiales) */}
+                    <div className="border-t border-gray-100 pt-2.5 text-[10px] text-gray-600 space-y-1.5">
+                      <span className="font-semibold text-gray-800 block">
+                        Comportamiento de pago de las obligaciones (Simbología oficial DataCrédito):
+                      </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-2 gap-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#009e3c] font-mono text-[9px] font-bold text-white">N</span>
+                          <span>Al día</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#99bf13] font-mono text-[9px] font-bold text-white">1</span>
+                          <span>Mora 30</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#e3d828] font-mono text-[9px] font-bold text-gray-900">2</span>
+                          <span>Mora 60</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#fcda0a] font-mono text-[9px] font-bold text-gray-900">3</span>
+                          <span>Mora 90</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#fb8d00] font-mono text-[9px] font-bold text-white">4</span>
+                          <span>Mora 120</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#f22e82] font-mono text-[9px] font-bold text-white">5</span>
+                          <span>Mora 150</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#f8062a] font-mono text-[9px] font-bold text-white">6</span>
+                          <span>Mora 180</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#003e7a] font-mono text-[9px] font-bold text-white">D</span>
+                          <span className="leading-tight">Dudoso Recaudo</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#7d2073] font-mono text-[9px] font-bold text-white">C</span>
+                          <span className="leading-tight">Cartera castigada</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-gray-400 bg-white font-mono text-[9px] font-bold text-gray-600">-</span>
+                          <span className="leading-tight">Sin información</span>
+                        </div>
                       </div>
                     </div>
                   </div>

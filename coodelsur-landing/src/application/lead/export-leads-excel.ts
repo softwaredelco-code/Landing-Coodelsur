@@ -612,6 +612,26 @@ const BASE_COLUMNS: ExportColumn[] = [
   },
   { header: "Entidad Bancaria", width: 24, value: (l) => readString(datosOf(l), "entidadBancaria") },
   { header: "Número Cuenta / Llave", width: 24, value: (l) => readString(datosOf(l), "numeroCuenta") },
+  {
+    header: "Cuenta Confirmada",
+    width: 20,
+    value: (l) => (datosOf(l).cuentaConfirmada ? "Sí" : "Pendiente"),
+  },
+  {
+    header: "Tipo de Cuenta Confirmada",
+    width: 22,
+    value: (l) => readOption(datosOf(l), "tipoCuentaConfirmada", TIPO_CUENTA_LABELS),
+  },
+  {
+    header: "Entidad Bancaria Confirmada",
+    width: 26,
+    value: (l) => readString(datosOf(l), "entidadBancariaConfirmada"),
+  },
+  {
+    header: "Número Cuenta / Llave Confirmada",
+    width: 26,
+    value: (l) => readString(datosOf(l), "numeroCuentaConfirmada"),
+  },
 
   // 11. Documentos y validaciones
   { header: "Cédula Frontal", width: 30, value: (l) => readAttachmentInfo(datosOf(l), "cedulaFrontal") },
@@ -648,6 +668,7 @@ const KNOWN_DATA_KEYS = new Set([
   "referenciaTipo", "referenciaParentesco", "referenciaParentescoOtro",
   "referenciaFamiliarNombre", "referenciaFamiliarTelefono",
   "tipoCuenta", "entidadBancaria", "numeroCuenta",
+  "cuentaConfirmada", "tipoCuentaConfirmada", "entidadBancariaConfirmada", "numeroCuentaConfirmada", "fechaConfirmacionCuenta",
   "cedulaFrontal", "cedulaReverso", "videoVerificacion", "firma",
   "cedulaVerificacion", "resultadoNodos", "geolocalizacion",
   "aceptaTerminos", "fechaAceptacionTerminos", "ip", "utm", "geoCliente",
