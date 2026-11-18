@@ -54,12 +54,15 @@ const production = {
 fs.writeFileSync("cpanel-deploy/package.json", JSON.stringify(production, null, 2) + "\n");
 NODE
 
-# Cliente Prisma compilado en Linux (evita prisma generate en el servidor)
+# Cliente Prisma compilado en Linux (solo runtime: .prisma + @prisma/client, sin @prisma/engines de 100MB)
 if [[ -d "$ROOT/node_modules/.prisma" ]]; then
-  mkdir -p "$OUT/.prisma-bundle"
+  mkdir -p "$OUT/.prisma-bundle/@prisma"
   cp -a "$ROOT/node_modules/.prisma" "$OUT/.prisma-bundle/"
-  cp -a "$ROOT/node_modules/@prisma" "$OUT/.prisma-bundle/"
+  if [[ -d "$ROOT/node_modules/@prisma/client" ]]; then
+    cp -a "$ROOT/node_modules/@prisma/client" "$OUT/.prisma-bundle/@prisma/"
+  fi
 fi
+rm -rf "$OUT/node_modules/@prisma/engines" "$OUT/.next/cache" 2>/dev/null || true
 
 cp "$ROOT/scripts/cpanel-post-deploy.sh" "$OUT/cpanel-post-deploy.sh"
 chmod +x "$OUT/cpanel-post-deploy.sh"

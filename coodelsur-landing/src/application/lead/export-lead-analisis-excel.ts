@@ -122,10 +122,12 @@ interface UpdateCellOptions {
 
 /**
  * Actualiza o inserta una celda en el XML de una hoja conservando su estilo y fórmula.
+ * IMPORTANTE: El regex usa [^>\\/]* para evitar que una celda autocerrada (<c r="D9" ... />)
+ * coincida codiciosamente consumiendo tags y filas subsiguientes hasta el próximo </c>.
  */
 function updateCell(xml: string, cellRef: string, options: UpdateCellOptions): string {
   const { value, isString = false, formula, defaultStyle } = options;
-  const cellRegex = new RegExp('<c\\s+r="' + cellRef + '"(?:\\s+[^>]*)?(?:\\/>|>[\\s\\S]*?<\\/c>)');
+  const cellRegex = new RegExp('<c\\s+r="' + cellRef + '"(?:\\s+[^>\\/]*)?(?:\\/>|>[\\s\\S]*?<\\/c>)');
   const match = xml.match(cellRegex);
 
   let styleAttr = defaultStyle ? `s="${defaultStyle}"` : "";
@@ -217,6 +219,27 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
     let s3 = await sheet3File.async("text");
     s3 = updateCell(s3, "D8", { value: ingresos, isString: false, defaultStyle: "117" });
     s3 = updateCell(s3, "D9", { value: quanto, isString: false, defaultStyle: "117" });
+
+    // Precalcular los valores derivados de las fórmulas para que Excel y visores
+    // muestren los valores y porcentajes inmediatamente sin dar #¡DIV/0!
+    const brutos = Math.min(ingresos, quanto);
+    const otrosIngresos = Number(datos.otrosIngresos || 0);
+    const totalIngresos = brutos + otrosIngresos;
+    const descuentosLey = Math.round(totalIngresos * 0.08);
+    const totalNetos = totalIngresos - descuentosLey;
+    const gastosSostenimiento = Math.round(totalNetos * 0.35);
+
+    s3 = updateCell(s3, "D10", { value: brutos, isString: false, defaultStyle: "120" });
+    s3 = updateCell(s3, "E10", { value: totalIngresos > 0 ? brutos / totalIngresos : 1, isString: false, defaultStyle: "118" });
+    s3 = updateCell(s3, "D15", { value: totalIngresos, isString: false, defaultStyle: "125" });
+    s3 = updateCell(s3, "E15", { value: 1, isString: false, defaultStyle: "126" });
+    s3 = updateCell(s3, "D16", { value: descuentosLey, isString: false, defaultStyle: "125" });
+    s3 = updateCell(s3, "E16", { value: totalIngresos > 0 ? descuentosLey / totalIngresos : 0.08, isString: false, defaultStyle: "123" });
+    s3 = updateCell(s3, "D17", { value: totalNetos, isString: false, defaultStyle: "128" });
+    s3 = updateCell(s3, "E17", { value: totalIngresos > 0 ? totalNetos / totalIngresos : 0.92, isString: false, defaultStyle: "129" });
+    s3 = updateCell(s3, "D19", { value: gastosSostenimiento, isString: false, defaultStyle: "130" });
+    s3 = updateCell(s3, "D26", { value: gastosSostenimiento, isString: false, defaultStyle: "128" });
+
     zip.file("xl/worksheets/sheet3.xml", s3);
   }
 
