@@ -372,7 +372,21 @@ export async function triggerWitmePostbackForLead(
   const witmeId = extractWitmeId(datos);
 
   if (!witmeId) {
-    console.log(`[WitmePostback] Lead ${leadId} no tiene witme_id, se omite postback.`);
+    console.warn(`[WitmePostback] Lead ${leadId} (${lead.cedula}) no tiene witme_id, se omite postback.`);
+    if (lead.origen === "witme" || lead.utmSource === "witme") {
+      const missingResult: PostbackResult = {
+        success: false,
+        status: "error",
+        attempts: 0,
+        httpStatus: null,
+        error: "Lead marcado con origen Witme pero sin identificador witme_id asignado.",
+        url: null,
+        product: resolvePostbackProduct(lead.tipoCredito),
+        witmeId: "",
+        triggeredAt: now,
+      };
+      await persistPostbackResult(leadId, datos, missingResult);
+    }
     return null;
   }
 

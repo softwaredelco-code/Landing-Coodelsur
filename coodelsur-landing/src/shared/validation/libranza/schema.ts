@@ -89,6 +89,12 @@ const LIBRANZA_MAX_CUOTAS = 36;
 const libranzaBaseSchema = z.object({
   tipoCredito: z.literal("libranza"),
 
+  witme_id: z.string().optional(),
+  witmeLeadId: z.string().optional(),
+  witmeId: z.string().optional(),
+  click_id: z.string().optional(),
+  id_externo: z.string().optional(),
+
   /* ── 1. Datos personales ─────────────────────────────────── */
   nombre: requiredText("Nombres y apellidos", 3),
   email: z

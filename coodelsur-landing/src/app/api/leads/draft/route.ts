@@ -115,6 +115,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "values requerido" }, { status: 400 });
     }
 
+    const cookieHeader = request.headers.get("cookie") || "";
+    const cookieWitmeMatch = cookieHeader.match(/(?:^|;\s*)coodelsur_witme_id=([^;]+)/);
+    const cookieWitmeId = cookieWitmeMatch ? decodeURIComponent(cookieWitmeMatch[1].trim()) : undefined;
+
+    const rawWitmeId =
+      (body.values as Record<string, unknown>).witme_id ||
+      (body.values as Record<string, unknown>).witmeLeadId ||
+      (body.values as Record<string, unknown>).witmeId ||
+      cookieWitmeId;
+    const witmeId = typeof rawWitmeId === "string" && rawWitmeId.trim() ? rawWitmeId.trim() : undefined;
+
+    if (witmeId && body.values) {
+      body.values.witme_id = witmeId;
+      body.values.witmeLeadId = witmeId;
+    }
+
     const step = typeof body.step === "number" ? body.step : 0;
     const ip = getClientIp(request);
 

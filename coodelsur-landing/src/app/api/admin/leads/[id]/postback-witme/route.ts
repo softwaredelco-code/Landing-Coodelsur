@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/infrastructure/auth/require-admin";
 import { triggerWitmePostbackForLead } from "@/application/tracking/witme-postback";
+import { prisma } from "@/infrastructure/database/prisma";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,37 @@ export async function POST(
     return NextResponse.json({ error: "ID requerido" }, { status: 400 });
   }
 
+  let customWitmeId: string | undefined;
   try {
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    if (body && typeof body === "object") {
+      const candidate = body.witme_id || body.witmeLeadId || body.witmeId || body.cid;
+      if (typeof candidate === "string" && candidate.trim()) {
+        customWitmeId = candidate.trim();
+      }
+    }
+  } catch {}
+
+  try {
+    if (customWitmeId) {
+      const existing = await prisma.lead.findUnique({
+        where: { id: leadId },
+        select: { datosFormulario: true },
+      });
+      if (existing) {
+        const datos = (existing.datosFormulario || {}) as Record<string, unknown>;
+        datos.witme_id = customWitmeId;
+        datos.witmeLeadId = customWitmeId;
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: {
+            origen: "witme",
+            datosFormulario: datos as any,
+          },
+        });
+      }
+    }
+
     const result = await triggerWitmePostbackForLead(leadId, true);
     if (!result) {
       return NextResponse.json(

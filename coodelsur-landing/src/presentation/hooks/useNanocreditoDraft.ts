@@ -16,6 +16,7 @@ import {
 } from "@/presentation/forms/nanocredito-draft";
 import { calcularDesgloseCuota } from "@/domain/credito/amortizacion";
 import { normalizeDocumentNumber } from "@/domain/identity/cedula";
+import { saveWitmeId, getWitmeId } from "@/presentation/tracking/TrackingProvider";
 import type { NanocreditoFormValues } from "@/shared/validation/nanocredito";
 import { useEffect, useRef, useState } from "react";
 import type { UseFormGetValues, UseFormReset, UseFormWatch } from "react-hook-form";
@@ -113,8 +114,11 @@ export function useNanocreditoDraft({
       searchParams?.get("click_id") ||
       searchParams?.get("id_externo");
 
-    if (urlWitmeId?.trim() && typeof window !== "undefined") {
-      sessionStorage.setItem("coodelsur_witme_id", urlWitmeId.trim());
+    if (urlWitmeId?.trim()) {
+      saveWitmeId(urlWitmeId.trim());
+    } else {
+      // Si no viene en la URL, rescatar de cookie/storage para asegurar persistencia
+      getWitmeId();
     }
 
     const urlValues: Partial<NanocreditoFormValues> = {};
