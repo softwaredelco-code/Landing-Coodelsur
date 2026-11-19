@@ -4,6 +4,7 @@ import {
   buildLeadAnalisisExcelBuffer,
 } from "@/application/lead/export-lead-analisis-excel";
 import { prisma } from "@/infrastructure/database/prisma";
+import { getLeadFromFile, isDbConnectionError } from "@/infrastructure/persistence/file-store";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -27,20 +28,41 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "ID de solicitud no proporcionado" }, { status: 400 });
     }
 
-    const lead = await prisma.lead.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        nombre: true,
-        cedula: true,
-        telefono: true,
-        email: true,
-        tipoCredito: true,
-        capitalSolicitado: true,
-        datosFormulario: true,
-        fechaCreacion: true,
-      },
-    });
+    let lead: {
+      id: string;
+      nombre: string;
+      cedula: string;
+      telefono: string;
+      email: string | null;
+      tipoCredito: string;
+      capitalSolicitado?: number | null;
+      datosFormulario: unknown;
+      fechaCreacion: Date | string;
+    } | null = null;
+
+    try {
+      lead = await prisma.lead.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          nombre: true,
+          cedula: true,
+          telefono: true,
+          email: true,
+          tipoCredito: true,
+          capitalSolicitado: true,
+          datosFormulario: true,
+          fechaCreacion: true,
+        },
+      });
+    } catch (dbErr) {
+      if (!isDbConnectionError(dbErr)) throw dbErr;
+      lead = getLeadFromFile(id);
+    }
+
+    if (!lead) {
+      lead = getLeadFromFile(id);
+    }
 
     if (!lead) {
       return NextResponse.json({ error: "Solicitud no encontrada" }, { status: 404 });
@@ -53,7 +75,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       telefono: lead.telefono,
       email: lead.email,
       tipoCredito: lead.tipoCredito,
-      capitalSolicitado: lead.capitalSolicitado,
+      capitalSolicitado: lead.capitalSolicitado ?? null,
       fechaCreacion: lead.fechaCreacion,
       datosFormulario: lead.datosFormulario as Record<string, unknown> | null,
     });

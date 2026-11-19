@@ -45,6 +45,24 @@ export interface AdminLeadDatosBancarios {
   fechaConfirmacionCuenta: string | null;
 }
 
+export interface AdminLeadActivosPropios {
+  /** Datos diligenciados por el cliente en el formulario ("si" | "no") */
+  tieneViviendaCliente: string | null;
+  tieneVehiculoCliente: string | null;
+  placaVehiculoCliente: string | null;
+  /** Datos confirmados en el panel admin ("si" | "no") */
+  activosConfirmados: boolean;
+  tieneViviendaConfirmada: string | null;
+  tieneVehiculoConfirmado: string | null;
+  fechaConfirmacionActivos: string | null;
+}
+
+export interface AdminLeadValidacionAdres {
+  /** "cotizante" | "beneficiario" | "subsidiado" | null */
+  estadoAdres: string | null;
+  fechaValidacionAdres: string | null;
+}
+
 export interface AdminLeadDetail {
   id: string;
   tipoCredito: string;
@@ -74,6 +92,8 @@ export interface AdminLeadDetail {
   /** GPS capturado en el formulario (permiso del navegador) */
   geoFormulario: AdminLeadGeoPoint | null;
   datosBancarios: AdminLeadDatosBancarios;
+  activosPropios: AdminLeadActivosPropios;
+  validacionAdres: AdminLeadValidacionAdres;
   secciones: AdminLeadSection[];
   adjuntos: AdminAttachment[];
   witmeLeadId: string | null;
@@ -118,6 +138,17 @@ function toIsoDateRequired(value: Date | string): string {
 function readDatosString(datos: Record<string, unknown>, key: string): string | null {
   const value = datos[key];
   if (typeof value === "string" && value.trim()) return value.trim();
+  return null;
+}
+
+function readDatosSiNo(datos: Record<string, unknown>, key: string): string | null {
+  const value = datos[key];
+  if (typeof value === "boolean") return value ? "si" : "no";
+  if (typeof value === "string") {
+    const clean = value.trim().toLowerCase();
+    if (clean === "si" || clean === "sí" || clean === "true") return "si";
+    if (clean === "no" || clean === "false") return "no";
+  }
   return null;
 }
 
@@ -226,6 +257,19 @@ export function mapLeadToAdminDetail(
       entidadBancariaConfirmada: readDatosString(datos, "entidadBancariaConfirmada"),
       numeroCuentaConfirmada: readDatosString(datos, "numeroCuentaConfirmada"),
       fechaConfirmacionCuenta: readDatosString(datos, "fechaConfirmacionCuenta"),
+    },
+    activosPropios: {
+      tieneViviendaCliente: readDatosSiNo(datos, "tieneVivienda"),
+      tieneVehiculoCliente: readDatosSiNo(datos, "tieneVehiculo"),
+      placaVehiculoCliente: readDatosString(datos, "placaVehiculo"),
+      activosConfirmados: Boolean(datos.activosConfirmados),
+      tieneViviendaConfirmada: readDatosSiNo(datos, "tieneViviendaConfirmada"),
+      tieneVehiculoConfirmado: readDatosSiNo(datos, "tieneVehiculoConfirmado"),
+      fechaConfirmacionActivos: readDatosString(datos, "fechaConfirmacionActivos"),
+    },
+    validacionAdres: {
+      estadoAdres: readDatosString(datos, "validacionAdres"),
+      fechaValidacionAdres: readDatosString(datos, "fechaValidacionAdres"),
     },
     secciones,
     adjuntos: adjuntos ?? buildAdminAttachments(lead.id, datos),

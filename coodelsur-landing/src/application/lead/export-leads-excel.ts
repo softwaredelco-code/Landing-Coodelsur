@@ -6,7 +6,7 @@
  */
 
 import { isAttachmentAvailable } from "@/domain/lead/attachments";
-import { TIEMPO_MORA_LABELS } from "@/shared/config/creditos/opciones";
+import { TIEMPO_MORA_LABELS, VALIDACION_ADRES_LABELS } from "@/shared/config/creditos/opciones";
 import { formatCOP } from "@/shared/utils";
 import * as XLSX from "xlsx-js-style";
 
@@ -588,6 +588,26 @@ const BASE_COLUMNS: ExportColumn[] = [
     value: (l) => readOption(datosOf(l), "vehiculoANombreCliente", SI_NO_LABELS),
   },
   { header: "Placa del Vehículo", width: 16, value: (l) => readString(datosOf(l), "placaVehiculo").toUpperCase() },
+  {
+    header: "Activos Propios Confirmados",
+    width: 22,
+    value: (l) => (datosOf(l).activosConfirmados ? "Sí" : "Pendiente"),
+  },
+  {
+    header: "Vivienda Confirmada",
+    width: 18,
+    value: (l) => readOption(datosOf(l), "tieneViviendaConfirmada", SI_NO_LABELS),
+  },
+  {
+    header: "Vehículo Confirmado",
+    width: 18,
+    value: (l) => readOption(datosOf(l), "tieneVehiculoConfirmado", SI_NO_LABELS),
+  },
+  {
+    header: "Validación ADRES",
+    width: 20,
+    value: (l) => readOption(datosOf(l), "validacionAdres", VALIDACION_ADRES_LABELS),
+  },
 
   // 9. Referencia familiar o personal
   {
@@ -665,6 +685,8 @@ const KNOWN_DATA_KEYS = new Set([
   "ciudadNegocio", "telefonoNegocio",
   "tieneVivienda", "viviendaANombreCliente", "direccionVivienda",
   "tieneVehiculo", "vehiculoANombreCliente", "placaVehiculo",
+  "activosConfirmados", "tieneViviendaConfirmada", "tieneVehiculoConfirmado", "fechaConfirmacionActivos",
+  "validacionAdres", "fechaValidacionAdres", "esCotizante",
   "referenciaTipo", "referenciaParentesco", "referenciaParentescoOtro",
   "referenciaFamiliarNombre", "referenciaFamiliarTelefono",
   "tipoCuenta", "entidadBancaria", "numeroCuenta",

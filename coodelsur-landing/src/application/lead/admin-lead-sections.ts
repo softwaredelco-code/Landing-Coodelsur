@@ -18,6 +18,12 @@ const WITME_METADATA_KEYS = new Set([
   "entidadBancariaConfirmada",
   "numeroCuentaConfirmada",
   "fechaConfirmacionCuenta",
+  "activosConfirmados",
+  "tieneViviendaConfirmada",
+  "tieneVehiculoConfirmado",
+  "fechaConfirmacionActivos",
+  "validacionAdres",
+  "fechaValidacionAdres",
 ]);
 
 export interface AdminLeadField {
@@ -58,6 +64,12 @@ const SKIP_FIELDS = new Set([
   "entidadBancariaConfirmada",
   "numeroCuentaConfirmada",
   "fechaConfirmacionCuenta",
+  "activosConfirmados",
+  "tieneViviendaConfirmada",
+  "tieneVehiculoConfirmado",
+  "fechaConfirmacionActivos",
+  "validacionAdres",
+  "fechaValidacionAdres",
 ]);
 
 /** Ya se muestran en la tarjeta de contacto del detalle. */
@@ -118,6 +130,7 @@ export function buildAdminLeadSections(datosFormulario: unknown): AdminLeadSecti
     .filter(
       (section) =>
         section.id === "bancarios" ||
+        section.id === "activos" ||
         section.fields.some((field) => field.value !== "—"),
     );
 }

@@ -118,6 +118,18 @@ export const TIPOS_CUENTA = [
   { label: "Llave bancaria (Bre-B)", value: "llave" },
 ];
 
+export const OPCIONES_VALIDACION_ADRES = [
+  { label: "Cotizante", value: "cotizante" },
+  { label: "Beneficiario", value: "beneficiario" },
+  { label: "Subsidiado", value: "subsidiado" },
+] as const;
+
+export const VALIDACION_ADRES_LABELS: Record<string, string> = {
+  cotizante: "Cotizante",
+  beneficiario: "Beneficiario",
+  subsidiado: "Subsidiado",
+};
+
 /** Destinos del crédito para Microcrédito Small ($200.000 – $600.000). */
 export const DESTINOS_CREDITO = [
   { label: "Capital de trabajo", value: "capital_trabajo" },

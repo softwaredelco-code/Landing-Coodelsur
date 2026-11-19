@@ -86,6 +86,24 @@ export function buildCoodelsurTemplateExcelBuffer(leads: LeadExportRecord[]): Ui
     const tasa = String(datos.tasa || datos.tasaInteres || "2.1").trim();
     const plazo = String(datos.cantidadCuotas || datos.plazo || "2").trim();
 
+    const adresLabels: Record<string, string> = {
+      cotizante: "Cotizante",
+      beneficiario: "Beneficiario",
+      subsidiado: "Subsidiado",
+    };
+    const rawAdres =
+      typeof datos.validacionAdres === "string"
+        ? datos.validacionAdres.trim().toLowerCase()
+        : "";
+    const saludAdres = rawAdres ? adresLabels[rawAdres] || rawAdres : "";
+
+    let propiedadesConfirmadas = "";
+    if (datos.activosConfirmados) {
+      const viv = String(datos.tieneViviendaConfirmada ?? "").trim().toLowerCase() === "si" ? "Sí" : "No";
+      const veh = String(datos.tieneVehiculoConfirmado ?? "").trim().toLowerCase() === "si" ? "Sí" : "No";
+      propiedadesConfirmadas = `Vivienda: ${viv}, Vehículo: ${veh}`;
+    }
+
     rows.push([
       lead.cedula,
       lead.nombre,
@@ -105,8 +123,8 @@ export function buildCoodelsurTemplateExcelBuffer(leads: LeadExportRecord[]): Ui
       "", // total deuda
       "", // valor cuotas
       "", // capacidad de pago (regla de negocio: vacía siempre)
-      "", // salud cotizante, beneficiario, subsidido (regla de negocio: vacía siempre)
-      "", // propiedades (regla de negocio: vacía siempre)
+      saludAdres, // salud cotizante, beneficiario, subsidido (confirmado en admin)
+      propiedadesConfirmadas, // propiedades (confirmado en admin)
     ]);
   }
 
@@ -302,7 +320,7 @@ export function processCruceData(
   const finalHeaders = [...rawHeaders, ...newColumnsToAdd];
 
   // Columnas que por regla de negocio deben quedar SIEMPRE vacías:
-  // "capacidad de pago", "salud cotizante, beneficiario, subsidido", "propiedades"
+  // "capacidad de pago" (las columnas de salud/ADRES y propiedades conservan lo confirmado en el panel admin)
   const alwaysEmptyColIndices: number[] = [];
   for (let i = 0; i < finalHeaders.length; i++) {
     const hNorm = finalHeaders[i]
@@ -310,12 +328,7 @@ export function processCruceData(
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .trim();
-    if (
-      hNorm === "capacidad de pago" ||
-      hNorm.startsWith("salud cotizante") ||
-      hNorm === "salud" ||
-      hNorm === "propiedades"
-    ) {
+    if (hNorm === "capacidad de pago") {
       alwaysEmptyColIndices.push(i);
     }
   }

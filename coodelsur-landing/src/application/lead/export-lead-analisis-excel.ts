@@ -249,8 +249,31 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
     let s4 = await sheet4File.async("text");
     s4 = updateCell(s4, "C10", { value: Number(datos.puntajeBegini || 0), isString: false, defaultStyle: "192" });
 
-    const esCotizante = datos.esCotizante !== undefined ? (datos.esCotizante ? "SI" : "NO") : "SI";
+    const validacionAdresRaw =
+      typeof datos.validacionAdres === "string"
+        ? datos.validacionAdres.trim().toLowerCase()
+        : "";
+    const esCotizante = validacionAdresRaw
+      ? validacionAdresRaw === "cotizante"
+        ? "SI"
+        : "NO"
+      : datos.esCotizante !== undefined
+        ? datos.esCotizante
+          ? "SI"
+          : "NO"
+        : "SI";
     s4 = updateCell(s4, "C15", { value: esCotizante, isString: true, defaultStyle: "193" });
+
+    const adresLabels: Record<string, string> = {
+      cotizante: "Cotizante",
+      beneficiario: "Beneficiario",
+      subsidiado: "Subsidiado",
+    };
+    const adresTexto = validacionAdresRaw
+      ? adresLabels[validacionAdresRaw] || validacionAdresRaw
+      : esCotizante === "SI"
+        ? "Cotizante"
+        : "No cotizante";
 
     const dirParts = [
       datos.direccion,
@@ -259,8 +282,20 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
       datos.departamento,
     ].filter(Boolean);
     const dir = dirParts.length ? dirParts.join(", ") : "No reportada";
-    const banco = datos.entidadBancaria || datos.banco || "No reportado";
-    const cuenta = `${banco} - ${datos.tipoCuenta || "Ahorros"} ${datos.numeroCuenta || ""}`.trim();
+    const banco =
+      (datos.cuentaConfirmada && datos.entidadBancariaConfirmada) ||
+      datos.entidadBancaria ||
+      datos.banco ||
+      "No reportado";
+    const tipoCuentaLabel =
+      (datos.cuentaConfirmada && datos.tipoCuentaConfirmada) ||
+      datos.tipoCuenta ||
+      "Ahorros";
+    const numeroCuentaLabel =
+      (datos.cuentaConfirmada && datos.numeroCuentaConfirmada) ||
+      datos.numeroCuenta ||
+      "";
+    const cuenta = `${banco} - ${tipoCuentaLabel} ${numeroCuentaLabel}`.trim();
     const codeudorInfo =
       datos.tieneCodeudor === "si"
         ? ` | Codeudor: ${datos.codeudorNombre || "Sin nombre"} (CC ${datos.codeudorCedula || "-"}, Tel ${datos.codeudorTelefono || "-"})`
@@ -277,14 +312,27 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
         : "No reportada";
 
     const novedad = String(datos.novedad || datos.novedades || "");
-    const propiedades = String(datos.propiedades || datos.tienePropiedades || "");
+    let propiedades = String(datos.propiedades || datos.tienePropiedades || "").trim();
+    if (!propiedades) {
+      const vivRaw = datos.activosConfirmados
+        ? String(datos.tieneViviendaConfirmada ?? "").trim().toLowerCase()
+        : String(datos.tieneVivienda ?? "").trim().toLowerCase();
+      const vehRaw = datos.activosConfirmados
+        ? String(datos.tieneVehiculoConfirmado ?? "").trim().toLowerCase()
+        : String(datos.tieneVehiculo ?? "").trim().toLowerCase();
+      if (vivRaw || vehRaw) {
+        const vivTxt = vivRaw === "si" || vivRaw === "true" ? "Sí" : "No";
+        const vehTxt = vehRaw === "si" || vehRaw === "true" ? "Sí" : "No";
+        propiedades = `Vivienda: ${vivTxt} | Vehículo: ${vehTxt}`;
+      }
+    }
 
     const concepto = [
       `Tipo crédito:  ${linea}`,
       ...(montoAprobado > 0
         ? [`Monto aprobado:  $${montoAprobado.toLocaleString("es-CO")} COP (Solicitado: $${montoSolicitado.toLocaleString("es-CO")} COP)`]
         : [`Monto solicitado:  $${montoSolicitado.toLocaleString("es-CO")} COP`]),
-      `Adres:  ${esCotizante === "SI" ? "Cotizante" : "No cotizante"}`,
+      `Adres:  ${adresTexto}`,
       `Validación de identidad:  Aprobada`,
       `Email:  ${lead.email || "No reportado"}`,
       `Dirección:  ${dir}`,

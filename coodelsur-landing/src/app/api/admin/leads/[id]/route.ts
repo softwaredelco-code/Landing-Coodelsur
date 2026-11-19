@@ -55,6 +55,14 @@ export async function PATCH(
       entidadBancariaConfirmada?: string | null;
       numeroCuentaConfirmada?: string | null;
     } | null;
+    activosPropiosConfirmados?: {
+      activosConfirmados: boolean;
+      tieneViviendaConfirmada?: string | null;
+      tieneVehiculoConfirmado?: string | null;
+    } | null;
+    validacionAdres?: {
+      estadoAdres?: string | null;
+    } | string | null;
   };
 
   let parsedMontoAprobado: number | null | undefined = undefined;
@@ -114,6 +122,77 @@ export async function PATCH(
     }
   }
 
+  let parsedActivos:
+    | {
+        activosConfirmados: boolean;
+        tieneViviendaConfirmada: string | null;
+        tieneVehiculoConfirmado: string | null;
+        fechaConfirmacionActivos: string | null;
+      }
+    | undefined = undefined;
+
+  if (body.activosPropiosConfirmados !== undefined) {
+    if (body.activosPropiosConfirmados === null || !body.activosPropiosConfirmados.activosConfirmados) {
+      parsedActivos = {
+        activosConfirmados: false,
+        tieneViviendaConfirmada: null,
+        tieneVehiculoConfirmado: null,
+        fechaConfirmacionActivos: null,
+      };
+    } else {
+      const vivienda = String(body.activosPropiosConfirmados.tieneViviendaConfirmada ?? "").trim().toLowerCase();
+      const vehiculo = String(body.activosPropiosConfirmados.tieneVehiculoConfirmado ?? "").trim().toLowerCase();
+
+      if ((vivienda !== "si" && vivienda !== "no") || (vehiculo !== "si" && vehiculo !== "no")) {
+        return NextResponse.json(
+          { error: "Selecciona Sí o No tanto para Vivienda como para Vehículo antes de confirmar." },
+          { status: 400 },
+        );
+      }
+
+      parsedActivos = {
+        activosConfirmados: true,
+        tieneViviendaConfirmada: vivienda,
+        tieneVehiculoConfirmado: vehiculo,
+        fechaConfirmacionActivos: new Date().toISOString(),
+      };
+    }
+  }
+
+  let parsedAdres:
+    | {
+        validacionAdres: string | null;
+        fechaValidacionAdres: string | null;
+      }
+    | undefined = undefined;
+
+  if (body.validacionAdres !== undefined) {
+    const rawAdres =
+      body.validacionAdres === null
+        ? ""
+        : typeof body.validacionAdres === "string"
+          ? body.validacionAdres.trim().toLowerCase()
+          : String(body.validacionAdres.estadoAdres ?? "").trim().toLowerCase();
+
+    if (!rawAdres) {
+      parsedAdres = {
+        validacionAdres: null,
+        fechaValidacionAdres: null,
+      };
+    } else {
+      if (!["cotizante", "beneficiario", "subsidiado"].includes(rawAdres)) {
+        return NextResponse.json(
+          { error: "Selecciona una opción válida para Validación ADRES (Cotizante, Beneficiario o Subsidiado)." },
+          { status: 400 },
+        );
+      }
+      parsedAdres = {
+        validacionAdres: rawAdres,
+        fechaValidacionAdres: new Date().toISOString(),
+      };
+    }
+  }
+
   const nuevoEstado = body.estado?.trim();
 
   try {
@@ -147,6 +226,22 @@ export async function PATCH(
       updatedDatos.entidadBancariaConfirmada = parsedBancarios.entidadBancariaConfirmada;
       updatedDatos.numeroCuentaConfirmada = parsedBancarios.numeroCuentaConfirmada;
       updatedDatos.fechaConfirmacionCuenta = parsedBancarios.fechaConfirmacionCuenta;
+    }
+
+    if (parsedActivos !== undefined) {
+      updatedDatos.activosConfirmados = parsedActivos.activosConfirmados;
+      updatedDatos.tieneViviendaConfirmada = parsedActivos.tieneViviendaConfirmada;
+      updatedDatos.tieneVehiculoConfirmado = parsedActivos.tieneVehiculoConfirmado;
+      updatedDatos.fechaConfirmacionActivos = parsedActivos.fechaConfirmacionActivos;
+    }
+
+    if (parsedAdres !== undefined) {
+      updatedDatos.validacionAdres = parsedAdres.validacionAdres;
+      updatedDatos.fechaValidacionAdres = parsedAdres.fechaValidacionAdres;
+      updatedDatos.esCotizante =
+        parsedAdres.validacionAdres !== null
+          ? parsedAdres.validacionAdres === "cotizante"
+          : undefined;
     }
 
     await prisma.lead.update({
@@ -197,6 +292,22 @@ export async function PATCH(
         updatedDatos.entidadBancariaConfirmada = parsedBancarios.entidadBancariaConfirmada;
         updatedDatos.numeroCuentaConfirmada = parsedBancarios.numeroCuentaConfirmada;
         updatedDatos.fechaConfirmacionCuenta = parsedBancarios.fechaConfirmacionCuenta;
+      }
+
+      if (parsedActivos !== undefined) {
+        updatedDatos.activosConfirmados = parsedActivos.activosConfirmados;
+        updatedDatos.tieneViviendaConfirmada = parsedActivos.tieneViviendaConfirmada;
+        updatedDatos.tieneVehiculoConfirmado = parsedActivos.tieneVehiculoConfirmado;
+        updatedDatos.fechaConfirmacionActivos = parsedActivos.fechaConfirmacionActivos;
+      }
+
+      if (parsedAdres !== undefined) {
+        updatedDatos.validacionAdres = parsedAdres.validacionAdres;
+        updatedDatos.fechaValidacionAdres = parsedAdres.fechaValidacionAdres;
+        updatedDatos.esCotizante =
+          parsedAdres.validacionAdres !== null
+            ? parsedAdres.validacionAdres === "cotizante"
+            : undefined;
       }
 
       updateLeadInFile(leadId, {

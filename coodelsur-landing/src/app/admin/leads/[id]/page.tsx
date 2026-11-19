@@ -2,17 +2,19 @@
 
 import { AdminShell } from "@/presentation/components/admin/AdminShell";
 import { AprobarMontoModal } from "@/presentation/components/admin/AprobarMontoModal";
+import { ConfirmacionActivosSection } from "@/presentation/components/admin/ConfirmacionActivosSection";
 import { ConfirmacionBancariaSection } from "@/presentation/components/admin/ConfirmacionBancariaSection";
 import { LeadAttachmentGallery } from "@/presentation/components/admin/LeadAttachmentGallery";
 import { LeadInfoGrid, LeadSummaryCard } from "@/presentation/components/admin/LeadInfoGrid";
 import { LeadUbicacionSection } from "@/presentation/components/admin/LeadUbicacionSection";
 import { StatusBadge, ESTADO_LABELS } from "@/presentation/components/admin/StatusBadge";
+import { ValidacionAdresSection } from "@/presentation/components/admin/ValidacionAdresSection";
 import { Button } from "@/presentation/components/ui/Button";
 import type { AdminLeadDetail } from "@/application/lead/admin-lead-detail";
 import { formatCOP } from "@/shared/utils";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const TIPO_CREDITO_LABELS: Record<string, string> = {
   microcredito_small: "Microcrédito Small",
@@ -627,20 +629,33 @@ export default function AdminLeadDetailPage() {
           )}
 
           {lead.secciones.map((section) => (
-            <section
-              key={section.id}
-              className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm md:p-6"
-            >
-              <h2 className="mb-4 text-lg font-semibold text-coodel-dark">{section.title}</h2>
-              <LeadInfoGrid fields={section.fields} />
-              {section.id === "bancarios" && (
-                <ConfirmacionBancariaSection
+            <React.Fragment key={section.id}>
+              <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm md:p-6">
+                <h2 className="mb-4 text-lg font-semibold text-coodel-dark">{section.title}</h2>
+                <LeadInfoGrid fields={section.fields} />
+                {section.id === "activos" && (
+                  <ConfirmacionActivosSection
+                    leadId={lead.id}
+                    activosPropios={lead.activosPropios}
+                    onUpdated={(updatedLead) => setLead(updatedLead)}
+                  />
+                )}
+                {section.id === "bancarios" && (
+                  <ConfirmacionBancariaSection
+                    leadId={lead.id}
+                    datosBancarios={lead.datosBancarios}
+                    onUpdated={(updatedLead) => setLead(updatedLead)}
+                  />
+                )}
+              </section>
+              {section.id === "activos" && (
+                <ValidacionAdresSection
                   leadId={lead.id}
-                  datosBancarios={lead.datosBancarios}
+                  validacionAdres={lead.validacionAdres}
                   onUpdated={(updatedLead) => setLead(updatedLead)}
                 />
               )}
-            </section>
+            </React.Fragment>
           ))}
         </div>
 
