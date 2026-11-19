@@ -21,9 +21,11 @@ const WITME_METADATA_KEYS = new Set([
   "activosConfirmados",
   "tieneViviendaConfirmada",
   "tieneVehiculoConfirmado",
+  "placaVehiculoConfirmada",
   "fechaConfirmacionActivos",
   "validacionAdres",
   "fechaValidacionAdres",
+  "capacidadPago",
 ]);
 
 export interface AdminLeadField {
@@ -67,9 +69,11 @@ const SKIP_FIELDS = new Set([
   "activosConfirmados",
   "tieneViviendaConfirmada",
   "tieneVehiculoConfirmado",
+  "placaVehiculoConfirmada",
   "fechaConfirmacionActivos",
   "validacionAdres",
   "fechaValidacionAdres",
+  "capacidadPago",
 ]);
 
 /** Ya se muestran en la tarjeta de contacto del detalle. */

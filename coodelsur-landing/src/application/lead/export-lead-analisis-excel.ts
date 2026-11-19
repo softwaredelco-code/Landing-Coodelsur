@@ -13,6 +13,133 @@
 import JSZip from "jszip";
 import path from "path";
 import fs from "fs";
+import { parseMoneyValue } from "@/domain/datacredito/types";
+
+export interface CapacidadPagoCalculo {
+  montoPlanPagos: number;
+  cuotas: number;
+  valorFinanciado: number;
+  cuotaCapitalInteres: number;
+  seguroVida: number;
+  fianzaIva: number;
+  cuotaNueva: number;
+  ingresos: number;
+  quanto: number;
+  brutos: number;
+  otrosIngresos: number;
+  totalIngresos: number;
+  descuentosLey: number;
+  totalNetos: number;
+  gastosSostenimiento: number;
+  cuotaNuevaMasGastos: number;
+  capacidadPago: number;
+}
+
+/**
+ * Calcula con exactitud matemática las celdas de:
+ * - 'Plan de pagos'!P19 (Cuota nueva = Capital+Interés PMT + Seguro Vida + Fianza IVA)
+ * - 'Flujo Empleado'!D10 (Quanto medio / Ingresos brutos) y 'Flujo Empleado'!D26 (Total gastos sostenimiento 35% de ingresos netos)
+ * - 'Analisis'!C12 (Quanto medio), 'Analisis'!C13 (Cuota nueva + total gastos) y 'Analisis'!C14 (Capacidad de pago = C12 - C13)
+ */
+export function calcularCapacidadPagoAnalisis(input: {
+  capitalSolicitado?: number | string | null;
+  cantidadCuotas?: number | string | null;
+  datosFormulario?: Record<string, unknown> | null;
+}): CapacidadPagoCalculo {
+  const datos =
+    input.datosFormulario && typeof input.datosFormulario === "object"
+      ? input.datosFormulario
+      : {};
+
+  const montoSolicitado =
+    parseMoneyValue(
+      input.capitalSolicitado ??
+        datos.capitalSeleccionado ??
+        datos.capitalSolicitado ??
+        datos.monto,
+    ) ?? 0;
+
+  const montoAprobado = parseMoneyValue(datos.montoAprobado) ?? 0;
+  const montoPlanPagos = montoAprobado > 0 ? montoAprobado : montoSolicitado;
+
+  const rawCuotas = Number(
+    input.cantidadCuotas ?? datos.cantidadCuotas ?? datos.plazo ?? 2,
+  );
+  const cuotas = Number.isFinite(rawCuotas) && rawCuotas > 0 ? rawCuotas : 2;
+
+  // 'Plan de pagos':
+  // F6 = +P14 + 30000
+  // J6 = 28.79% EA -> F7 = ((1 + 0.2879)^(1/12)) - 1
+  // O19 = -PMT(F7, F8, F6, 0, 0)
+  // M19 = (F6 * 1.9) / 1000
+  // N19 = P10 = (P14 * 10.504%) * 1.19
+  // P19 = O19 + M19 + N19
+  const valorFinanciado = montoPlanPagos > 0 ? montoPlanPagos + 30000 : 0;
+  const tasaEA = 0.2879;
+  const tasaMensual = Math.pow(1 + tasaEA, 1 / 12) - 1;
+
+  const cuotaCapitalInteres =
+    valorFinanciado > 0 && cuotas > 0
+      ? (valorFinanciado * tasaMensual) / (1 - Math.pow(1 + tasaMensual, -cuotas))
+      : 0;
+  const seguroVida = valorFinanciado > 0 ? (valorFinanciado * 1.9) / 1000 : 0;
+  const fianzaIva = montoPlanPagos > 0 ? montoPlanPagos * 0.10504 * 1.19 : 0;
+  const cuotaNueva = cuotaCapitalInteres + seguroVida + fianzaIva;
+
+  // 'Flujo Empleado':
+  // D8 = ingresosMensuales
+  // D9 = quantoMedio
+  // D10 = MIN(D8, D9)
+  // D15 = SUM(D10:D14)
+  // D16 = D15 * 0.08
+  // D17 = D15 - D16
+  // D19 = D26 = D17 * 35%
+  const ingresos =
+    parseMoneyValue(
+      datos.ingresosMensuales ?? datos.ingresos_mensuales ?? datos.ingresos,
+    ) ?? 0;
+  const quantoRaw = parseMoneyValue(datos.quantoMedio ?? datos.ingresosMedio);
+  const quanto =
+    quantoRaw !== null && quantoRaw > 0
+      ? quantoRaw
+      : ingresos > 0
+        ? ingresos
+        : 3011000;
+
+  const brutos = Math.min(ingresos, quanto);
+  const otrosIngresos = 0; // En 'Flujo Empleado' D11:D14 son 0, por lo que D15 = SUM(D10:D14) = D10 (brutos)
+  const totalIngresos = brutos;
+  const descuentosLey = totalIngresos * 0.08;
+  const totalNetos = totalIngresos - descuentosLey;
+  const gastosSostenimiento = totalNetos * 0.35;
+
+  // 'Analisis':
+  // C12 = +'Flujo Empleado'!D10
+  // C13 = +'Plan de pagos'!P19 + 'Flujo Empleado'!D26
+  // C14 = +C12 - C13 (Capacidad de pago)
+  const cuotaNuevaMasGastos = cuotaNueva + gastosSostenimiento;
+  const capacidadPago = Math.round(brutos - cuotaNuevaMasGastos);
+
+  return {
+    montoPlanPagos,
+    cuotas,
+    valorFinanciado,
+    cuotaCapitalInteres,
+    seguroVida,
+    fianzaIva,
+    cuotaNueva,
+    ingresos,
+    quanto,
+    brutos,
+    otrosIngresos,
+    totalIngresos,
+    descuentosLey,
+    totalNetos,
+    gastosSostenimiento,
+    cuotaNuevaMasGastos,
+    capacidadPago,
+  };
+}
 
 export interface LeadAnalisisInput {
   id: string;
@@ -181,12 +308,32 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
   const destino = formatDestinoCredito(datos.destinoCredito || datos.destino_credito);
   const linea = formatLineaCredito(lead.tipoCredito);
 
-  const montoSolicitado = Number(lead.capitalSolicitado || datos.capitalSeleccionado || datos.monto || 0);
-  const montoAprobado = Number(datos.montoAprobado || 0);
-  const montoPlanPagos = montoAprobado > 0 ? montoAprobado : montoSolicitado;
-  const cuotas = Number(lead.cantidadCuotas || datos.cantidadCuotas || 2);
-  const ingresos = Number(datos.ingresosMensuales || datos.ingresos_mensuales || datos.ingresos || 0);
-  const quanto = Number(datos.quantoMedio || datos.ingresosMedio || (ingresos > 0 ? ingresos : 3011000));
+  const montoSolicitado =
+    parseMoneyValue(
+      lead.capitalSolicitado ??
+        datos.capitalSeleccionado ??
+        datos.capitalSolicitado ??
+        datos.monto,
+    ) ?? 0;
+  const montoAprobado = parseMoneyValue(datos.montoAprobado) ?? 0;
+  const calc = calcularCapacidadPagoAnalisis({
+    capitalSolicitado: montoSolicitado,
+    cantidadCuotas: lead.cantidadCuotas,
+    datosFormulario: datos,
+  });
+  const {
+    montoPlanPagos,
+    cuotas,
+    ingresos,
+    quanto,
+    brutos,
+    totalIngresos,
+    descuentosLey,
+    totalNetos,
+    gastosSostenimiento,
+    cuotaNuevaMasGastos,
+    capacidadPago,
+  } = calc;
 
   const fechaSolicitud = new Date(lead.fechaCreacion);
   const fechaValida = !isNaN(fechaSolicitud.getTime()) ? fechaSolicitud : new Date();
@@ -222,23 +369,16 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
 
     // Precalcular los valores derivados de las fórmulas para que Excel y visores
     // muestren los valores y porcentajes inmediatamente sin dar #¡DIV/0!
-    const brutos = Math.min(ingresos, quanto);
-    const otrosIngresos = Number(datos.otrosIngresos || 0);
-    const totalIngresos = brutos + otrosIngresos;
-    const descuentosLey = Math.round(totalIngresos * 0.08);
-    const totalNetos = totalIngresos - descuentosLey;
-    const gastosSostenimiento = Math.round(totalNetos * 0.35);
-
     s3 = updateCell(s3, "D10", { value: brutos, isString: false, defaultStyle: "120" });
     s3 = updateCell(s3, "E10", { value: totalIngresos > 0 ? brutos / totalIngresos : 1, isString: false, defaultStyle: "118" });
     s3 = updateCell(s3, "D15", { value: totalIngresos, isString: false, defaultStyle: "125" });
     s3 = updateCell(s3, "E15", { value: 1, isString: false, defaultStyle: "126" });
-    s3 = updateCell(s3, "D16", { value: descuentosLey, isString: false, defaultStyle: "125" });
+    s3 = updateCell(s3, "D16", { value: Math.round(descuentosLey), isString: false, defaultStyle: "125" });
     s3 = updateCell(s3, "E16", { value: totalIngresos > 0 ? descuentosLey / totalIngresos : 0.08, isString: false, defaultStyle: "123" });
-    s3 = updateCell(s3, "D17", { value: totalNetos, isString: false, defaultStyle: "128" });
+    s3 = updateCell(s3, "D17", { value: Math.round(totalNetos), isString: false, defaultStyle: "128" });
     s3 = updateCell(s3, "E17", { value: totalIngresos > 0 ? totalNetos / totalIngresos : 0.92, isString: false, defaultStyle: "129" });
-    s3 = updateCell(s3, "D19", { value: gastosSostenimiento, isString: false, defaultStyle: "130" });
-    s3 = updateCell(s3, "D26", { value: gastosSostenimiento, isString: false, defaultStyle: "128" });
+    s3 = updateCell(s3, "D19", { value: Math.round(gastosSostenimiento), isString: false, defaultStyle: "130" });
+    s3 = updateCell(s3, "D26", { value: Math.round(gastosSostenimiento), isString: false, defaultStyle: "128" });
 
     zip.file("xl/worksheets/sheet3.xml", s3);
   }
@@ -248,6 +388,9 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
   if (sheet4File) {
     let s4 = await sheet4File.async("text");
     s4 = updateCell(s4, "C10", { value: Number(datos.puntajeBegini || 0), isString: false, defaultStyle: "192" });
+    s4 = updateCell(s4, "C12", { value: brutos, isString: false, defaultStyle: "190" });
+    s4 = updateCell(s4, "C13", { value: Math.round(cuotaNuevaMasGastos), isString: false, defaultStyle: "192" });
+    s4 = updateCell(s4, "C14", { value: capacidadPago, isString: false, defaultStyle: "192" });
 
     const validacionAdresRaw =
       typeof datos.validacionAdres === "string"
@@ -320,9 +463,17 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
       const vehRaw = datos.activosConfirmados
         ? String(datos.tieneVehiculoConfirmado ?? "").trim().toLowerCase()
         : String(datos.tieneVehiculo ?? "").trim().toLowerCase();
+      const placaRaw = datos.activosConfirmados
+        ? String(datos.placaVehiculoConfirmada ?? "").trim().toUpperCase()
+        : String(datos.placaVehiculo ?? "").trim().toUpperCase();
       if (vivRaw || vehRaw) {
         const vivTxt = vivRaw === "si" || vivRaw === "true" ? "Sí" : "No";
-        const vehTxt = vehRaw === "si" || vehRaw === "true" ? "Sí" : "No";
+        const isVehSi = vehRaw === "si" || vehRaw === "true";
+        const vehTxt = isVehSi
+          ? placaRaw
+            ? `Sí (Placa: ${placaRaw})`
+            : "Sí"
+          : "No";
         propiedades = `Vivienda: ${vivTxt} | Vehículo: ${vehTxt}`;
       }
     }

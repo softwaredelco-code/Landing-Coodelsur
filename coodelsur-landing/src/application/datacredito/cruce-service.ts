@@ -100,7 +100,9 @@ export function buildCoodelsurTemplateExcelBuffer(leads: LeadExportRecord[]): Ui
     let propiedadesConfirmadas = "";
     if (datos.activosConfirmados) {
       const viv = String(datos.tieneViviendaConfirmada ?? "").trim().toLowerCase() === "si" ? "Sí" : "No";
-      const veh = String(datos.tieneVehiculoConfirmado ?? "").trim().toLowerCase() === "si" ? "Sí" : "No";
+      const isVehSi = String(datos.tieneVehiculoConfirmado ?? "").trim().toLowerCase() === "si";
+      const placaConf = String(datos.placaVehiculoConfirmada ?? "").trim().toUpperCase();
+      const veh = isVehSi ? (placaConf ? `Sí (Placa: ${placaConf})` : "Sí") : "No";
       propiedadesConfirmadas = `Vivienda: ${viv}, Vehículo: ${veh}`;
     }
 
@@ -319,7 +321,7 @@ export function processCruceData(
 
   const finalHeaders = [...rawHeaders, ...newColumnsToAdd];
 
-  // Columnas que por regla de negocio deben quedar SIEMPRE vacías:
+  // Columnas que por regla de negocio deben quedar SIEMPRE vacías en el cruce de DataCrédito:
   // "capacidad de pago" (las columnas de salud/ADRES y propiedades conservan lo confirmado en el panel admin)
   const alwaysEmptyColIndices: number[] = [];
   for (let i = 0; i < finalHeaders.length; i++) {
@@ -407,7 +409,7 @@ export function processCruceData(
       originalRow[analysisHeadersMap["Monto sugerido"]] = numMontoSugerido;
       originalRow[analysisHeadersMap["Ingreso data"]] = numIngresoData;
       originalRow[analysisHeadersMap["Endeudamiento"]] = ext.endeudamiento;
-      // Regla obligatoria: "Capacidad de pago" COMPLETAMENTE VACÍA
+      // Regla obligatoria: "Capacidad de pago" COMPLETAMENTE VACÍA en el cruce de DataCrédito
       originalRow[analysisHeadersMap["Capacidad de pago"]] = "";
       originalRow[analysisHeadersMap["Vectores"]] = `${cleanVector} (${vAnalysis.resumen})`;
       originalRow[analysisHeadersMap["Créditos vigentes"]] = numCreditosVigentes;

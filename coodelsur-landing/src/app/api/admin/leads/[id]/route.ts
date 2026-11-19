@@ -1,5 +1,6 @@
 import { loadLeadForAdminDetail } from "@/application/lead/load-admin-lead-detail";
 import { deleteLead } from "@/application/lead/delete-lead";
+import { calcularCapacidadPagoAnalisis } from "@/application/lead/export-lead-analisis-excel";
 import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/infrastructure/auth/require-admin";
 import { prisma } from "@/infrastructure/database/prisma";
@@ -59,6 +60,7 @@ export async function PATCH(
       activosConfirmados: boolean;
       tieneViviendaConfirmada?: string | null;
       tieneVehiculoConfirmado?: string | null;
+      placaVehiculoConfirmada?: string | null;
     } | null;
     validacionAdres?: {
       estadoAdres?: string | null;
@@ -127,6 +129,7 @@ export async function PATCH(
         activosConfirmados: boolean;
         tieneViviendaConfirmada: string | null;
         tieneVehiculoConfirmado: string | null;
+        placaVehiculoConfirmada: string | null;
         fechaConfirmacionActivos: string | null;
       }
     | undefined = undefined;
@@ -137,11 +140,15 @@ export async function PATCH(
         activosConfirmados: false,
         tieneViviendaConfirmada: null,
         tieneVehiculoConfirmado: null,
+        placaVehiculoConfirmada: null,
         fechaConfirmacionActivos: null,
       };
     } else {
       const vivienda = String(body.activosPropiosConfirmados.tieneViviendaConfirmada ?? "").trim().toLowerCase();
       const vehiculo = String(body.activosPropiosConfirmados.tieneVehiculoConfirmado ?? "").trim().toLowerCase();
+      const placaRaw = String(body.activosPropiosConfirmados.placaVehiculoConfirmada ?? "")
+        .trim()
+        .toUpperCase();
 
       if ((vivienda !== "si" && vivienda !== "no") || (vehiculo !== "si" && vehiculo !== "no")) {
         return NextResponse.json(
@@ -154,6 +161,7 @@ export async function PATCH(
         activosConfirmados: true,
         tieneViviendaConfirmada: vivienda,
         tieneVehiculoConfirmado: vehiculo,
+        placaVehiculoConfirmada: vehiculo === "si" && placaRaw ? placaRaw : null,
         fechaConfirmacionActivos: new Date().toISOString(),
       };
     }
@@ -198,7 +206,7 @@ export async function PATCH(
   try {
     const existing = await prisma.lead.findUnique({
       where: { id: leadId },
-      select: { id: true, datosFormulario: true, estado: true },
+      select: { id: true, datosFormulario: true, estado: true, capitalSolicitado: true },
     });
 
     if (!existing) {
@@ -232,6 +240,7 @@ export async function PATCH(
       updatedDatos.activosConfirmados = parsedActivos.activosConfirmados;
       updatedDatos.tieneViviendaConfirmada = parsedActivos.tieneViviendaConfirmada;
       updatedDatos.tieneVehiculoConfirmado = parsedActivos.tieneVehiculoConfirmado;
+      updatedDatos.placaVehiculoConfirmada = parsedActivos.placaVehiculoConfirmada;
       updatedDatos.fechaConfirmacionActivos = parsedActivos.fechaConfirmacionActivos;
     }
 
@@ -242,6 +251,14 @@ export async function PATCH(
         parsedAdres.validacionAdres !== null
           ? parsedAdres.validacionAdres === "cotizante"
           : undefined;
+    }
+
+    const calcCapacidad = calcularCapacidadPagoAnalisis({
+      capitalSolicitado: existing.capitalSolicitado ?? null,
+      datosFormulario: updatedDatos,
+    });
+    if (calcCapacidad.brutos > 0 || calcCapacidad.montoPlanPagos > 0) {
+      updatedDatos.capacidadPago = calcCapacidad.capacidadPago;
     }
 
     await prisma.lead.update({
@@ -298,6 +315,7 @@ export async function PATCH(
         updatedDatos.activosConfirmados = parsedActivos.activosConfirmados;
         updatedDatos.tieneViviendaConfirmada = parsedActivos.tieneViviendaConfirmada;
         updatedDatos.tieneVehiculoConfirmado = parsedActivos.tieneVehiculoConfirmado;
+        updatedDatos.placaVehiculoConfirmada = parsedActivos.placaVehiculoConfirmada;
         updatedDatos.fechaConfirmacionActivos = parsedActivos.fechaConfirmacionActivos;
       }
 
@@ -308,6 +326,13 @@ export async function PATCH(
           parsedAdres.validacionAdres !== null
             ? parsedAdres.validacionAdres === "cotizante"
             : undefined;
+      }
+
+      const calcCapacidad = calcularCapacidadPagoAnalisis({
+        datosFormulario: updatedDatos,
+      });
+      if (calcCapacidad.brutos > 0 || calcCapacidad.montoPlanPagos > 0) {
+        updatedDatos.capacidadPago = calcCapacidad.capacidadPago;
       }
 
       updateLeadInFile(leadId, {

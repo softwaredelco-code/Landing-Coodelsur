@@ -172,7 +172,7 @@ export interface CruceItemResult {
   montoSugerido: number | null | "Pendiente reporte";
   ingresoData: number | null | "Pendiente reporte";
   endeudamiento: string | "Pendiente reporte";
-  capacidadPago: ""; // Siempre vacía por regla de negocio estricta
+  capacidadPago: number | string | null;
   vectores: string | "Pendiente reporte";
   analisisVectores?: string;
   creditosVigentes: number | null | "Pendiente reporte";
