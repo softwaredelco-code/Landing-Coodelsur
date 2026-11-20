@@ -24,6 +24,12 @@ const WITME_RESERVED_KEYS = new Set([
   "witmeId",
   "id_externo",
   "external_id",
+  "click_id",
+  "cid",
+  "clickid",
+  "transaction_id",
+  "subid",
+  "aff_sub",
 ]);
 
 /** Alias comunes de Witme → campos internos del formulario Small. */
@@ -209,7 +215,20 @@ export function mapWitmePayload(raw: Record<string, unknown>): MappedWitmeLead |
 
   datosFormulario.fuente = "witme_webhook";
   datosFormulario.witmeLeadId =
-    readString(raw, "witme_id", "witmeId", "id_externo", "external_id") ?? null;
+    readString(
+      raw,
+      "witme_id",
+      "witmeId",
+      "id_externo",
+      "external_id",
+      "click_id",
+      "cid",
+      "clickid",
+      "transaction_id",
+      "subid",
+      "aff_sub",
+    ) ?? null;
+  datosFormulario.witme_id = datosFormulario.witmeLeadId;
   datosFormulario.payloadOriginal = raw;
 
   const email = readString(raw, "email", "correo") ?? readString(datosFormulario, "email");
@@ -234,7 +253,20 @@ export function mapWitmePayload(raw: Record<string, unknown>): MappedWitmeLead |
       raw.acepta_terminos === true ||
       datosFormulario.aceptaTerminos === true,
     utm,
-    witmeLeadId: readString(raw, "witme_id", "witmeId", "id_externo", "external_id"),
+    witmeLeadId:
+      readString(
+        raw,
+        "witme_id",
+        "witmeId",
+        "id_externo",
+        "external_id",
+        "click_id",
+        "cid",
+        "clickid",
+        "transaction_id",
+        "subid",
+        "aff_sub",
+      ) ?? undefined,
     datosFormulario,
   };
 }

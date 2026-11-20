@@ -28,6 +28,7 @@ export default function AdminLeadDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [triggeringPostback, setTriggeringPostback] = useState(false);
+  const [manualWitmeId, setManualWitmeId] = useState("");
   const [isMontoModalOpen, setIsMontoModalOpen] = useState(false);
   const [montoNotice, setMontoNotice] = useState<string | null>(null);
   const [postbackNotice, setPostbackNotice] = useState<{
@@ -97,24 +98,36 @@ export default function AdminLeadDetailPage() {
     }
   };
 
-  const handleTriggerPostback = async () => {
+  const handleTriggerPostback = async (overrideId?: string) => {
     if (!lead) return;
+    const cidToSend = (overrideId ?? manualWitmeId).trim() || undefined;
     setTriggeringPostback(true);
     setPostbackNotice(null);
     try {
       const res = await fetch(`/api/admin/leads/${lead.id}/postback-witme`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cidToSend ? { witme_id: cidToSend } : {}),
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Error al disparar postback");
       }
-      setLead((prev) => (prev ? { ...prev, witmePostback: data.result } : prev));
+      setLead((prev) =>
+        prev
+          ? {
+              ...prev,
+              witmeLeadId: cidToSend || prev.witmeLeadId,
+              witmePostback: data.result,
+            }
+          : prev,
+      );
       if (data.result?.status === "success") {
         setPostbackNotice({
           type: "success",
           text: `Postback enviado con éxito a Witme (HTTP ${data.result.httpStatus}).`,
         });
+        setManualWitmeId("");
       } else if (data.result?.status === "pending_url") {
         setPostbackNotice({
           type: "info",
@@ -552,10 +565,36 @@ export default function AdminLeadDetailPage() {
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg bg-white/90 p-3 border border-indigo-100 shadow-xs">
-                  <span className="block text-xs font-medium text-gray-500">ID Witme (witme_id)</span>
+                  <span className="block text-xs font-medium text-gray-500">ID Witme (witme_id / Click ID)</span>
                   <span className="mt-1 block font-mono text-xs font-semibold text-gray-900 break-all">
-                    {lead.witmeLeadId ?? "No disponible en payload"}
+                    {lead.witmeLeadId ?? (
+                      <span className="text-amber-700 font-normal">
+                        ⚠️ Sin ID registrado (el postback automático requiere este ID)
+                      </span>
+                    )}
                   </span>
+                  {lead.witmePostback?.status !== "success" && (
+                    <div className="mt-2.5 flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Pegar witme_id / Click ID..."
+                        value={manualWitmeId}
+                        onChange={(e) => setManualWitmeId(e.target.value)}
+                        className="rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-mono text-gray-800 placeholder-gray-400 w-full focus:border-indigo-500 focus:outline-none"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="primary"
+                        loading={triggeringPostback}
+                        disabled={triggeringPostback || !manualWitmeId.trim()}
+                        onClick={() => void handleTriggerPostback(manualWitmeId)}
+                        className="text-xs shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white"
+                      >
+                        Asignar y Enviar
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-lg bg-white/90 p-3 border border-indigo-100 shadow-xs">

@@ -2,7 +2,7 @@ import { createLead } from "@/application/lead/create-lead";
 import { mapWitmePayload, type MappedWitmeLead } from "@/application/lead/map-witme-payload";
 import { resolveClientDuplicateByProgress } from "@/domain/lead/duplicate-cedula";
 import { calcularProgresoFormulario } from "@/domain/lead/form-progress";
-import { cleanupIncompleteDraftsForContact } from "@/application/lead/save-draft-lead";
+import { cleanupIncompleteDraftsForContact, saveDraftLead } from "@/application/lead/save-draft-lead";
 import { getClientIp } from "@/shared/utils";
 import type { TipoCredito } from "@/shared/types/credito";
 import { randomUUID } from "crypto";
@@ -298,17 +298,45 @@ export async function POST(request: Request) {
     //      redirija al usuario al formulario y el lead se guarde al completarse.
     // =========================================================================
     if (!completeness.complete) {
-      const trackingId = mapped.witmeLeadId || randomUUID();
+      let draftId = "";
+      if (mapped.witmeLeadId) {
+        try {
+          const draft = await saveDraftLead({
+            step: 1,
+            values: {
+              ...mapped.datosFormulario,
+              nombre: mapped.nombre,
+              cedula: mapped.cedula,
+              telefono: mapped.telefono,
+              email: mapped.email,
+              witme_id: mapped.witmeLeadId,
+              witmeLeadId: mapped.witmeLeadId,
+              origen: "witme",
+            },
+            utm: mapped.utm,
+            ip: getClientIp(request),
+          });
+          if (draft && draft.id) {
+            draftId = draft.id;
+          }
+        } catch (draftErr) {
+          console.warn("[WitmeWebhook] Error guardando borrador con witme_id:", draftErr);
+        }
+      }
+
+      const effectiveRedirectUrl = buildWitmeRedirectUrl(origin, mapped.tipoCredito, draftId, mapped);
+      const trackingId = mapped.witmeLeadId || draftId || randomUUID();
       return NextResponse.json(
         {
           status: "created",
           success: true,
           id: trackingId,
           leadId: trackingId,
+          draftLeadId: draftId || undefined,
           estado: "redirect_pending",
           origen: "witme",
-          redirect_url: redirectUrl,
-          redirectUrl: redirectUrl,
+          redirect_url: effectiveRedirectUrl,
+          redirectUrl: effectiveRedirectUrl,
           incomingProgreso,
           message:
             "Datos de pre-calificación validados. Redirigir al usuario a redirect_url para finalizar y registrar su solicitud completa.",

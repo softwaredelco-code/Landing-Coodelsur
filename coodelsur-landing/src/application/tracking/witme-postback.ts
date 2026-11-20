@@ -118,8 +118,13 @@ export function extractWitmeId(datosFormulario: unknown): string | null {
     d.witme_id ||
     d.witmeId ||
     d.click_id ||
+    d.cid ||
+    d.clickid ||
     d.id_externo ||
-    d.external_id;
+    d.external_id ||
+    d.transaction_id ||
+    d.subid ||
+    d.aff_sub;
 
   if (typeof candidate === "string" && candidate.trim()) {
     return candidate.trim();
