@@ -27,7 +27,7 @@ import {
   type LibranzaStepId,
 } from "@/shared/validation/libranza/schema";
 import { deserializeUtm } from "@/presentation/tracking/utm";
-import { getUtmFromCookie } from "@/presentation/tracking/TrackingProvider";
+import { getUtmFromCookie, getWitmeId } from "@/presentation/tracking/TrackingProvider";
 import { trackEvent } from "@/presentation/tracking/analytics";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -251,10 +251,7 @@ export function FormularioLibranza({ config, initialMonto }: CreditoFormProps) {
       // El video real siempre viaja en el envío final: el borrador del servidor solo
       // conserva metadatos, por lo que nunca se debe sustituir por una referencia liviana.
       const cleanData: any = { ...data };
-      const storedWitmeId =
-        typeof window !== "undefined"
-          ? sessionStorage.getItem("coodelsur_witme_id") || undefined
-          : undefined;
+      const storedWitmeId = getWitmeId() ?? undefined;
 
       const payload = {
         ...cleanData,

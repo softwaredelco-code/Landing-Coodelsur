@@ -11,7 +11,7 @@
  */
 
 import { deserializeUtm } from "@/presentation/tracking/utm";
-import { getUtmFromCookie } from "@/presentation/tracking/TrackingProvider";
+import { getUtmFromCookie, getWitmeId } from "@/presentation/tracking/TrackingProvider";
 import { stripHeavyFieldsForDraft } from "@/domain/lead/form-progress";
 import type { NanocreditoFormValues } from "@/shared/validation/nanocredito";
 import { useEffect, useRef } from "react";
@@ -71,6 +71,12 @@ export async function syncNanocreditoDraftToServer(
     const values = stripHeavyFieldsForDraft(
       getValues() as unknown as Record<string, unknown>,
     );
+
+    const witmeId = getWitmeId();
+    if (witmeId) {
+      values.witme_id = witmeId;
+      values.witmeLeadId = witmeId;
+    }
 
     const response = await fetch("/api/leads/draft", {
       method: "POST",

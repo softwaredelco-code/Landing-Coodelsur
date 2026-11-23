@@ -117,10 +117,42 @@ export async function POST(request: Request) {
     }
 
     const utm = body.utm as UtmParams | undefined;
+
+    // Rescatar witme_id de múltiples fuentes resilientes: body, cookies del request o query
+    const cookieHeader = request.headers.get("cookie") || "";
+    const cookieWitmeMatch = cookieHeader.match(/(?:^|;\s*)coodelsur_witme_id=([^;]+)/);
+    const cookieWitmeId = cookieWitmeMatch ? decodeURIComponent(cookieWitmeMatch[1].trim()) : undefined;
+
+    const rawWitmeId =
+      body.witme_id ||
+      body.witmeLeadId ||
+      body.witmeId ||
+      body.click_id ||
+      body.id_externo ||
+      (formResult.data as Record<string, unknown>).witme_id ||
+      (formResult.data as Record<string, unknown>).witmeLeadId ||
+      cookieWitmeId;
+    const witmeId = typeof rawWitmeId === "string" && rawWitmeId.trim() ? rawWitmeId.trim() : undefined;
+
     const leadData = extractLeadFromFormBody(
-      { ...formResult.data, utm, geoCliente: body.geoCliente },
+      {
+        ...body,
+        ...formResult.data,
+        witme_id: witmeId,
+        witmeLeadId: witmeId,
+        utm,
+        geoCliente: body.geoCliente,
+      },
       utm,
     );
+
+    if (witmeId) {
+      leadData.datosFormulario.witme_id = witmeId;
+      leadData.datosFormulario.witmeLeadId = witmeId;
+      if (!leadData.origen || leadData.origen === "directo") {
+        leadData.origen = "witme";
+      }
+    }
 
     const apiResult = leadApiSchema.safeParse({
       ...leadData,

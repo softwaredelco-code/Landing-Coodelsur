@@ -472,6 +472,15 @@ export async function saveDraftLead(input: SaveDraftLeadInput): Promise<SaveDraf
         }
       }
 
+      if (input.values?.witme_id) {
+        mergedDatos.witme_id = input.values.witme_id;
+        finalOrigen = "witme";
+      }
+      if (input.values?.witmeLeadId) {
+        mergedDatos.witmeLeadId = input.values.witmeLeadId;
+        finalOrigen = "witme";
+      }
+
       const payload = {
         tipoCredito,
         nombre,

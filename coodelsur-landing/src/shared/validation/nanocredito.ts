@@ -80,6 +80,12 @@ const geoCoordsSchema: z.ZodType<GeoCoords> = z.object({
 const nanocreditoBaseSchema = z.object({
   tipoCredito: z.literal("microcredito_small"),
 
+  witme_id: z.string().optional(),
+  witmeLeadId: z.string().optional(),
+  witmeId: z.string().optional(),
+  click_id: z.string().optional(),
+  id_externo: z.string().optional(),
+
   nombre: requiredText("Nombre y apellido", 3),
   email: z
     .string({ required_error: "El e-mail es requerido" })
