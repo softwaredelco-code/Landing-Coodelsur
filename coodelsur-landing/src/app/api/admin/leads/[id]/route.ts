@@ -60,7 +60,6 @@ export async function PATCH(
       activosConfirmados: boolean;
       tieneViviendaConfirmada?: string | null;
       tieneVehiculoConfirmado?: string | null;
-      placaVehiculoConfirmada?: string | null;
     } | null;
     validacionAdres?: {
       estadoAdres?: string | null;
@@ -129,7 +128,6 @@ export async function PATCH(
         activosConfirmados: boolean;
         tieneViviendaConfirmada: string | null;
         tieneVehiculoConfirmado: string | null;
-        placaVehiculoConfirmada: string | null;
         fechaConfirmacionActivos: string | null;
       }
     | undefined = undefined;
@@ -140,15 +138,11 @@ export async function PATCH(
         activosConfirmados: false,
         tieneViviendaConfirmada: null,
         tieneVehiculoConfirmado: null,
-        placaVehiculoConfirmada: null,
         fechaConfirmacionActivos: null,
       };
     } else {
       const vivienda = String(body.activosPropiosConfirmados.tieneViviendaConfirmada ?? "").trim().toLowerCase();
       const vehiculo = String(body.activosPropiosConfirmados.tieneVehiculoConfirmado ?? "").trim().toLowerCase();
-      const placaRaw = String(body.activosPropiosConfirmados.placaVehiculoConfirmada ?? "")
-        .trim()
-        .toUpperCase();
 
       if ((vivienda !== "si" && vivienda !== "no") || (vehiculo !== "si" && vehiculo !== "no")) {
         return NextResponse.json(
@@ -161,7 +155,6 @@ export async function PATCH(
         activosConfirmados: true,
         tieneViviendaConfirmada: vivienda,
         tieneVehiculoConfirmado: vehiculo,
-        placaVehiculoConfirmada: vehiculo === "si" && placaRaw ? placaRaw : null,
         fechaConfirmacionActivos: new Date().toISOString(),
       };
     }
@@ -240,7 +233,7 @@ export async function PATCH(
       updatedDatos.activosConfirmados = parsedActivos.activosConfirmados;
       updatedDatos.tieneViviendaConfirmada = parsedActivos.tieneViviendaConfirmada;
       updatedDatos.tieneVehiculoConfirmado = parsedActivos.tieneVehiculoConfirmado;
-      updatedDatos.placaVehiculoConfirmada = parsedActivos.placaVehiculoConfirmada;
+      updatedDatos.placaVehiculoConfirmada = null;
       updatedDatos.fechaConfirmacionActivos = parsedActivos.fechaConfirmacionActivos;
     }
 
@@ -315,7 +308,7 @@ export async function PATCH(
         updatedDatos.activosConfirmados = parsedActivos.activosConfirmados;
         updatedDatos.tieneViviendaConfirmada = parsedActivos.tieneViviendaConfirmada;
         updatedDatos.tieneVehiculoConfirmado = parsedActivos.tieneVehiculoConfirmado;
-        updatedDatos.placaVehiculoConfirmada = parsedActivos.placaVehiculoConfirmada;
+        updatedDatos.placaVehiculoConfirmada = null;
         updatedDatos.fechaConfirmacionActivos = parsedActivos.fechaConfirmacionActivos;
       }
 

@@ -54,7 +54,6 @@ export interface AdminLeadActivosPropios {
   activosConfirmados: boolean;
   tieneViviendaConfirmada: string | null;
   tieneVehiculoConfirmado: string | null;
-  placaVehiculoConfirmada: string | null;
   fechaConfirmacionActivos: string | null;
 }
 
@@ -266,7 +265,6 @@ export function mapLeadToAdminDetail(
       activosConfirmados: Boolean(datos.activosConfirmados),
       tieneViviendaConfirmada: readDatosSiNo(datos, "tieneViviendaConfirmada"),
       tieneVehiculoConfirmado: readDatosSiNo(datos, "tieneVehiculoConfirmado"),
-      placaVehiculoConfirmada: readDatosString(datos, "placaVehiculoConfirmada"),
       fechaConfirmacionActivos: readDatosString(datos, "fechaConfirmacionActivos"),
     },
     validacionAdres: {

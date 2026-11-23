@@ -463,17 +463,9 @@ export async function buildLeadAnalisisExcelBuffer(lead: LeadAnalisisInput): Pro
       const vehRaw = datos.activosConfirmados
         ? String(datos.tieneVehiculoConfirmado ?? "").trim().toLowerCase()
         : String(datos.tieneVehiculo ?? "").trim().toLowerCase();
-      const placaRaw = datos.activosConfirmados
-        ? String(datos.placaVehiculoConfirmada ?? "").trim().toUpperCase()
-        : String(datos.placaVehiculo ?? "").trim().toUpperCase();
       if (vivRaw || vehRaw) {
         const vivTxt = vivRaw === "si" || vivRaw === "true" ? "Sí" : "No";
-        const isVehSi = vehRaw === "si" || vehRaw === "true";
-        const vehTxt = isVehSi
-          ? placaRaw
-            ? `Sí (Placa: ${placaRaw})`
-            : "Sí"
-          : "No";
+        const vehTxt = vehRaw === "si" || vehRaw === "true" ? "Sí" : "No";
         propiedades = `Vivienda: ${vivTxt} | Vehículo: ${vehTxt}`;
       }
     }

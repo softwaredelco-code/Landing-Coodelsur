@@ -26,7 +26,6 @@ export function ConfirmacionActivosSection({
 }: ConfirmacionActivosSectionProps) {
   const viviendaCliente = activosPropios?.tieneViviendaCliente ?? "";
   const vehiculoCliente = activosPropios?.tieneVehiculoCliente ?? "";
-  const placaCliente = (activosPropios?.placaVehiculoCliente ?? "").toUpperCase();
 
   const isConfirmada = Boolean(activosPropios?.activosConfirmados);
 
@@ -35,9 +34,6 @@ export function ConfirmacionActivosSection({
   );
   const [tieneVehiculo, setTieneVehiculo] = useState<string>(
     activosPropios?.tieneVehiculoConfirmado || vehiculoCliente || "no",
-  );
-  const [placaVehiculo, setPlacaVehiculo] = useState<string>(
-    (activosPropios?.placaVehiculoConfirmada || placaCliente || "").toUpperCase(),
   );
 
   const [saving, setSaving] = useState(false);
@@ -55,21 +51,12 @@ export function ConfirmacionActivosSection({
         activosPropios?.tieneVehiculoCliente ||
         "no",
     );
-    setPlacaVehiculo(
-      (
-        activosPropios?.placaVehiculoConfirmada ||
-        activosPropios?.placaVehiculoCliente ||
-        ""
-      ).toUpperCase(),
-    );
   }, [
     activosPropios?.activosConfirmados,
     activosPropios?.tieneViviendaConfirmada,
     activosPropios?.tieneVehiculoConfirmado,
-    activosPropios?.placaVehiculoConfirmada,
     activosPropios?.tieneViviendaCliente,
     activosPropios?.tieneVehiculoCliente,
-    activosPropios?.placaVehiculoCliente,
   ]);
 
   const changedFromClient =
@@ -77,15 +64,12 @@ export function ConfirmacionActivosSection({
     ((viviendaCliente &&
       (activosPropios?.tieneViviendaConfirmada ?? "") !== viviendaCliente) ||
       (vehiculoCliente &&
-        (activosPropios?.tieneVehiculoConfirmado ?? "") !== vehiculoCliente) ||
-      ((activosPropios?.placaVehiculoConfirmada ?? "").toUpperCase() !==
-        placaCliente));
+        (activosPropios?.tieneVehiculoConfirmado ?? "") !== vehiculoCliente));
 
   const saveConfirmation = async (payload: {
     activosConfirmados: boolean;
     tieneViviendaConfirmada?: string | null;
     tieneVehiculoConfirmado?: string | null;
-    placaVehiculoConfirmada?: string | null;
   }) => {
     setSaving(true);
     setError(null);
@@ -135,17 +119,14 @@ export function ConfirmacionActivosSection({
   const handleConfirmarMismosDelCliente = () => {
     const viv = viviendaCliente || tieneVivienda || "no";
     const veh = vehiculoCliente || tieneVehiculo || "no";
-    const placa = veh === "si" ? (placaCliente || placaVehiculo.trim()).toUpperCase() : "";
 
     setTieneVivienda(viv);
     setTieneVehiculo(veh);
-    setPlacaVehiculo(placa);
 
     void saveConfirmation({
       activosConfirmados: true,
       tieneViviendaConfirmada: viv,
       tieneVehiculoConfirmado: veh,
-      placaVehiculoConfirmada: veh === "si" && placa ? placa : null,
     });
   };
 
@@ -153,15 +134,9 @@ export function ConfirmacionActivosSection({
     e.preventDefault();
     const viv = tieneVivienda.trim().toLowerCase();
     const veh = tieneVehiculo.trim().toLowerCase();
-    const placa = placaVehiculo.trim().toUpperCase();
 
     if ((viv !== "si" && viv !== "no") || (veh !== "si" && veh !== "no")) {
       setError("Debes seleccionar Sí o No tanto para Vivienda como para Vehículo.");
-      return;
-    }
-
-    if (veh === "si" && !placa) {
-      setError("Ingresa la placa del vehículo para confirmar.");
       return;
     }
 
@@ -169,12 +144,8 @@ export function ConfirmacionActivosSection({
       activosConfirmados: true,
       tieneViviendaConfirmada: viv,
       tieneVehiculoConfirmado: veh,
-      placaVehiculoConfirmada: veh === "si" ? placa : null,
     });
   };
-
-  const isVehiculoConfirmadoSi =
-    (activosPropios?.tieneVehiculoConfirmado ?? "").toLowerCase() === "si";
 
   return (
     <div className="mt-5 border-t border-gray-200 pt-5">
@@ -258,11 +229,7 @@ export function ConfirmacionActivosSection({
               </span>
             )}
           </div>
-          <dl
-            className={`grid grid-cols-1 gap-x-6 gap-y-2 ${
-              isVehiculoConfirmadoSi ? "sm:grid-cols-3" : "sm:grid-cols-2"
-            }`}
-          >
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
             <div>
               <dt className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">
                 Vivienda (Confirmado)
@@ -283,16 +250,6 @@ export function ConfirmacionActivosSection({
                   "—"}
               </dd>
             </div>
-            {isVehiculoConfirmadoSi && (
-              <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">
-                  Placa del vehículo (Confirmada)
-                </dt>
-                <dd className="font-mono text-sm font-bold text-emerald-950">
-                  {activosPropios?.placaVehiculoConfirmada || "—"}
-                </dd>
-              </div>
-            )}
           </dl>
         </div>
       )}
@@ -336,13 +293,7 @@ export function ConfirmacionActivosSection({
               id={`tiene-vehiculo-confirmado-${leadId}`}
               value={tieneVehiculo}
               disabled={saving}
-              onChange={(e) => {
-                const val = e.target.value;
-                setTieneVehiculo(val);
-                if (val === "no") {
-                  setPlacaVehiculo("");
-                }
-              }}
+              onChange={(e) => setTieneVehiculo(e.target.value)}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-coodel-dark shadow-xs focus:border-coodel-primary focus:outline-none focus:ring-1 focus:ring-coodel-primary"
             >
               {SI_NO.map((opt) => (
@@ -352,27 +303,6 @@ export function ConfirmacionActivosSection({
               ))}
             </select>
           </div>
-
-          {tieneVehiculo === "si" && (
-            <div className="sm:col-span-2">
-              <label
-                htmlFor={`placa-vehiculo-confirmada-${leadId}`}
-                className="block text-xs font-medium uppercase tracking-wide text-gray-600 mb-1"
-              >
-                Placa del vehículo (Confirmada)
-              </label>
-              <input
-                id={`placa-vehiculo-confirmada-${leadId}`}
-                type="text"
-                value={placaVehiculo}
-                disabled={saving}
-                maxLength={10}
-                onChange={(e) => setPlacaVehiculo(e.target.value.toUpperCase())}
-                placeholder="Ingresa la placa del vehículo (Ej: ABC123)"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm font-medium uppercase text-coodel-dark shadow-xs placeholder:font-sans placeholder:normal-case placeholder:text-gray-400 focus:border-coodel-primary focus:outline-none focus:ring-1 focus:ring-coodel-primary"
-              />
-            </div>
-          )}
         </div>
 
         {error && (

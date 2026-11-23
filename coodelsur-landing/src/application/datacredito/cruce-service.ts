@@ -21,6 +21,7 @@ export const COODELSUR_TEMPLATE_HEADERS = [
   "Nombre",
   "TELEFONO",
   "Actividad",
+  "Ingresos Mensuales",
   "Monto Solicitado",
   "Monto APROBADO",
   "Línea de crédito",
@@ -62,6 +63,18 @@ export function buildCoodelsurTemplateExcelBuffer(leads: LeadExportRecord[]): Ui
         "na",
       ).trim();
 
+    const rawIngresosCliente =
+      datos.ingresosMensuales ??
+      datos.ingresos_mensuales ??
+      datos.ingresos ??
+      "";
+    const ingresosCliente =
+      rawIngresosCliente !== "" &&
+      rawIngresosCliente !== null &&
+      rawIngresosCliente !== undefined
+        ? parseMoneyValue(rawIngresosCliente) ?? rawIngresosCliente
+        : "";
+
     const rawMonto =
       lead.capitalSolicitado ??
       datos.capitalSeleccionado ??
@@ -100,9 +113,7 @@ export function buildCoodelsurTemplateExcelBuffer(leads: LeadExportRecord[]): Ui
     let propiedadesConfirmadas = "";
     if (datos.activosConfirmados) {
       const viv = String(datos.tieneViviendaConfirmada ?? "").trim().toLowerCase() === "si" ? "Sí" : "No";
-      const isVehSi = String(datos.tieneVehiculoConfirmado ?? "").trim().toLowerCase() === "si";
-      const placaConf = String(datos.placaVehiculoConfirmada ?? "").trim().toUpperCase();
-      const veh = isVehSi ? (placaConf ? `Sí (Placa: ${placaConf})` : "Sí") : "No";
+      const veh = String(datos.tieneVehiculoConfirmado ?? "").trim().toLowerCase() === "si" ? "Sí" : "No";
       propiedadesConfirmadas = `Vivienda: ${viv}, Vehículo: ${veh}`;
     }
 
@@ -111,6 +122,7 @@ export function buildCoodelsurTemplateExcelBuffer(leads: LeadExportRecord[]): Ui
       lead.nombre,
       lead.telefono,
       actividad,
+      ingresosCliente,
       montoSolicitado,
       montoAprobado,
       lineaCredito,
@@ -663,6 +675,20 @@ export function processCruceData(
   }
   if (montoCol !== -1) {
     monetaryColIndices.add(montoCol);
+  }
+  for (let i = 0; i < finalHeaders.length; i++) {
+    const hNorm = finalHeaders[i]
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+    if (
+      hNorm === "ingresos mensuales" ||
+      hNorm === "monto solicitado" ||
+      hNorm === "monto aprobado"
+    ) {
+      monetaryColIndices.add(i);
+    }
   }
 
   const nivelRiesgoCol = analysisHeadersMap["Nivel Riesgo"];

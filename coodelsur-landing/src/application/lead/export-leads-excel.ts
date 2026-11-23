@@ -604,14 +604,6 @@ const BASE_COLUMNS: ExportColumn[] = [
     value: (l) => readOption(datosOf(l), "tieneVehiculoConfirmado", SI_NO_LABELS),
   },
   {
-    header: "Placa del Vehículo Confirmada",
-    width: 24,
-    value: (l) =>
-      String(datosOf(l).tieneVehiculoConfirmado ?? "").trim().toLowerCase() === "si"
-        ? readString(datosOf(l), "placaVehiculoConfirmada").toUpperCase()
-        : "",
-  },
-  {
     header: "Validación ADRES",
     width: 20,
     value: (l) => readOption(datosOf(l), "validacionAdres", VALIDACION_ADRES_LABELS),
