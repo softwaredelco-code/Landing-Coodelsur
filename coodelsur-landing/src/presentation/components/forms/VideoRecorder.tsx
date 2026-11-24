@@ -332,6 +332,9 @@ export function VideoRecorder({
 
       {isLive && !hasValue && (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-black">
+          <div className="bg-amber-600 px-3 py-1.5 text-center text-xs font-medium text-white">
+            🪪 Recuerda: debes sostener tu cédula física en la mano junto a tu rostro.
+          </div>
           <video
             ref={videoRef}
             autoPlay
@@ -341,10 +344,12 @@ export function VideoRecorder({
           />
           <div className="space-y-2 bg-white p-3">
             {mode === "recording" ? (
-              <p className="text-sm font-medium text-red-600">Grabando… {secondsLeft}s</p>
+              <p className="text-sm font-medium text-red-600">
+                🔴 Grabando… {secondsLeft}s · Mantén tu cédula visible en la mano
+              </p>
             ) : (
-              <p className="text-sm text-gray-600">
-                Centra tu rostro y pulsa grabar. Se detiene solo a los {durationSeconds} segundos.
+              <p className="text-sm text-gray-700">
+                Sostén tu cédula en la mano junto a tu rostro mirando a la cámara y pulsa iniciar grabación. Se detiene solo a los {durationSeconds} segundos.
               </p>
             )}
             <div className="flex flex-wrap gap-2">

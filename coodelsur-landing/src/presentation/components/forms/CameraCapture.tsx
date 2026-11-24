@@ -224,6 +224,9 @@ export function CameraCapture({
 
       {mode === "camera" && !hasValue && (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-black">
+          <div className="bg-amber-600 px-3 py-1.5 text-center text-xs font-medium text-white">
+            📸 Acerca bien la cédula a la cámara para que los datos sean legibles y nítidos.
+          </div>
           <video
             ref={videoRef}
             autoPlay

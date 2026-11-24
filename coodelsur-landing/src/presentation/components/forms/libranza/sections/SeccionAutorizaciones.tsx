@@ -41,7 +41,7 @@ export function SeccionAutorizaciones() {
             label="Foto de la cédula — cara frontal"
             facingMode="environment"
             required
-            helperText="Funciona en celular y computador. Usa la cámara trasera o sube una imagen nítida."
+            helperText="Toma la foto de cerca y bien enfocada para que los datos sean legibles. Usa la cámara o sube una imagen nítida."
             value={field.value}
             onChange={field.onChange}
             error={fieldState.error?.message}
@@ -58,7 +58,7 @@ export function SeccionAutorizaciones() {
             label="Foto de la cédula — cara posterior"
             facingMode="environment"
             required
-            helperText="Toma el reverso con la cámara o súbelo desde tu galería."
+            helperText="Toma la foto de cerca y bien enfocada. Usa la cámara o súbela desde tu galería."
             value={field.value}
             onChange={field.onChange}
             error={fieldState.error?.message}
@@ -73,10 +73,10 @@ export function SeccionAutorizaciones() {
           render={({ field, fieldState }) => (
             <VideoRecorder
               id="videoVerificacion"
-              label="Video de 3 segundos"
+              label="Video de verificación (con cédula en mano)"
               durationSeconds={3}
               required
-              helperText="Graba un video corto de tu rostro con la cámara frontal. También puedes subir un video si tu navegador no permite grabar."
+              helperText="Graba un video corto de tu rostro sosteniendo tu cédula en la mano con la cámara frontal. También puedes subir un video si tu navegador no permite grabar."
               value={field.value}
               onChange={field.onChange}
               error={fieldState.error?.message}
